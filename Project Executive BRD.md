@@ -4,9 +4,6 @@ Project definition:
 IRMS is a web-based system that will help businesses manage their inventory and recovery processes. It will be used to track and accommodate inventory excess for each operational process.
 
 ## IRMS process definition
-
-
-
 [Request Pickup]
 
 [Inbound] (Can be implemented onv2)
