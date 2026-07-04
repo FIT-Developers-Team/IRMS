@@ -1,0 +1,29 @@
+
+
+* Core column
+
+|Column Name            |Column Model|Data Type|
+|---                    |---         |---------|
+|Time stamp             |             | Timestamp|
+|SKU CODE               |             | SKU CODE |
+|Product Name           |             | String   |
+|QTY                    |             | Number   |
+|Location               |             | String   |
+|Trx Type               |             | String   |
+|Vendor Name            |             | String   |
+|Po Number              |             | String   | 
+|Inbound staff name     |             | String   |
+|So Number              |             | String   |  
+|Picker Staff name      |             | String   |
+|Checker staff name     |             | String   |
+|Reason                 |             | String   |
+
+* Calculation column
+|Column Name         |Logic                                          |Data type             |
+|---                 |---                                            |------                |
+|Aging               | Timestamp data trx in - now() if net qty>0    | Number (day count)   |
+|Net Qty             | qty in - qty out                              | Number (qty count)   |
+|Is on LDP?          | Join sku number on LDP+LBH Data               | Boolean (TRUE/FALSE) |
+|Recovery Qty        | IF is on LDP = TRUE then retrun qty LDP+LBH   |                      |
+
+
