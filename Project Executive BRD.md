@@ -5,7 +5,6 @@ IRMS is a web-based system that will help businesses manage their inventory and 
 
 ## IRMS process definition
 [Request Pickup]
-
 [Inbound] (Can be implemented onv2)
 [Inventory] (Can be implemented onV2)
 
