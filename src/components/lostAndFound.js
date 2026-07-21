@@ -1,5 +1,6 @@
 import { db } from '../data/db.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
+import { showAlertModal } from '../utils/alert.js';
 
 export function renderLostAndFound(container, currentUser) {
   let searchQuery = '';
@@ -383,24 +384,24 @@ export function renderLostAndFound(container, currentUser) {
       const reasonVal = lfReasonInput ? lfReasonInput.value.trim() : '';
 
       if (!zoneVal) {
-        alert('Please select a Zone.');
+        showAlertModal('Please select a Zone.', 'Zone Required');
         return;
       }
 
       if (!skuVal) {
-        alert('Please enter a valid SKU Code.');
+        showAlertModal('Please enter a valid SKU Code.', 'SKU Required');
         lfSkuInput.focus();
         return;
       }
 
       if (isNaN(qtyVal) || qtyVal <= 0) {
-        alert('Please enter a valid positive quantity.');
+        showAlertModal('Please enter a valid positive quantity.', 'Invalid Quantity');
         lfQtyInput.focus();
         return;
       }
 
       if (!reasonVal) {
-        alert('Please select a Reason.');
+        showAlertModal('Please select a Reason.', 'Reason Required');
         return;
       }
 
@@ -412,13 +413,13 @@ export function renderLostAndFound(container, currentUser) {
       } else {
         const foundAtText = lfFoundAtInput ? lfFoundAtInput.value.trim() : '';
         if (!foundAtText) {
-          alert('Please enter a Found At location.');
+          showAlertModal('Please enter a Found At location code.', 'Location Required');
           if (lfFoundAtInput) lfFoundAtInput.focus();
           return;
         }
 
         if (!foundAtText.toLowerCase().includes(zoneVal.toLowerCase())) {
-          alert(`Found At location must contain the selected Zone ("${zoneVal}").`);
+          showAlertModal(`Found At location must contain the selected Zone ("${zoneVal}").`, 'Location Validation');
           if (lfFoundAtInput) lfFoundAtInput.focus();
           return;
         }

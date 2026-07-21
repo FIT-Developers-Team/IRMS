@@ -1,5 +1,6 @@
 import { db } from '../data/db.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
+import { showAlertModal } from '../utils/alert.js';
 
 export function renderRequestPickup(container, currentUser) {
   const storageKey = `irms_selected_checker_line_${currentUser.staffId}`;
@@ -468,20 +469,20 @@ export function renderRequestPickup(container, currentUser) {
 
       const currentSoVal = soInput.value.trim();
       if (!currentSoVal) {
-        alert('Please enter or select an SO Number.');
+        showAlertModal('Please enter or select an SO Number.', 'Missing SO Number');
         soInput.focus();
         return;
       }
 
       if (!selectedSku) {
-        alert('Please select a valid product from the SKU search dropdown.');
+        showAlertModal('Please select a valid product from the SKU search dropdown.', 'Product Required');
         skuSearchInput.focus();
         return;
       }
 
       const qty = parseInt(qtyInput.value, 10);
       if (isNaN(qty) || qty <= 0) {
-        alert('Please enter a valid positive quantity.');
+        showAlertModal('Please enter a valid positive quantity.', 'Invalid Quantity');
         qtyInput.focus();
         return;
       }
