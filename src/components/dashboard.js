@@ -1,6 +1,7 @@
 import { renderRequestPickup } from './requestPickup.js';
 import { renderPickingTask } from './pickingTask.js';
 import { renderLostAndFound } from './lostAndFound.js';
+import { db } from '../data/db.js';
 
 export function renderDashboard(container, currentUser, onLogout) {
   let activeTab = 'requestPickup';
@@ -99,6 +100,7 @@ export function renderDashboard(container, currentUser, onLogout) {
   function switchTab(tabId) {
     activeTab = tabId;
     window.irmsActiveTab = tabId;
+    db.checkAndRefreshIfExpired();
     navTabs.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tabId);
     });

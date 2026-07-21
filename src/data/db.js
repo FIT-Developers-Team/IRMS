@@ -1,6 +1,8 @@
 import Papa from 'papaparse';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets.js';
 
+export const DATA_EXPIRY_DURATION_MS = 15 * 60 * 1000; // 15 minutes TTL
+
 class DatabaseService {
   constructor() {
     this.users = [];
@@ -21,6 +23,11 @@ class DatabaseService {
     
     // Auto-fetch hardcoded Google Sheets on init
     this.initPromise = this.syncGoogleSheets();
+
+    // Background interval: Check every 60 seconds if data has reached 15-minute expiry and force refresh from backend
+    this.cacheCheckInterval = setInterval(() => {
+      this.checkAndRefreshIfExpired();
+    }, 60 * 1000);
   }
 
   subscribe(listener) {
@@ -279,6 +286,22 @@ class DatabaseService {
     }
   }
 
+  isDataExpired() {
+    if (!this.lastSyncTime) return true;
+    const lastSyncMs = new Date(this.lastSyncTime).getTime();
+    if (isNaN(lastSyncMs)) return true;
+    return (Date.now() - lastSyncMs) >= DATA_EXPIRY_DURATION_MS;
+  }
+
+  async checkAndRefreshIfExpired() {
+    if (this.isDataExpired() && !this.isSyncing) {
+      console.log('[Data Cache Expired] 15 minutes reached. Performing forced data update from Google Sheets backend...');
+      await this.syncGoogleSheets();
+      return true;
+    }
+    return false;
+  }
+
   lookupStaffId(staffId) {
     const trimmed = String(staffId).trim();
     if (!trimmed) return null;
@@ -286,16 +309,17 @@ class DatabaseService {
   }
 
   getUniqueSoNumbers() {
+    this.checkAndRefreshIfExpired();
     const map = new Map();
     this.soList.forEach(item => {
-      if (!map.has(item.soNumber)) {
-        map.set(item.soNumber, item.pickerName || 'N/A');
+      if (item.soNumber && !map.has(item.soNumber)) {
+        map.set(item.soNumber, {
+          soNumber: item.soNumber,
+          pickerName: item.pickerName || ''
+        });
       }
     });
-    return Array.from(map.entries()).map(([soNumber, pickerName]) => ({
-      soNumber,
-      pickerName
-    }));
+    return Array.from(map.values());
   }
 
   getProductsForSo(soNumber) {
@@ -557,6 +581,7 @@ class DatabaseService {
   }
 
   getZones() {
+    this.checkAndRefreshIfExpired();
     return this.zones;
   }
 
@@ -581,6 +606,7 @@ class DatabaseService {
   }
 
   getCheckerLines() {
+    this.checkAndRefreshIfExpired();
     return this.checkerLines;
   }
 
