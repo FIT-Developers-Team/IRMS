@@ -1,11 +1,11 @@
 import { db } from './data/db.js';
 import { renderLogin } from './components/login.js';
 import { renderDashboard } from './components/dashboard.js';
+import { showBlockerLock, hideBlockerLock } from './utils/blocker.js';
 
 class IRMSApp {
   constructor() {
     this.appRoot = document.getElementById('app');
-    this.currentViewMode = 'desktop'; // 'desktop' or 'ios'
     this.currentUser = this.loadUserSession();
     this.init();
   }
@@ -55,88 +55,60 @@ class IRMSApp {
   }
 
   renderShell() {
-    const isLive = db.isLoaded && !db.syncError;
-    const dotClass = isLive ? 'green' : (db.syncError ? 'red' : 'gray');
-    const statusText = isLive ? 'Google Sheet Sync' : (db.syncError ? 'Sync Error' : 'Loading Sheet...');
-
     document.body.innerHTML = `
-      <div class="app-mode-header">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div style="display: flex; align-items: center; gap: 8px; font-weight: 700;">
-            <span class="material-icons-round" style="font-size: 18px; color: var(--primary-500);">dashboard</span>
-            <span>IRMS Web App</span>
-          </div>
-
-          <button id="refetchGsheetBtn" class="gsheet-status-btn" title="Click to refetch live data from Google Sheets">
-            <span class="status-dot ${dotClass}"></span>
-            <span>${statusText}</span>
-            <span class="material-icons-round" style="font-size: 14px;">sync</span>
-          </button>
-        </div>
-
-        <div class="mode-toggle-group">
-          <button class="mode-btn ${this.currentViewMode === 'desktop' ? 'active' : ''}" id="desktopModeBtn">
-            <span class="material-icons-round" style="font-size: 16px;">desktop_windows</span>
-            <span>Desktop View</span>
-          </button>
-          <button class="mode-btn ${this.currentViewMode === 'ios' ? 'active' : ''}" id="iosModeBtn">
-            <span class="material-icons-round" style="font-size: 16px;">phone_iphone</span>
-            <span>iOS Mobile View</span>
-          </button>
-        </div>
-      </div>
-
       <div id="app"></div>
+
+      <button id="floatingRefreshBtn" class="floating-refresh-btn" title="Click to refresh live data for current menu">
+        <span class="material-icons-round">refresh</span>
+        <span>Refresh Data</span>
+      </button>
     `;
 
     this.appRoot = document.getElementById('app');
+    const floatingRefreshBtn = document.getElementById('floatingRefreshBtn');
 
-    const desktopBtn = document.getElementById('desktopModeBtn');
-    const iosBtn = document.getElementById('iosModeBtn');
-    const refetchBtn = document.getElementById('refetchGsheetBtn');
+    if (floatingRefreshBtn) {
+      floatingRefreshBtn.addEventListener('click', async () => {
+        floatingRefreshBtn.disabled = true;
+        const activeTab = window.irmsActiveTab || 'requestPickup';
+        let tabsToSync = [];
+        let syncLabel = 'Syncing data from Google Sheets...';
 
-    desktopBtn.addEventListener('click', () => {
-      this.currentViewMode = 'desktop';
-      desktopBtn.classList.add('active');
-      iosBtn.classList.remove('active');
-      this.renderCurrentView();
-    });
+        if (activeTab === 'requestPickup') {
+          tabsToSync = ['requestChecker', 'soData'];
+          syncLabel = 'Syncing Pickup Requests from Google Sheets...';
+        } else if (activeTab === 'pickingTask') {
+          tabsToSync = ['pickingTask', 'requestChecker'];
+          syncLabel = 'Syncing Picking Tasks from Google Sheets...';
+        } else if (activeTab === 'lostAndFound') {
+          tabsToSync = ['lostAndFound', 'racks'];
+          syncLabel = 'Syncing Lost & Found from Google Sheets...';
+        }
 
-    iosBtn.addEventListener('click', () => {
-      this.currentViewMode = 'ios';
-      iosBtn.classList.add('active');
-      desktopBtn.classList.remove('active');
-      this.renderCurrentView();
-    });
-
-    refetchBtn.addEventListener('click', async () => {
-      refetchBtn.disabled = true;
-      refetchBtn.querySelector('span:nth-child(2)').textContent = 'Syncing...';
-      await db.syncGoogleSheets();
-      this.renderShell();
-      this.renderCurrentView();
-    });
+        showBlockerLock(syncLabel);
+        try {
+          await db.syncGoogleSheets(tabsToSync);
+          this.renderCurrentView();
+        } finally {
+          hideBlockerLock();
+          floatingRefreshBtn.disabled = false;
+        }
+      });
+    }
   }
 
   renderCurrentView() {
-    const isIos = this.currentViewMode === 'ios';
-
     this.appRoot.innerHTML = `
-      <div class="layout-wrapper ${isIos ? 'ios-frame-mode' : 'desktop-mode'}">
-        ${isIos ? `
-          <div class="ios-device">
-            <div class="ios-dynamic-island"></div>
-            <div class="ios-screen" id="viewContainer"></div>
-          </div>
-        ` : `
-          <div style="width: 100%; min-height: 100%; display: flex; flex-direction: column;" id="viewContainer"></div>
-        `}
+      <div class="layout-wrapper desktop-mode">
+        <div style="width: 100%; min-height: 100%; display: flex; flex-direction: column;" id="viewContainer"></div>
       </div>
     `;
 
     const viewContainer = document.getElementById('viewContainer');
+    const floatingRefreshBtn = document.getElementById('floatingRefreshBtn');
 
     if (!this.currentUser) {
+      if (floatingRefreshBtn) floatingRefreshBtn.style.display = 'none';
       renderLogin(viewContainer, async (userSession) => {
         this.saveUserSession(userSession);
         
@@ -146,6 +118,7 @@ class IRMSApp {
         this.renderCurrentView();
       });
     } else {
+      if (floatingRefreshBtn) floatingRefreshBtn.style.display = 'flex';
       renderDashboard(viewContainer, this.currentUser, () => {
         this.saveUserSession(null);
         this.renderCurrentView();

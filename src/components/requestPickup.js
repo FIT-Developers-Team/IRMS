@@ -1,4 +1,5 @@
 import { db } from '../data/db.js';
+import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
 
 export function renderRequestPickup(container, currentUser) {
   let selectedSoNumber = '';
@@ -109,10 +110,6 @@ export function renderRequestPickup(container, currentUser) {
         </div>
         
         <div style="display: flex; align-items: center; gap: 12px;">
-          <button id="refreshTableBtn" class="mode-btn" style="background: var(--primary-50); color: var(--primary-600); padding: 6px 14px; font-size: 12px;" title="Refresh requests from Google Sheets">
-            <span class="material-icons-round" style="font-size: 16px;">refresh</span>
-            <span>Refresh Table</span>
-          </button>
           <span style="font-size: 13px; font-weight: 600; color: var(--text-muted);" id="requestCountBadge">0 requests</span>
         </div>
       </div>
@@ -145,13 +142,12 @@ export function renderRequestPickup(container, currentUser) {
   const qtyInput = container.querySelector('#qtyInput');
   const requestForm = container.querySelector('#requestForm');
   const submitRequestBtn = container.querySelector('#submitRequestBtn');
-  const refreshTableBtn = container.querySelector('#refreshTableBtn');
   const requestTableBody = container.querySelector('#requestTableBody');
   const requestCountBadge = container.querySelector('#requestCountBadge');
   const autoIdPreview = container.querySelector('#autoIdPreview');
 
   // Preview initial auto-id
-  autoIdPreview.textContent = '#' + Math.floor(100000 + Math.random() * 900000);
+  autoIdPreview.textContent = '#RC-' + Math.floor(100000 + Math.random() * 900000);
 
   // Update SKU input enablement state based on SO number value
   function updateSkuEnablement() {
@@ -310,7 +306,7 @@ export function renderRequestPickup(container, currentUser) {
 
     requestTableBody.innerHTML = userRequests.map(req => `
       <tr>
-        <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.uniqueid}</strong></td>
+        <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
         <td style="font-size: 12px; color: var(--text-secondary);">${new Date(req.timestamp).toLocaleString()}</td>
         <td style="font-size: 12px; font-weight: 600;">${req.soNumber}</td>
         <td>${req.pickerName || 'N/A'}</td>
@@ -332,23 +328,6 @@ export function renderRequestPickup(container, currentUser) {
   // Subscribe to DB updates so table automatically refreshes on sync or form submit
   const unsubscribe = db.subscribe(() => {
     refreshTable();
-  });
-
-  // Manual Refresh Table button handler
-  refreshTableBtn.addEventListener('click', async () => {
-    refreshTableBtn.disabled = true;
-    refreshTableBtn.innerHTML = `
-      <div class="spinner" style="width: 14px; height: 14px; border-width: 2px; border-top-color: var(--primary-600);"></div>
-      <span>Syncing...</span>
-    `;
-    
-    await db.syncGoogleSheets();
-
-    refreshTableBtn.disabled = false;
-    refreshTableBtn.innerHTML = `
-      <span class="material-icons-round" style="font-size: 16px;">refresh</span>
-      <span>Refresh Table</span>
-    `;
   });
 
   // Submit request handler
@@ -376,40 +355,35 @@ export function renderRequestPickup(container, currentUser) {
     }
 
     submitRequestBtn.disabled = true;
-    submitRequestBtn.innerHTML = `
-      <div class="spinner"></div>
-      <span>Submitting Request...</span>
-    `;
+    showBlockerLock('Submitting Pickup Request to Google Sheets...');
+    try {
+      const newReq = await db.savePickupRequest({
+        checkerName: currentUser.name,
+        pickerName: pickerNameInput.value.trim() || 'N/A',
+        soNumber: currentSoVal,
+        skuNumber: selectedSku.skuNumber,
+        productName: selectedSku.productName,
+        qty: qty
+      });
 
-    const newReq = await db.savePickupRequest({
-      checkerName: currentUser.name,
-      pickerName: pickerNameInput.value.trim() || 'N/A',
-      soNumber: currentSoVal,
-      skuNumber: selectedSku.skuNumber,
-      productName: selectedSku.productName,
-      qty: qty
-    });
+      // Reset Form
+      soInput.value = '';
+      pickerNameInput.value = '';
+      skuSearchInput.value = '';
+      selectedSkuDisplay.innerHTML = '';
+      qtyInput.value = '1';
+      selectedSoNumber = '';
+      selectedPickerName = '';
+      selectedSku = null;
+      autoIdPreview.textContent = '#RC-' + Math.floor(100000 + Math.random() * 900000);
 
-    submitRequestBtn.disabled = false;
-    submitRequestBtn.innerHTML = `
-      <span class="material-icons-round">post_add</span>
-      <span>Submit Request</span>
-    `;
-
-    // Reset Form
-    soInput.value = '';
-    pickerNameInput.value = '';
-    skuSearchInput.value = '';
-    selectedSkuDisplay.innerHTML = '';
-    qtyInput.value = '1';
-    selectedSoNumber = '';
-    selectedPickerName = '';
-    selectedSku = null;
-    autoIdPreview.textContent = '#' + Math.floor(100000 + Math.random() * 900000);
-
-    updateSkuEnablement();
-    refreshTable();
-    showToast(`Pickup request #${newReq.uniqueid} submitted successfully!`);
+      updateSkuEnablement();
+      refreshTable();
+      showToast(`Pickup request #${newReq.ticketId || newReq.uniqueid} submitted successfully!`);
+    } finally {
+      hideBlockerLock();
+      submitRequestBtn.disabled = false;
+    }
   });
 }
 

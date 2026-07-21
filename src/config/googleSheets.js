@@ -5,6 +5,9 @@ export const GOOGLE_SHEETS_CONFIG = {
   tabs: {
     userDb: 'User_DB',
     soData: 'SO_DATA',
-    requestChecker: 'Request_Checker'
+    requestChecker: 'Request_Checker',
+    pickingTask: 'Picking_Task',
+    racks: 'Racks',
+    lostAndFound: 'Lost_And_Found'
   }
 };

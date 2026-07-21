@@ -1,4 +1,6 @@
 import { renderRequestPickup } from './requestPickup.js';
+import { renderPickingTask } from './pickingTask.js';
+import { renderLostAndFound } from './lostAndFound.js';
 
 export function renderDashboard(container, currentUser, onLogout) {
   let activeTab = 'requestPickup';
@@ -46,24 +48,14 @@ export function renderDashboard(container, currentUser, onLogout) {
             <span class="nav-label">Pickup</span>
           </button>
 
-          <button class="nav-tab-item" data-tab="registerInbound" title="Register / Inbound">
-            <span class="material-icons-round">add_box</span>
-            <span class="nav-label">Inbound</span>
+          <button class="nav-tab-item" data-tab="pickingTask" title="Picking Task">
+            <span class="material-icons-round">fact_check</span>
+            <span class="nav-label">Picking</span>
           </button>
 
-          <button class="nav-tab-item" data-tab="keepStock" title="Keep / Stock">
-            <span class="material-icons-round">inventory_2</span>
-            <span class="nav-label">Stock</span>
-          </button>
-
-          <button class="nav-tab-item" data-tab="stockMovement" title="Stock Movement">
-            <span class="material-icons-round">swap_horiz</span>
-            <span class="nav-label">Movement</span>
-          </button>
-
-          <button class="nav-tab-item" data-tab="staging" title="Staging / Outbound">
-            <span class="material-icons-round">layers</span>
-            <span class="nav-label">Staging</span>
+          <button class="nav-tab-item" data-tab="lostAndFound" title="Lost & Found">
+            <span class="material-icons-round">travel_explore</span>
+            <span class="nav-label">Lost & Found</span>
           </button>
         </div>
 
@@ -106,14 +98,17 @@ export function renderDashboard(container, currentUser, onLogout) {
 
   function switchTab(tabId) {
     activeTab = tabId;
+    window.irmsActiveTab = tabId;
     navTabs.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tabId);
     });
 
-    if (tabId === 'requestPickup') {
-      renderRequestPickup(tabContentArea, currentUser);
+    if (tabId === 'pickingTask') {
+      renderPickingTask(tabContentArea, currentUser);
+    } else if (tabId === 'lostAndFound') {
+      renderLostAndFound(tabContentArea, currentUser);
     } else {
-      renderModulePlaceholder(tabContentArea, tabId);
+      renderRequestPickup(tabContentArea, currentUser);
     }
   }
 
@@ -123,29 +118,4 @@ export function renderDashboard(container, currentUser, onLogout) {
 
   // Default view
   switchTab('requestPickup');
-}
-
-function renderModulePlaceholder(container, tabId) {
-  const titles = {
-    registerInbound: { title: 'Register / Inbound / GRN', icon: 'add_box', desc: 'Data entry for warehouse excess items from Vendor, Inventory, or Outbound processes.' },
-    keepStock: { title: 'Keep / Stock Management', icon: 'inventory_2', desc: 'Core SOH excess management, SKU Aging, Source Ratio, and Location lookup.' },
-    stockMovement: { title: 'Stock Movement', icon: 'swap_horiz', desc: 'Relocate excess items within IRMS warehouse zones.' },
-    staging: { title: 'Staging / Replenishment', icon: 'layers', desc: 'Pick face process for staging items matched with SO today.' }
-  };
-
-  const info = titles[tabId] || { title: 'Module', icon: 'apps', desc: '' };
-
-  container.innerHTML = `
-    <div class="card-panel" style="text-align: center; padding: 60px 20px;">
-      <div class="brand-logo-icon" style="margin-bottom: 16px;">
-        <span class="material-icons-round" style="font-size: 40px; color: var(--primary-600);">${info.icon}</span>
-      </div>
-      <h2 style="font-size: 22px; font-weight: 800; color: var(--primary-900); margin-bottom: 8px;">${info.title}</h2>
-      <p style="font-size: 14px; color: var(--text-secondary); max-width: 500px; margin: 0 auto 24px;">${info.desc}</p>
-      <div class="autofill-badge success" style="display: inline-flex;">
-        <span class="material-icons-round">info</span>
-        <span>Module scheduled in Executive Roadmap</span>
-      </div>
-    </div>
-  `;
 }
