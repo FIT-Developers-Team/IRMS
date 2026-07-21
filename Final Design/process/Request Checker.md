@@ -8,7 +8,8 @@ This field will be input by staff
 
 |Column Name|Behaviour|
 |--------------|---------|
-|Ticket ID      |System generated RC + 6 digit uniqueid|
+|Ticket ID     |System generated RC + 6 digit uniqueid|
+|Checker Line  |dropdown from checker_lines table|
 |timestamp     |system generated|
 |picker name   |lookup from so number|
 |checker name  |Lookup from user login credential|

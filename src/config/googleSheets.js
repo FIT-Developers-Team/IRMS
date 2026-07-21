@@ -8,6 +8,8 @@ export const GOOGLE_SHEETS_CONFIG = {
     requestChecker: 'Request_Checker',
     pickingTask: 'Picking_Task',
     racks: 'Racks',
-    lostAndFound: 'Lost_And_Found'
+    zones: 'Zone',
+    lostAndFound: 'Lost_And_Found',
+    checkerLines: 'Checker_Lines'
   }
 };

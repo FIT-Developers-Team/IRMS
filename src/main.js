@@ -6,25 +6,104 @@ import { showBlockerLock, hideBlockerLock } from './utils/blocker.js';
 class IRMSApp {
   constructor() {
     this.appRoot = document.getElementById('app');
+    this.sessionCheckInterval = null;
     this.currentUser = this.loadUserSession();
     this.init();
+
+    // Helper for debugging/testing session expiration directly from console
+    window.irmsExpireSessionNow = () => {
+      this.promptSessionExpired();
+    };
   }
 
   loadUserSession() {
     try {
       const saved = localStorage.getItem('irms_user_session');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const data = JSON.parse(saved);
+
+      if (data && data.expiresAt) {
+        if (Date.now() > data.expiresAt) {
+          localStorage.removeItem('irms_user_session');
+          return null;
+        }
+        return data.user;
+      }
+      return data;
     } catch (e) {
       return null;
     }
   }
 
-  saveUserSession(user) {
+  saveUserSession(user, durationMs = 4 * 60 * 60 * 1000) {
     this.currentUser = user;
     if (user) {
-      localStorage.setItem('irms_user_session', JSON.stringify(user));
+      const sessionData = {
+        user: user,
+        loggedInAt: Date.now(),
+        expiresAt: Date.now() + durationMs
+      };
+      localStorage.setItem('irms_user_session', JSON.stringify(sessionData));
+      this.startSessionExpiryCheck();
     } else {
       localStorage.removeItem('irms_user_session');
+      this.stopSessionExpiryCheck();
+    }
+  }
+
+  startSessionExpiryCheck() {
+    this.stopSessionExpiryCheck();
+    if (!this.currentUser) return;
+
+    this.sessionCheckInterval = setInterval(() => {
+      const activeUser = this.loadUserSession();
+      if (!activeUser && this.currentUser) {
+        this.stopSessionExpiryCheck();
+        this.promptSessionExpired();
+      }
+    }, 15000);
+  }
+
+  stopSessionExpiryCheck() {
+    if (this.sessionCheckInterval) {
+      clearInterval(this.sessionCheckInterval);
+      this.sessionCheckInterval = null;
+    }
+  }
+
+  promptSessionExpired() {
+    this.saveUserSession(null);
+
+    const existingModal = document.getElementById('sessionExpiredModal');
+    if (existingModal) existingModal.remove();
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.id = 'sessionExpiredModal';
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.innerHTML = `
+      <div class="modal-card" style="max-width: 420px; text-align: center; padding: 32px 24px; align-items: center;">
+        <div style="width: 64px; height: 64px; background: rgba(239, 68, 68, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+          <span class="material-icons-round" style="font-size: 36px; color: var(--danger-500, #ef4444);">timer_off</span>
+        </div>
+        <h2 style="font-size: 20px; font-weight: 800; color: var(--primary-900);">Session Expired</h2>
+        <p style="font-size: 14px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5;">
+          Your login session has timed out. Please log in again to continue accessing the IRMS portal.
+        </p>
+        <button id="reloginConfirmBtn" class="btn-primary" style="margin-top: 24px; width: 100%; justify-content: center;">
+          <span>Log In Again</span>
+          <span class="material-icons-round">login</span>
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(modalOverlay);
+
+    const reloginBtn = modalOverlay.querySelector('#reloginConfirmBtn');
+    if (reloginBtn) {
+      reloginBtn.addEventListener('click', () => {
+        modalOverlay.remove();
+        this.renderCurrentView();
+      });
     }
   }
 
@@ -37,6 +116,10 @@ class IRMSApp {
     
     this.renderShell();
     this.renderCurrentView();
+
+    if (this.currentUser) {
+      this.startSessionExpiryCheck();
+    }
   }
 
   renderLoadingState() {

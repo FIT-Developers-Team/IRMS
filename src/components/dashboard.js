@@ -44,8 +44,8 @@ export function renderDashboard(container, currentUser, onLogout) {
 
         <div class="sidebar-menu">
           <button class="nav-tab-item active" data-tab="requestPickup" title="Request Pickup">
-            <span class="material-icons-round">local_shipping</span>
-            <span class="nav-label">Pickup</span>
+            <span class="material-icons-round">outbox</span>
+            <span class="nav-label">Request Pickup</span>
           </button>
 
           <button class="nav-tab-item" data-tab="pickingTask" title="Picking Task">

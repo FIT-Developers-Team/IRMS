@@ -1,7 +1,13 @@
-# This data is mainly read only
+# This data is used for application data references
 
-# Racks
+# Zone
 |Column|Behaviour|
 |------|---------|
 |Id|System generated| 
-|Rack Name|System generated| 
+|Zone|System generated| 
+
+# Checker_Lines
+|Column|Behaviour|
+|------|---------|
+|Id|System generated| 
+|Line Name|System generated| 

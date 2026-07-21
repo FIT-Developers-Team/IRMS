@@ -14,7 +14,7 @@ IRMS is a web-based system that will help businesses manage their inventory and 
 
 ## Backend design
 
-when fetching data from google sheet , use google sheet csv end point for all process , only use appscript webapp API fro writing data back to google sheet
+when fetching data from google sheet , use google sheet csv end point for all process , only use appscript webapp API from writing data back to google sheet
 
 
 

@@ -8,6 +8,8 @@ class DatabaseService {
     this.requests = this.loadSavedRequests();
     this.pickingTasks = this.loadSavedPickingTasks();
     this.racks = [];
+    this.zones = [];
+    this.checkerLines = [];
     this.lostAndFound = this.loadSavedLostAndFound();
     this.spreadsheetId = GOOGLE_SHEETS_CONFIG.spreadsheetId;
     this.webAppUrl = GOOGLE_SHEETS_CONFIG.webAppUrl;
@@ -48,12 +50,14 @@ class DatabaseService {
         const name = this.findRowValue(row, ['name', 'staff name']);
         const role = this.findRowValue(row, ['role']);
         const access = this.findRowValue(row, ['acess', 'access']);
+        const password = this.findRowValue(row, ['password', 'pwd', 'pass']);
 
         return {
           staffId: String(staffId).trim(),
           name: String(name).trim(),
           role: String(role).trim(),
-          access: String(access).trim()
+          access: String(access).trim(),
+          password: String(password).trim()
         };
       }).filter(u => u.staffId);
     }
@@ -101,6 +105,7 @@ class DatabaseService {
 
     const remoteReqs = (result.data || []).map(row => {
       const ticketId = this.findRowValue(row, ['ticket id', 'ticket_id', 'ticketid', 'uniqueid', 'unique id', 'id']);
+      const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline', 'line']);
       const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
       const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'picker']) || 'N/A';
       const checkerName = this.findRowValue(row, ['checker name', 'checker_name', 'checker']);
@@ -114,6 +119,7 @@ class DatabaseService {
       return {
         ticketId: tid,
         uniqueid: tid,
+        checkerLine: String(checkerLine).trim(),
         timestamp: String(timestamp).trim(),
         pickerName: String(pickerName).trim(),
         checkerName: String(checkerName).trim(),
@@ -208,7 +214,9 @@ class DatabaseService {
     const requestCheckerTab = GOOGLE_SHEETS_CONFIG.tabs.requestChecker;
     const pickingTaskTab = GOOGLE_SHEETS_CONFIG.tabs.pickingTask;
     const racksTab = GOOGLE_SHEETS_CONFIG.tabs.racks;
+    const zonesTab = GOOGLE_SHEETS_CONFIG.tabs.zones || 'Zone';
     const lostAndFoundTab = GOOGLE_SHEETS_CONFIG.tabs.lostAndFound;
+    const checkerLinesTab = GOOGLE_SHEETS_CONFIG.tabs.checkerLines;
     const cacheBuster = `_t=${Date.now()}`;
 
     const shouldSync = (tabKey) => !tabsToSync || tabsToSync.includes(tabKey);
@@ -226,11 +234,14 @@ class DatabaseService {
     if (shouldSync('pickingTask')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(pickingTaskTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'pickingTask', res: r })).catch(() => null));
     }
-    if (shouldSync('racks')) {
-      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(racksTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'racks', res: r })).catch(() => null));
+    if (shouldSync('racks') || shouldSync('zones')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(zonesTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'zones', res: r })).catch(() => null));
     }
     if (shouldSync('lostAndFound')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(lostAndFoundTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'lostAndFound', res: r })).catch(() => null));
+    }
+    if (shouldSync('checkerLines')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(checkerLinesTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'checkerLines', res: r })).catch(() => null));
     }
 
     try {
@@ -244,8 +255,12 @@ class DatabaseService {
         if (item.key === 'soData') this.parseSoData(text);
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
-        if (item.key === 'racks') this.parseRacks(text);
+        if (item.key === 'zones') {
+          this.parseRacks(text);
+          this.parseZones(text);
+        }
         if (item.key === 'lostAndFound') this.parseLostAndFound(text);
+        if (item.key === 'checkerLines') this.parseCheckerLines(text);
       }
 
       this.lastSyncTime = new Date().toISOString();
@@ -328,6 +343,7 @@ class DatabaseService {
     const newReq = {
       ticketId: tId,
       uniqueid: tId,
+      checkerLine: requestData.checkerLine || '',
       timestamp: new Date().toISOString(),
       checkerName: requestData.checkerName,
       pickerName: requestData.pickerName,
@@ -511,13 +527,61 @@ class DatabaseService {
     if (result.data && result.data.length > 0) {
       this.racks = result.data.map(row => {
         const id = this.findRowValue(row, ['id']);
-        const rackName = this.findRowValue(row, ['rack name', 'rack_name', 'rack']);
+        const rackName = this.findRowValue(row, ['rack name', 'rack_name', 'rack', 'zone', 'zone name']);
         return {
           id: String(id).trim(),
           rackName: String(rackName).trim()
         };
       }).filter(r => r.rackName);
     }
+  }
+
+  parseZones(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    if (result.data && result.data.length > 0) {
+      this.zones = result.data.map(row => {
+        const id = this.findRowValue(row, ['id']);
+        const zoneName = this.findRowValue(row, ['zone', 'zone name', 'zone_name', 'rack name', 'rack']);
+        return {
+          id: String(id).trim(),
+          zoneName: String(zoneName).trim()
+        };
+      }).filter(z => z.zoneName);
+    }
+  }
+
+  getZones() {
+    return this.zones;
+  }
+
+  parseCheckerLines(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    if (result.data && result.data.length > 0) {
+      this.checkerLines = result.data.map(row => {
+        const id = this.findRowValue(row, ['id']);
+        const lineName = this.findRowValue(row, ['line name', 'line_name', 'linename', 'checker line', 'checker_line', 'line']);
+        return {
+          id: String(id).trim(),
+          lineName: String(lineName).trim()
+        };
+      }).filter(l => l.lineName);
+    }
+  }
+
+  getCheckerLines() {
+    return this.checkerLines;
   }
 
   parseLostAndFound(csvText) {
@@ -541,6 +605,7 @@ class DatabaseService {
       const qty = this.findRowValue(row, ['qty', 'quantity']) || '1';
       const foundAt = this.findRowValue(row, ['found at', 'found_at', 'rack', 'rack name', 'rack_name']);
       const status = this.findRowValue(row, ['status']) || 'Pending';
+      const reason = this.findRowValue(row, ['reason', 'reasons', 'cause']);
 
       return {
         ticketId: String(ticketId).trim(),
@@ -549,7 +614,8 @@ class DatabaseService {
         skuCode: String(skuCode).trim(),
         qty: parseInt(String(qty).trim() || '1', 10),
         foundAt: String(foundAt).trim(),
-        status: String(status).trim()
+        status: String(status).trim(),
+        reason: String(reason).trim()
       };
     }).filter(e => e.ticketId || e.skuCode);
 
@@ -605,6 +671,7 @@ class DatabaseService {
       skuCode: entryData.skuCode,
       qty: entryData.qty,
       foundAt: entryData.foundAt,
+      reason: entryData.reason || '',
       status: 'Pending'
     };
 

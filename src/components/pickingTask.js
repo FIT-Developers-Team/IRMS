@@ -20,7 +20,7 @@ export function renderPickingTask(container, currentUser) {
         </div>
 
         <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-          <button id="openCreateModalBtn" class="btn-primary" style="padding: 8px 16px; font-size: 13px;">
+          <button id="openCreateModalBtn" class="btn-primary">
             <span class="material-icons-round">add</span>
             <span>Create Picking Task</span>
           </button>
@@ -128,12 +128,13 @@ export function renderPickingTask(container, currentUser) {
         <p id="cancelModalTaskText" style="font-size: 13px; color: var(--text-secondary); margin: 0 0 24px; line-height: 1.5;">
           Are you sure you want to cancel this picking task? This action will update Google Sheets and cannot be undone.
         </p>
-        <div style="display: flex; gap: 12px; justify-content: center;">
-          <button id="cancelModalCloseBtn" class="mode-btn" style="padding: 10px 20px; font-size: 13px; background: rgba(0,0,0,0.05); color: var(--text-primary); border-radius: 12px; font-weight: 700; border: none; cursor: pointer;">
+        <div class="form-modal-footer-actions" style="display: flex; gap: 12px; justify-content: center; margin-top: 20px;">
+          <button id="cancelModalCloseBtn" class="btn-secondary">
             No, Keep Task
           </button>
-          <button id="cancelModalConfirmBtn" class="btn-primary" style="padding: 10px 20px; font-size: 13px; background: #ef4444; color: #ffffff; border-radius: 12px; border: none; font-weight: 700; cursor: pointer;">
-            Yes, Cancel Task
+          <button id="cancelModalConfirmBtn" class="btn-danger">
+            <span class="material-icons-round" style="font-size: 18px;">block</span>
+            <span>Yes, Cancel Task</span>
           </button>
         </div>
       </div>
@@ -235,7 +236,7 @@ export function renderPickingTask(container, currentUser) {
           <td style="font-size: 12px; color: var(--text-secondary);">${new Date(task.timestamp).toLocaleString()}</td>
           <td style="text-align: right;">
             ${isPicking ? `
-              <button class="mode-btn action-cancel-btn" data-id="${task.pickingId}" style="background: #fee2e2; color: #dc2626; padding: 4px 10px; font-size: 11px;" title="Cancel Task">
+              <button class="btn-action-sm cancel action-cancel-btn" data-id="${task.pickingId}" title="Cancel Task">
                 <span class="material-icons-round" style="font-size: 14px;">close</span>
                 <span>Cancel</span>
               </button>

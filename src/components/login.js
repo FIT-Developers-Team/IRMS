@@ -120,7 +120,7 @@ export function renderLogin(container, onLoginSuccess) {
           <div class="inputGroup">
             <label for="passwordInput">Password</label>
             <input type="password" id="passwordInput" required placeholder="Enter Password..." />
-            <div class="input-helper-text">Default password for demo: <strong>123456</strong> (or Staff ID)</div>
+            <div class="input-helper-text">Enter your account password</div>
             <div id="passwordFeedback"></div>
           </div>
 
@@ -272,20 +272,25 @@ export function renderLogin(container, onLoginSuccess) {
       return false;
     }
 
-    // Valid passwords for demo: "123456", "password", "admin", or matching Staff ID
-    const validPasswords = ['123456', '1234', 'password', 'admin'];
-    if (currentUserFound && currentUserFound.staffId) {
-      validPasswords.push(currentUserFound.staffId);
+    let isPasswordCorrect = false;
+    if (currentUserFound) {
+      if (currentUserFound.password) {
+        isPasswordCorrect = (pwd === currentUserFound.password);
+      } else {
+        // Fallback for demo if password column is empty in sheet for this user
+        const validPasswords = ['123456', '1234', 'password', 'admin', currentUserFound.staffId];
+        isPasswordCorrect = validPasswords.includes(pwd);
+      }
     }
 
-    if (validPasswords.includes(pwd)) {
+    if (isPasswordCorrect) {
       passwordFeedback.innerHTML = '';
       return true;
     } else {
       passwordFeedback.innerHTML = `
         <div class="autofill-badge error">
           <span class="material-icons-round" style="font-size: 16px;">lock_clock</span>
-          <span>Invalid password. (Use default: 123456)</span>
+          <span>Invalid password</span>
         </div>
       `;
       return false;
