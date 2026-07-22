@@ -7,6 +7,7 @@ This section has the same concept as Request Checker; its purpose is to create a
 |Timestamp|System Generated|
 |BTI Staff|Lookup from user login credential|
 |Sku Code|User Input|
+|Product Name|Lookup from SKUs_DB based on SKU Code| 
 |Qty|User Input|
 |Found At|Free text input (must contain selected Zone), hidden if Reason is Unknown Location| 
 |Status|System Generated (Pending)|

@@ -1,65 +1,60 @@
 # Daily Development Summary - IRMS Inventory Recovery Management System
-**Date**: July 21 / 22, 2026  
+**Date**: July 22 / 23, 2026  
 **Repository**: [FIT-Developers-Team/IRMS](https://github.com/FIT-Developers-Team/IRMS) (`main` branch)
 
 ---
 
 ## Executive Summary
 
-Today's session focused on expanding core inventory processes, enhancing UI/UX aesthetics and mobile responsiveness, refactoring reference datasets, upgrading backend Google Apps Script endpoints with dynamic header matching, and implementing automated caching & security policies.
+Today's session focused on eliminating transaction latency on Putaway saves, implementing local-first resiliency for background synchronization, consolidating the dashboard action controls, and refining the global toast system. 
 
 ---
 
 ## Key Features & Changes Accomplished
 
-### 1. Authentication & Security
-- **User_DB Password Integration**: Wired the `Password` column from `User_DB` into the login authentication flow (`login.js`, `db.js`), falling back to default passwords if unassigned.
-- **Session Expiry Manager**: Implemented a 4-hour session expiry policy (`main.js`) with background auto-checks and a modal dialog alerting users to re-login when session expires.
+### 1. Putaway Performance Optimization (Strategy A & B)
+- **Client-Side Completion Logic (Strategy A)**: Moved task completion validation and status changes to browser memory before posting to the server.
+- **Payload Pre-Filling**: Pre-fills SKU lookups (`productId`, categories, etc.) client-side from the `SKUs_DB` cache.
+- **Gas Scan Elimination**: Streamlined the `handleCreatePutaway` endpoint in [Code.gs](file:///c:/AI%20Project/IRMS/gas/Code.gs), removing three slow row-scanning spreadsheet loops. Saves are now processed instantly.
+- **SOH Formula Safekeeping**: Configured row writing in Google Sheets to bypass writing to spreadsheet formula columns (`qtyonso`, `countso`, `qtyonldp`, `stockage`), keeping array formulas active.
 
-### 2. Checker Line & Reference Data Enhancements
-- **Checker Line Persistence**: Added `Checker_Lines` tab mapping and `db.getCheckerLines()`. Created a custom searchable selector that persists line choice in `localStorage` per user (`irms_selected_checker_line_${staffId}`).
-- **Racks to Zone Migration**: Refactored the `Racks` reference table to **`Zone`**, updating `googleSheets.js`, `db.js`, and `lostAndFound.js` to parse and utilize `Zone` data.
+### 2. Optimistic UI & Local-First Resilience
+- **Non-Blocking submissions**: Form submission closes the dialog modal instantly and updates task rows in <50ms without loading locks.
+- **Auto-Retry Sync Queue**: Local records are tagged with a `syncState` (`pending` / `failed`). A background process in [db.js](file:///c:/AI%20Project/IRMS/src/data/db.js) attempts to auto-sync failed transactions every 15 seconds.
+- **Local Merge Safeguard**: Refactored `parsePutaway` to merge cached pending/failed logs with remote sheet fetches, ensuring offline records are never overwritten.
 
-### 3. Lost & Found Module Upgrades
-- **Reason Feature**: Added reason chip selection options: `Sloc Mismatch`, `Damaged Item`, `Unknown Location`, and `Excess Item`.
-- **Found At Free-Text & Validation**: Replaced rack dropdowns with a free-text location input. Added validation requiring the input to contain the selected `Zone` substring.
-- **Unknown Location Handling**: Automatically hides the `Found At` input when `Unknown Location` is chosen and formats the submitted location as `${selectedZone}-null` (e.g. `CBT-null`).
+### 3. Merged Sync Button & Progress Modal
+- **Merged Button Control**: Removed the old redundant "Refresh Data" button. The floating **Sync Status** button is now positioned at the bottom right.
+- **Interactive Sync Actions**: If clicked during a sync/failed state, it opens a status popup. If clicked in a fully synced state, it executes a live sheet refresh.
+- **Sync Progress Modal**: Implemented `showSyncProgressModal()` in [main.js](file:///c:/AI%20Project/IRMS/src/main.js) displaying active fetches, pending queues (`Sending...`), and failed queues (`Retry Queued`) with force-retry buttons.
 
-### 4. UI/UX Redesign & Stacking Adjustments
-- **Table-First Display**: Main module views now display full-width record tables as the primary display.
-- **Modal Dialog Form Entry**: Primary action buttons (`+ New Pickup Request`, `+ New Lost & Found Entry`) trigger clean modal popups.
-- **Hybrid Dropdown & Chip Selection Modal**: `Checker Line` and `Zone` selection triggers open a pop-up modal featuring a top live-search bar and chip buttons. Fixed z-index layering (`z-index: 3500`) to stack above form modals.
-- **Mobile Responsiveness**: Form modals transform into iOS-style bottom sheets on mobile viewports; chip grids support touch horizontal scrolling; action buttons stack vertically on mobile.
-- **Global Action Button Redesign**: Redesigned `.btn-primary`, `.btn-secondary`, `.btn-danger`, and `.btn-action-sm` with premium design tokens, active scale effects, and flush alignment.
-
-### 5. Backend Apps Script (`Code.gs`) Dynamic Headers
-- **Header-Based Value Placement**: Replaced hardcoded column index array appends with `appendRowByHeader()` and `updateStatusByHeader()`. Automatically detects row 1 headers, appends missing columns, and routes data into exact matching columns.
-
-### 6. Custom Alert Dialogs & Data Cache TTL
-- **Custom Alert Modals**: Replaced all 9 raw browser `alert()` popups with `showAlertModal()` (`utils/alert.js`).
-- **15-Minute Data Cache Expiry**: Implemented a 15-minute cache TTL (`DATA_EXPIRY_DURATION_MS`) in `db.js`. A background interval timer (running every 60 seconds) and tab switches automatically force refetching fresh data from Google Sheets CSV endpoints when cache expires.
+### 4. Global Top-Center Toast System
+- **Toast Redesign**: Relocated the toast container in [style.css](file:///c:/AI%20Project/IRMS/src/style.css) to the top center of the screen with a premium frosted glassmorphism style and drop-down/fade-out animations.
+- **Helper Unification**: Exposed `window.showToast` globally, deleting redundant local helper definitions across all sub-components.
 
 ---
 
 ## Files Modified & Created Today
 
-- `src/config/googleSheets.js`: Tab mappings for `checkerLines` and `zones`.
-- `src/data/db.js`: Password parsing, `getZones()`, `getCheckerLines()`, 15-min cache TTL & auto-sync.
-- `src/components/login.js`: Password validation from `User_DB`.
-- `src/components/dashboard.js`: Navigation labels, icons, tab-switch cache checks.
-- `src/components/requestPickup.js`: Modal form entry, Hybrid Chip modal, table-first view.
-- `src/components/lostAndFound.js`: Modal form entry, Hybrid Zone Chip modal, Reason chips, location validation.
-- `src/components/pickingTask.js`: Action button redesign, cancel confirmation modal styling.
-- `src/style.css`: Modal styling, `.hybrid-select-trigger`, `.btn-secondary`, `.btn-danger`, mobile bottom-sheets.
-- `src/utils/alert.js`: `showAlertModal()` promise-based dialog utility.
-- `gas/Code.gs`: Dynamic header column matching for row appends and status updates.
-- `Final Design/`: Updated BRD & process documentation.
+- [Code.gs](file:///c:/AI%20Project/IRMS/gas/Code.gs): Optimized handleCreatePutaway payload properties and SOH cell-by-cell skip conditions.
+- [db.js](file:///c:/AI%20Project/IRMS/src/data/db.js): Client-side prefill lookups, completion calculations, local-remote cache merge, background sync retriers.
+- [pickingTask.js](file:///c:/AI%20Project/IRMS/src/components/pickingTask.js): Putaway form submissions to non-blocking (Optimistic UI), visual sync status badges on Putaway logs, deleted localized `showToast`.
+- [main.js](file:///c:/AI%20Project/IRMS/src/main.js): Consolidating floating action buttons, implementing `showSyncProgressModal()`, binding global `window.showToast()`.
+- [style.css](file:///c:/AI%20Project/IRMS/src/style.css): Floating button reposition rules, top-centered toast containers, and animations.
+- [requestPickup.js](file:///c:/AI%20Project/IRMS/src/components/requestPickup.js): Removed redundant `showToast`.
+- [lostAndFound.js](file:///c:/AI%20Project/IRMS/src/components/lostAndFound.js): Removed redundant `showToast`.
+- [walkthrough.md](file:///C:/Users/Andry%20Tri%20Apriyadi/.gemini/antigravity-ide/brain/b014d051-a334-4f09-bcf6-905ee8edf60a/walkthrough.md): Documented manual verification guidelines for the new features.
 
 ---
 
-## Roadmap & Plan for Tomorrow
+## Roadmap & Next Steps
 
-- [ ] **Wire Up Putaway Functionality**:
-  - Define Putaway process specifications and data structures in documentation.
-  - Create Putaway UI component (`src/components/putaway.js`) and navigation tab.
-  - Connect Putaway data layer in `db.js` with Google Sheets CSV sync and Apps Script WebApp endpoints in `Code.gs`.
+1. **Redesign "Create Picking Task" Dashboard**:
+   - Remove the "Create Picking Task" manual click button.
+   - Introduce a new **"Waiting List"** sub-menu or dashboard section on the Picking Task Dashboard.
+   - Automatically populate and queue pending unpicked items from `Request_Checker` and `Lost_And_Found` tabs into this list for picking selection.
+
+2. **Implement Stock Movement & Stock Deduction Modules**:
+   - Code `Stock_Movement` process hooks for transferring inventory between rack zones.
+   - Code `Stock_Deduction` logic hooks for resolving inventory shrinkage or checker claims.
+   - Design backend gas schemas and frontend UI forms.

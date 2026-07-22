@@ -8,6 +8,12 @@ class IRMSApp {
     this.appRoot = document.getElementById('app');
     this.sessionCheckInterval = null;
     this.currentUser = this.loadUserSession();
+    
+    // Subscribe to DB changes to update sync status UI in real-time
+    db.subscribe(() => {
+      this.updateSyncStatusUI();
+    });
+
     this.init();
 
     // Helper for debugging/testing session expiration directly from console
@@ -141,40 +147,49 @@ class IRMSApp {
     document.body.innerHTML = `
       <div id="app"></div>
 
-      <button id="floatingRefreshBtn" class="floating-refresh-btn" title="Click to refresh live data for current menu">
-        <span class="material-icons-round">refresh</span>
-        <span>Refresh Data</span>
-      </button>
+      <div id="floatingSyncStatusBtn" class="floating-sync-status-btn synced" title="All changes synced with Google Sheets" style="display: none;">
+        <span class="material-icons-round font-icon">cloud_done</span>
+        <span class="status-label">All synced</span>
+      </div>
     `;
 
     this.appRoot = document.getElementById('app');
-    const floatingRefreshBtn = document.getElementById('floatingRefreshBtn');
+    const floatingSyncStatusBtn = document.getElementById('floatingSyncStatusBtn');
 
-    if (floatingRefreshBtn) {
-      floatingRefreshBtn.addEventListener('click', async () => {
-        floatingRefreshBtn.disabled = true;
-        const activeTab = window.irmsActiveTab || 'requestPickup';
-        let tabsToSync = [];
-        let syncLabel = 'Syncing data from Google Sheets...';
+    if (floatingSyncStatusBtn) {
+      floatingSyncStatusBtn.addEventListener('click', async () => {
+        const pendingCount = db.putawayRecords.filter(p => p.syncState === 'pending').length;
+        const failedCount = db.putawayRecords.filter(p => p.syncState === 'failed').length;
+        const isSyncActive = db.isSyncing || pendingCount > 0 || failedCount > 0;
 
-        if (activeTab === 'requestPickup') {
-          tabsToSync = ['requestChecker', 'soData'];
-          syncLabel = 'Syncing Pickup Requests from Google Sheets...';
-        } else if (activeTab === 'pickingTask') {
-          tabsToSync = ['pickingTask', 'requestChecker'];
-          syncLabel = 'Syncing Picking Tasks from Google Sheets...';
-        } else if (activeTab === 'lostAndFound') {
-          tabsToSync = ['lostAndFound', 'racks'];
-          syncLabel = 'Syncing Lost & Found from Google Sheets...';
-        }
+        if (isSyncActive) {
+          // Show the detailed sync progress popup modal
+          this.showSyncProgressModal();
+        } else {
+          // Perform live data refresh only
+          showToast('Refreshing live data from Google Sheets...');
+          const activeTab = window.irmsActiveTab || 'requestPickup';
+          let tabsToSync = [];
+          let syncLabel = 'Syncing data from Google Sheets...';
 
-        showBlockerLock(syncLabel);
-        try {
-          await db.syncGoogleSheets(tabsToSync);
-          this.renderCurrentView();
-        } finally {
-          hideBlockerLock();
-          floatingRefreshBtn.disabled = false;
+          if (activeTab === 'requestPickup') {
+            tabsToSync = ['requestChecker', 'soData'];
+            syncLabel = 'Syncing Pickup Requests from Google Sheets...';
+          } else if (activeTab === 'pickingTask') {
+            tabsToSync = ['pickingTask', 'requestChecker', 'putaway', 'soh', 'skusDb'];
+            syncLabel = 'Syncing Picking Tasks, Putaway & SOH...';
+          } else if (activeTab === 'lostAndFound') {
+            tabsToSync = ['lostAndFound', 'racks', 'skusDb'];
+            syncLabel = 'Syncing Lost & Found & SKU Reference...';
+          }
+
+          try {
+            await db.syncGoogleSheets(tabsToSync);
+            this.renderCurrentView();
+            showToast('Refreshed data successfully!');
+          } catch(e) {
+            showToast('Refresh failed. Please check network.');
+          }
         }
       });
     }
@@ -188,10 +203,10 @@ class IRMSApp {
     `;
 
     const viewContainer = document.getElementById('viewContainer');
-    const floatingRefreshBtn = document.getElementById('floatingRefreshBtn');
+    const floatingSyncStatusBtn = document.getElementById('floatingSyncStatusBtn');
 
     if (!this.currentUser) {
-      if (floatingRefreshBtn) floatingRefreshBtn.style.display = 'none';
+      if (floatingSyncStatusBtn) floatingSyncStatusBtn.style.display = 'none';
       renderLogin(viewContainer, async (userSession) => {
         this.saveUserSession(userSession);
         
@@ -201,11 +216,163 @@ class IRMSApp {
         this.renderCurrentView();
       });
     } else {
-      if (floatingRefreshBtn) floatingRefreshBtn.style.display = 'flex';
+      this.updateSyncStatusUI();
       renderDashboard(viewContainer, this.currentUser, () => {
         this.saveUserSession(null);
         this.renderCurrentView();
       });
+    }
+  }
+
+  showSyncProgressModal() {
+    const existing = document.getElementById('syncProgressModal');
+    if (existing) existing.remove();
+
+    const pending = db.putawayRecords.filter(p => p.syncState === 'pending');
+    const failed = db.putawayRecords.filter(p => p.syncState === 'failed');
+    
+    let activeTasksHtml = '';
+    
+    if (db.isSyncing) {
+      activeTasksHtml += `
+        <div style="display: flex; align-items: center; gap: 12px; background: #eff6ff; padding: 12px; border-radius: 12px; border: 1px solid #bfdbfe; margin-bottom: 10px;">
+          <div class="spinner" style="border-top-color: var(--primary-600); width: 16px; height: 16px;"></div>
+          <span style="font-size: 13px; font-weight: 700; color: var(--primary-800);">Fetch Sync: Pulling live sheets data...</span>
+        </div>
+      `;
+    }
+
+    if (pending.length > 0) {
+      activeTasksHtml += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Syncing in Progress (${pending.length})</div>
+          ${pending.map(p => `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 10px; margin-bottom: 6px; font-size: 12px;">
+              <span style="font-weight: 700; font-family: monospace;">Putaway #${p.putawayId}</span>
+              <span style="color: #64748b; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons-round" style="font-size: 14px; animation: spin 1s linear infinite;">sync</span>
+                Sending...
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    if (failed.length > 0) {
+      activeTasksHtml += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;">Unsynced Queue (${failed.length})</div>
+          ${failed.map(p => `
+            <div style="display: flex; justify-content: space-between; align-items: center; background: #fff5f5; padding: 10px 12px; border: 1px solid #fed7d7; border-radius: 10px; margin-bottom: 6px; font-size: 12px;">
+              <span style="font-weight: 700; font-family: monospace; color: #c53030;">Putaway #${p.putawayId}</span>
+              <span style="color: #e53e3e; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons-round" style="font-size: 14px;">sync_problem</span>
+                Retry Queued
+              </span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    if (activeTasksHtml === '') {
+      activeTasksHtml = `
+        <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px; font-weight: 600;">
+          <span class="material-icons-round" style="font-size: 36px; display: block; margin-bottom: 8px; color: var(--success);">cloud_done</span>
+          All data synced! No active pipeline processes.
+        </div>
+      `;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'syncProgressModal';
+    modal.className = 'modal-overlay';
+    modal.style.zIndex = '4000';
+    
+    modal.innerHTML = `
+      <div class="modal-card form-modal-card" style="max-width: 440px;">
+        <div class="form-modal-header">
+          <h3>
+            <span class="material-icons-round" style="color: var(--primary-600);">sync_alt</span>
+            Sync Pipeline Status
+          </h3>
+          <button class="form-modal-close-btn" id="closeSyncModalBtn">&times;</button>
+        </div>
+        <div class="form-modal-body" style="padding: 20px;">
+          ${activeTasksHtml}
+          
+          <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+            ${failed.length > 0 ? `
+              <button class="btn-primary" id="forceRetryBtn" style="padding: 0 16px; height: 38px; font-size: 13px;">
+                <span class="material-icons-round" style="font-size: 16px;">sync</span>
+                <span>Retry Sync</span>
+              </button>
+            ` : ''}
+            <button class="btn-secondary" id="closeSyncFooterBtn" style="padding: 0 16px; height: 38px; font-size: 13px;">Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeBtn = modal.querySelector('#closeSyncModalBtn');
+    const closeFooterBtn = modal.querySelector('#closeSyncFooterBtn');
+    const forceRetryBtn = modal.querySelector('#forceRetryBtn');
+
+    const closeModal = () => modal.remove();
+    closeBtn.addEventListener('click', closeModal);
+    closeFooterBtn.addEventListener('click', closeModal);
+    if (forceRetryBtn) {
+      forceRetryBtn.addEventListener('click', () => {
+        db.retryPendingSyncs();
+        closeModal();
+        showToast('Sync retries triggered...');
+      });
+    }
+  }
+
+  updateSyncStatusUI() {
+    const btn = document.getElementById('floatingSyncStatusBtn');
+    if (!btn) return;
+    if (!this.currentUser) {
+      btn.style.display = 'none';
+      return;
+    }
+    btn.style.display = 'flex';
+
+    const pendingCount = db.putawayRecords.filter(p => p.syncState === 'pending').length;
+    const failedCount = db.putawayRecords.filter(p => p.syncState === 'failed').length;
+
+    if (db.isSyncing) {
+      btn.className = 'floating-sync-status-btn syncing';
+      btn.innerHTML = `
+        <span class="material-icons-round font-icon">sync</span>
+        <span class="status-label">Syncing...</span>
+      `;
+      btn.title = 'Synchronizing with Google Sheets...';
+    } else if (failedCount > 0) {
+      btn.className = 'floating-sync-status-btn failed';
+      btn.innerHTML = `
+        <span class="material-icons-round font-icon">sync_problem</span>
+        <span class="status-label">${failedCount} unsynced (Retry)</span>
+      `;
+      btn.title = `${failedCount} transactions failed to sync. Click to retry syncing now.`;
+    } else if (pendingCount > 0) {
+      btn.className = 'floating-sync-status-btn syncing';
+      btn.innerHTML = `
+        <span class="material-icons-round font-icon">sync</span>
+        <span class="status-label">${pendingCount} queueing...</span>
+      `;
+      btn.title = `${pendingCount} transactions sync in progress...`;
+    } else {
+      btn.className = 'floating-sync-status-btn synced';
+      btn.innerHTML = `
+        <span class="material-icons-round font-icon">cloud_done</span>
+        <span class="status-label">All synced</span>
+      `;
+      btn.title = 'All changes synced successfully with Google Sheets';
     }
   }
 }
@@ -213,3 +380,28 @@ class IRMSApp {
 document.addEventListener('DOMContentLoaded', () => {
   new IRMSApp();
 });
+
+function showToast(message) {
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.innerHTML = `
+    <span class="material-icons-round" style="color: var(--success, #10b981); font-size: 18px;">check_circle</span>
+    <span>${message}</span>
+  `;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.animation = 'toastOut 0.3s forwards';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+// Expose toast globally to replace local duplicates
+window.showToast = showToast;

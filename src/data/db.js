@@ -13,6 +13,9 @@ class DatabaseService {
     this.zones = [];
     this.checkerLines = [];
     this.lostAndFound = this.loadSavedLostAndFound();
+    this.putawayRecords = this.loadSavedPutawayRecords();
+    this.skus = [];
+    this.soh = [];
     this.spreadsheetId = GOOGLE_SHEETS_CONFIG.spreadsheetId;
     this.webAppUrl = GOOGLE_SHEETS_CONFIG.webAppUrl;
     this.isSyncing = false;
@@ -224,6 +227,9 @@ class DatabaseService {
     const zonesTab = GOOGLE_SHEETS_CONFIG.tabs.zones || 'Zone';
     const lostAndFoundTab = GOOGLE_SHEETS_CONFIG.tabs.lostAndFound;
     const checkerLinesTab = GOOGLE_SHEETS_CONFIG.tabs.checkerLines;
+    const putawayTab = GOOGLE_SHEETS_CONFIG.tabs.putaway || 'Putaway';
+    const skusDbTab = GOOGLE_SHEETS_CONFIG.tabs.skusDb || 'SKUs_DB';
+    const sohTab = GOOGLE_SHEETS_CONFIG.tabs.soh || 'SOH';
     const cacheBuster = `_t=${Date.now()}`;
 
     const shouldSync = (tabKey) => !tabsToSync || tabsToSync.includes(tabKey);
@@ -250,6 +256,15 @@ class DatabaseService {
     if (shouldSync('checkerLines')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(checkerLinesTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'checkerLines', res: r })).catch(() => null));
     }
+    if (shouldSync('putaway')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(putawayTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'putaway', res: r })).catch(() => null));
+    }
+    if (shouldSync('skusDb')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(skusDbTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'skusDb', res: r })).catch(() => null));
+    }
+    if (shouldSync('soh')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sohTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'soh', res: r })).catch(() => null));
+    }
 
     try {
       const results = await Promise.all(fetches);
@@ -268,6 +283,9 @@ class DatabaseService {
         }
         if (item.key === 'lostAndFound') this.parseLostAndFound(text);
         if (item.key === 'checkerLines') this.parseCheckerLines(text);
+        if (item.key === 'putaway') this.parsePutaway(text);
+        if (item.key === 'skusDb') this.parseSkusDb(text);
+        if (item.key === 'soh') this.parseSoh(text);
       }
 
       this.lastSyncTime = new Date().toISOString();
@@ -628,6 +646,7 @@ class DatabaseService {
       const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
       const btiStaff = this.findRowValue(row, ['bti staff', 'bti_staff', 'checker name', 'checker_name', 'picker name', 'picker_name']);
       const skuCode = this.findRowValue(row, ['sku code', 'sku_code', 'sku number', 'sku_number', 'sku']);
+      const productName = this.findRowValue(row, ['product name', 'product_name', 'product']);
       const qty = this.findRowValue(row, ['qty', 'quantity']) || '1';
       const foundAt = this.findRowValue(row, ['found at', 'found_at', 'rack', 'rack name', 'rack_name']);
       const status = this.findRowValue(row, ['status']) || 'Pending';
@@ -638,6 +657,7 @@ class DatabaseService {
         timestamp: String(timestamp).trim(),
         btiStaff: String(btiStaff).trim(),
         skuCode: String(skuCode).trim(),
+        productName: String(productName).trim(),
         qty: parseInt(String(qty).trim() || '1', 10),
         foundAt: String(foundAt).trim(),
         status: String(status).trim(),
@@ -690,11 +710,13 @@ class DatabaseService {
   }
 
   async saveLostAndFoundEntry(entryData) {
+    const prodName = this.lookupProductName(entryData.skuCode) || entryData.productName || 'Unknown SKU';
     const newEntry = {
       ticketId: 'LF-' + this.generate6DigitId(),
       timestamp: new Date().toISOString(),
       btiStaff: entryData.btiStaff,
       skuCode: entryData.skuCode,
+      productName: prodName,
       qty: entryData.qty,
       foundAt: entryData.foundAt,
       reason: entryData.reason || '',
@@ -720,6 +742,297 @@ class DatabaseService {
     }
 
     return newEntry;
+  }
+
+  parsePutaway(csvText) {
+    if (!csvText) {
+      this.putawayRecords = [];
+      this.persistPutawayRecords();
+      return;
+    }
+
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    const remoteEntries = (result.data || []).map(row => {
+      const putawayId = this.findRowValue(row, ['putway id', 'putaway id', 'putway_id', 'putaway_id', 'id']);
+      const pickingId = this.findRowValue(row, ['picking id', 'picking_id', 'pickingid']);
+      const ticketId = this.findRowValue(row, ['ticket id', 'ticket_id', 'ticketid', 'uniqueid']);
+      const skuCode = this.findRowValue(row, ['sku code', 'sku_code', 'sku number', 'sku_number', 'sku']);
+      const productName = this.findRowValue(row, ['product name', 'product_name', 'product']);
+      const qtyPut = this.findRowValue(row, ['qty put', 'qty_put', 'quantity put', 'quantity_put', 'qty', 'quantity']);
+      const location = this.findRowValue(row, ['location', 'loc', 'storage location']);
+      const staffName = this.findRowValue(row, ['staff name', 'staff_name', 'staff', 'operator']);
+      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
+
+      return {
+        putawayId: String(putawayId).trim(),
+        pickingId: String(pickingId).trim(),
+        ticketId: String(ticketId).trim(),
+        skuCode: String(skuCode).trim(),
+        productName: String(productName).trim(),
+        qtyPut: parseInt(String(qtyPut).trim() || '0', 10),
+        location: String(location).trim(),
+        staffName: String(staffName).trim(),
+        timestamp: String(timestamp).trim()
+      };
+    }).filter(e => e.putawayId || e.pickingId);
+
+    const unsynced = this.putawayRecords.filter(p => p.syncState === 'pending' || p.syncState === 'failed');
+    const merged = [...unsynced];
+    remoteEntries.forEach(re => {
+      if (!merged.some(p => p.putawayId === re.putawayId)) {
+        re.syncState = 'synced';
+        merged.push(re);
+      }
+    });
+
+    this.putawayRecords = merged;
+    this.putawayRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    this.persistPutawayRecords();
+  }
+
+  loadSavedPutawayRecords() {
+    try {
+      const saved = localStorage.getItem('irms_putaway_records');
+      const records = saved ? JSON.parse(saved) : [];
+      records.forEach(r => {
+        if (!r.syncState) r.syncState = 'synced';
+      });
+      return records;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  persistPutawayRecords() {
+    try {
+      localStorage.setItem('irms_putaway_records', JSON.stringify(this.putawayRecords));
+    } catch (e) {
+      console.error('Failed to persist putawayRecords', e);
+    }
+  }
+
+  getPickingTaskRemainingQty(pickingId) {
+    const task = this.pickingTasks.find(t => String(t.pickingId).trim() === String(pickingId).trim());
+    if (!task) return 0;
+    
+    const sumPut = this.putawayRecords
+      .filter(p => String(p.pickingId).trim() === String(pickingId).trim())
+      .reduce((sum, p) => sum + (p.qtyPut || 0), 0);
+      
+    return Math.max(0, task.qty - sumPut);
+  }
+
+  async savePutawayEntry(entryData) {
+    const ptId = 'PT-' + this.generate6DigitId();
+    const now = new Date().toISOString();
+    const pickingId = String(entryData.pickingId).trim();
+    
+    // Calculate total quantity put away so far for this task (including this submission)
+    const sumPutSoFar = this.putawayRecords
+      .filter(p => String(p.pickingId).trim() === pickingId)
+      .reduce((sum, p) => sum + (p.qtyPut || 0), 0);
+    
+    const qtyPutThisTime = parseInt(entryData.qtyPut, 10);
+    const task = this.pickingTasks.find(t => String(t.pickingId).trim() === pickingId);
+    const taskQty = task ? task.qty : 0;
+    const isCompleted = (sumPutSoFar + qtyPutThisTime) >= taskQty;
+
+    const skuDetails = this.lookupSkuDetails(entryData.skuCode);
+    const newEntry = {
+      putawayId: ptId,
+      pickingId: entryData.pickingId,
+      ticketId: entryData.ticketId || '',
+      skuCode: entryData.skuCode,
+      productName: entryData.productName || (skuDetails ? skuDetails.productName : ''),
+      qtyPut: qtyPutThisTime,
+      location: entryData.location,
+      staffName: entryData.staffName,
+      timestamp: now,
+      
+      // Pre-filled lookup fields for SOH
+      productId: skuDetails ? skuDetails.productId : '',
+      l0CategoryName: skuDetails ? skuDetails.l0CategoryName : '',
+      l1CategoryName: skuDetails ? skuDetails.l1CategoryName : '',
+      l2CategoryName: skuDetails ? skuDetails.l2CategoryName : '',
+      foodOrNonFood: skuDetails ? skuDetails.foodOrNonFood : '',
+
+      // Pre-calculated statuses for Strategy A
+      isCompleted: isCompleted,
+      status: isCompleted ? 'Completed' : 'Picking',
+      ticketStatus: isCompleted ? 'Completed' : 'Picking',
+      syncState: 'pending'
+    };
+
+    // 1. Add locally immediately
+    this.putawayRecords.unshift(newEntry);
+    this.persistPutawayRecords();
+
+    // 2. Local state updates for picking task and ticket IDs
+    if (task) {
+      if (isCompleted) {
+        task.status = 'Completed';
+        
+        // Update ticket ID status
+        const ticketId = String(task.ticketId || '').trim();
+        if (ticketId) {
+          const isLf = ticketId.startsWith('LF-');
+          if (isLf) {
+            const lfEntry = this.lostAndFound.find(e => String(e.ticketId).trim() === ticketId);
+            if (lfEntry) lfEntry.status = 'Completed';
+          } else {
+            const reqEntry = this.requests.find(r => String(r.ticketId || r.uniqueid).trim() === ticketId);
+            if (reqEntry) reqEntry.status = 'Completed';
+          }
+        }
+      }
+    }
+    
+    this.persistPickingTasks();
+    this.persistRequests();
+    this.persistLostAndFound();
+    this.notifyListeners();
+
+    // 3. POST WebApp (Asynchronous background trigger for Strategy B)
+    this.postPutawayToBackend(newEntry);
+
+    return newEntry;
+  }
+
+  async postPutawayToBackend(entry) {
+    if (!this.webAppUrl) return;
+    try {
+      await fetch(this.webAppUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'createPutaway', ...entry })
+      });
+      entry.syncState = 'synced';
+      this.persistPutawayRecords();
+      this.notifyListeners();
+      
+      // Background sheet update refresh
+      setTimeout(() => this.syncGoogleSheets(), 2500);
+    } catch (err) {
+      console.error(`Failed to push Putaway entry PT-#${entry.putawayId} to WebApp:`, err);
+      entry.syncState = 'failed';
+      this.persistPutawayRecords();
+      this.notifyListeners();
+      
+      // Schedule background sync retry
+      this.scheduleSyncRetry();
+    }
+  }
+
+  scheduleSyncRetry() {
+    if (this._retryTimer) return;
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      this.retryPendingSyncs();
+    }, 15000);
+  }
+
+  async retryPendingSyncs() {
+    const pending = this.putawayRecords.filter(p => p.syncState === 'failed' || p.syncState === 'pending');
+    if (pending.length === 0) return;
+    
+    console.log(`Retrying ${pending.length} pending putaway syncs...`);
+    let someSucceeded = false;
+    for (const entry of pending) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'createPutaway', ...entry })
+        });
+        entry.syncState = 'synced';
+        someSucceeded = true;
+        console.log(`Successfully synced PT-#${entry.putawayId} in background retry`);
+      } catch (err) {
+        console.error(`Retry failed for PT-#${entry.putawayId}:`, err);
+        this.scheduleSyncRetry();
+        break;
+      }
+    }
+    if (someSucceeded) {
+      this.persistPutawayRecords();
+      this.notifyListeners();
+    }
+  }
+
+  parseSkusDb(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    if (result.data && result.data.length > 0) {
+      this.skus = result.data.map(row => {
+        const skuCode = this.findRowValue(row, ['sku_number', 'sku number', 'sku code', 'sku_code', 'sku']);
+        const productName = this.findRowValue(row, ['product_name', 'product name', 'product']);
+        const productId = this.findRowValue(row, ['product_id', 'product id', 'id']);
+        const l0CategoryName = this.findRowValue(row, ['l0_category_name', 'l0 category name', 'l0 category', 'l0']);
+        const l1CategoryName = this.findRowValue(row, ['l1_category_name', 'l1 category name', 'l1 category', 'l1']);
+        const l2CategoryName = this.findRowValue(row, ['l2_category_name', 'l2 category name', 'l2 category', 'l2']);
+        const foodOrNonFood = this.findRowValue(row, ['food_or_non_food', 'food or non food', 'food/non food', 'food']);
+
+        return {
+          skuCode: String(skuCode).trim(),
+          productName: String(productName).trim(),
+          productId: String(productId).trim(),
+          l0CategoryName: String(l0CategoryName).trim(),
+          l1CategoryName: String(l1CategoryName).trim(),
+          l2CategoryName: String(l2CategoryName).trim(),
+          foodOrNonFood: String(foodOrNonFood).trim()
+        };
+      }).filter(s => s.skuCode);
+    }
+  }
+
+  lookupSkuDetails(skuCode) {
+    const cleanSku = String(skuCode || '').trim();
+    if (!cleanSku) return null;
+    return this.skus.find(s => s.skuCode === cleanSku) || null;
+  }
+
+  lookupProductName(skuCode) {
+    const cleanSku = String(skuCode || '').trim();
+    if (!cleanSku) return '';
+    const match = this.skus.find(s => s.skuCode === cleanSku);
+    return match ? match.productName : '';
+  }
+
+  parseSoh(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    if (result.data && result.data.length > 0) {
+      this.soh = result.data.map(row => {
+        const skuCode = this.findRowValue(row, ['sku_number', 'sku number', 'sku code', 'sku_code', 'sku']);
+        const rackLocation = this.findRowValue(row, ['rack_location', 'rack location', 'location', 'rack']);
+        const qtySoh = this.findRowValue(row, ['qty soh', 'qty_soh', 'quantity SOH', 'quantity_soh', 'qty', 'quantity']);
+        const updatedAt = this.findRowValue(row, ['updated_at', 'updated at', 'timestamp', 'date', 'time']) || new Date().toISOString();
+
+        return {
+          skuCode: String(skuCode).trim(),
+          rackLocation: String(rackLocation).trim(),
+          qtySoh: parseInt(String(qtySoh).trim() || '0', 10),
+          updatedAt: String(updatedAt).trim()
+        };
+      }).filter(s => s.skuCode);
+    }
   }
 }
 

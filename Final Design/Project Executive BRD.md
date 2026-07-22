@@ -5,10 +5,10 @@ IRMS is a web-based system that will help businesses manage their inventory and 
 
 ## IRMS process definition
 [Request_Checker]
-[Picking task]
+[Picking_Task]
 [Putaway]
-[Stock Movement]
-[Lost And Found]
+[Stock_Movement]
+[Lost_And_Found]
 
 
 

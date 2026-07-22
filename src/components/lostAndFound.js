@@ -48,7 +48,7 @@ export function renderLostAndFound(container, currentUser) {
               <th>Ticket ID</th>
               <th>Timestamp</th>
               <th>BTI Staff</th>
-              <th>SKU Code</th>
+              <th>SKU / Item Details</th>
               <th>Qty</th>
               <th>Found At</th>
               <th>Reason</th>
@@ -100,7 +100,10 @@ export function renderLostAndFound(container, currentUser) {
         <td><strong style="color: var(--primary-700); font-family: monospace;">#${entry.ticketId}</strong></td>
         <td style="font-size: 12px; color: var(--text-secondary);">${new Date(entry.timestamp).toLocaleString()}</td>
         <td><strong>${escapeHtml(entry.btiStaff)}</strong></td>
-        <td><span style="font-weight: 700; color: var(--primary-600); font-family: monospace; font-size: 13px;">${escapeHtml(entry.skuCode)}</span></td>
+        <td>
+          <span style="font-weight: 700; color: var(--primary-600); font-family: monospace; font-size: 13px; display: block;">SKU: ${escapeHtml(entry.skuCode)}</span>
+          <span style="font-size: 12px; color: var(--text-secondary);">${escapeHtml(entry.productName || 'N/A')}</span>
+        </td>
         <td><strong style="font-size: 14px;">${entry.qty}</strong></td>
         <td><span class="location-badge" style="font-weight: 700; font-family: monospace; font-size: 12px; color: var(--primary-800); background: var(--primary-50); padding: 4px 8px; border-radius: 6px;">${escapeHtml(entry.foundAt)}</span></td>
         <td><span style="font-size: 12px; font-weight: 600; color: var(--text-secondary);">${escapeHtml(entry.reason || '-')}</span></td>
@@ -164,6 +167,7 @@ export function renderLostAndFound(container, currentUser) {
                   placeholder="Enter SKU Code (e.g. 10000000004093)..." 
                   required
                 />
+                <span id="lfSkuPreview" style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-top: 4px; display: block; min-height: 16px;"></span>
               </div>
 
               <!-- Quantity Input -->
@@ -245,6 +249,7 @@ export function renderLostAndFound(container, currentUser) {
     const submitLfBtn = modalOverlay.querySelector('#submitLfBtn');
 
     const lfSkuInput = modalOverlay.querySelector('#lfSkuInput');
+    const lfSkuPreview = modalOverlay.querySelector('#lfSkuPreview');
     const lfQtyInput = modalOverlay.querySelector('#lfQtyInput');
     const lfZoneInput = modalOverlay.querySelector('#lfZoneInput');
     const zoneTrigger = modalOverlay.querySelector('#zoneTrigger');
@@ -260,6 +265,22 @@ export function renderLostAndFound(container, currentUser) {
     cancelBtn.addEventListener('click', closeModal);
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) closeModal();
+    });
+
+    lfSkuInput.addEventListener('input', () => {
+      const skuVal = lfSkuInput.value.trim();
+      if (skuVal) {
+        const name = db.lookupProductName(skuVal);
+        if (name) {
+          lfSkuPreview.textContent = `Product Name: ${name}`;
+          lfSkuPreview.style.color = 'var(--success)';
+        } else {
+          lfSkuPreview.textContent = 'SKU not found in database';
+          lfSkuPreview.style.color = 'var(--warning)';
+        }
+      } else {
+        lfSkuPreview.textContent = '';
+      }
     });
 
     // Zone Hybrid Chip Modal Handler
@@ -463,24 +484,4 @@ function escapeHtml(str) {
   return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function showToast(message) {
-  let container = document.querySelector('.toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.className = 'toast-container';
-    document.body.appendChild(container);
-  }
 
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerHTML = `
-    <span class="material-icons-round" style="color: var(--success);">check_circle</span>
-    <span>${message}</span>
-  `;
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.animation = 'toastOut 0.3s forwards';
-    setTimeout(() => toast.remove(), 300);
-  }, 3500);
-}

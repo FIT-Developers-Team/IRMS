@@ -1,5 +1,6 @@
 import { db } from '../data/db.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
+import { showAlertModal } from '../utils/alert.js';
 
 export function renderPickingTask(container, currentUser) {
   let activeFilter = 'all';
@@ -222,8 +223,9 @@ export function renderPickingTask(container, currentUser) {
     pickingTableBody.innerHTML = tasks.map(task => {
       const statusClass = (task.status || '').toLowerCase();
       const isPicking = task.status === 'Picking';
+      const remainingQty = db.getPickingTaskRemainingQty(task.pickingId);
       return `
-        <tr>
+        <tr data-picking-id="${task.pickingId}" class="picking-task-row" style="cursor: pointer;">
           <td><strong style="color: var(--primary-700); font-family: monospace;">#${task.pickingId}</strong></td>
           <td><span style="font-family: monospace; font-weight: 600;">#${task.ticketId || 'N/A'}</span></td>
           <td><strong>${escapeHtml(task.pickedBy)}</strong></td>
@@ -235,11 +237,17 @@ export function renderPickingTask(container, currentUser) {
           <td><span class="status-badge ${statusClass}">${task.status}</span></td>
           <td style="font-size: 12px; color: var(--text-secondary);">${new Date(task.timestamp).toLocaleString()}</td>
           <td style="text-align: right;">
-            ${isPicking ? `
-              <button class="btn-action-sm cancel action-cancel-btn" data-id="${task.pickingId}" title="Cancel Task">
-                <span class="material-icons-round" style="font-size: 14px;">close</span>
-                <span>Cancel</span>
-              </button>
+            ${(isPicking && remainingQty > 0) ? `
+              <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                <button class="btn-action-sm action-putaway-btn" data-id="${task.pickingId}" data-sku="${escapeHtml(task.skuCode)}" data-product="${escapeHtml(task.productName)}" data-qty="${remainingQty}" style="background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0;" title="Confirm Putaway">
+                  <span class="material-icons-round" style="font-size: 14px;">input</span>
+                  <span>Putaway (${remainingQty})</span>
+                </button>
+                <button class="btn-action-sm cancel action-cancel-btn" data-id="${task.pickingId}" title="Cancel Task">
+                  <span class="material-icons-round" style="font-size: 14px;">close</span>
+                  <span>Cancel</span>
+                </button>
+              </div>
             ` : '<span style="color: var(--text-muted); font-size: 12px;">--</span>'}
           </td>
         </tr>
@@ -253,6 +261,27 @@ export function renderPickingTask(container, currentUser) {
         taskToCancelId = id;
         cancelModalTaskText.textContent = `Are you sure you want to cancel picking task #${id}? This will update status on Google Sheets.`;
         cancelConfirmModalOverlay.style.display = 'flex';
+      });
+    });
+
+    pickingTableBody.querySelectorAll('.action-putaway-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = btn.dataset.id;
+        const sku = btn.dataset.sku;
+        const productName = btn.dataset.product;
+        const maxQty = parseInt(btn.dataset.qty, 10);
+        openPutawayModal(id, sku, productName, maxQty);
+      });
+    });
+
+    // Row clicks for detailed task popup modal
+    pickingTableBody.querySelectorAll('.picking-task-row').forEach(rowEl => {
+      rowEl.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const pickingId = rowEl.dataset.pickingId;
+        if (pickingId) {
+          openTaskDetailsModal(pickingId);
+        }
       });
     });
   }
@@ -531,6 +560,354 @@ export function renderPickingTask(container, currentUser) {
     renderTasks();
   });
 
+  function openPutawayModal(pickingId, sku, productName, maxQty) {
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.id = 'putawayFormModal';
+
+    const ptTempId = 'PT-' + Math.floor(100000 + Math.random() * 900000);
+
+    modalOverlay.innerHTML = `
+      <div class="modal-card form-modal-card">
+        <div class="form-modal-header">
+          <h3>
+            <span class="material-icons-round" style="color: var(--success);">input</span>
+            Confirm Putaway Task
+          </h3>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="unique-id-chip">${ptTempId}</span>
+            <button class="form-modal-close-btn" id="closePutawayModalBtn" title="Close">
+              <span class="material-icons-round">close</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-modal-body">
+          <form id="putawayForm" autocomplete="off" onsubmit="return false;">
+            <div style="background: #f8fafc; padding: 12px 16px; border-radius: 12px; margin-bottom: 16px; border: 1.5px solid var(--border-light);">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Picking Task Details</div>
+              <div style="font-size: 14px; font-weight: 800; color: var(--primary-800); margin-top: 4px;">Picking ID: #${pickingId}</div>
+              <div style="font-size: 12px; color: var(--text-primary); margin-top: 2px;"><strong>SKU:</strong> ${sku}</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Product Name:</strong> ${productName}</div>
+              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Remaining Qty to Putaway:</strong> ${maxQty}</div>
+            </div>
+
+            <div class="form-grid">
+              <!-- Staff Name (Logged-in User) -->
+              <div class="form-field-wrapper">
+                <label class="form-label">Staff Name (System)</label>
+                <input 
+                  type="text" 
+                  class="text-control read-only-control" 
+                  value="${escapeHtml(currentUser.name)}" 
+                  readonly 
+                />
+              </div>
+
+              <!-- Qty to Put away -->
+              <div class="form-field-wrapper">
+                <label class="form-label">Qty to Putaway (Max ${maxQty})</label>
+                <input 
+                  type="number" 
+                  id="putawayQtyInput" 
+                  class="text-control" 
+                  min="1" 
+                  max="${maxQty}" 
+                  value="${maxQty}" 
+                  required 
+                />
+              </div>
+
+              <!-- Location -->
+              <div class="form-field-wrapper span-full">
+                <label class="form-label">Storage Location (Exactly 20 chars)</label>
+                <input 
+                  type="text" 
+                  id="putawayLocationInput" 
+                  class="text-control" 
+                  placeholder="e.g. CBT-MZF3-35-03-L1-04" 
+                  maxlength="20"
+                  required
+                />
+                <span class="input-helper-text" id="putawayLocationHelper">Should contain exactly 20 characters. Current length: 0</span>
+              </div>
+            </div>
+
+            <div class="form-modal-footer-actions" style="margin-top: 24px; display: flex; align-items: center; justify-content: flex-end; gap: 12px;">
+              <button type="button" class="btn-secondary" id="cancelPutawayModalBtn">Cancel</button>
+              <button type="submit" id="submitPutawayBtn" class="btn-primary" style="background: linear-gradient(135deg, var(--success), #059669); box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28);">
+                <span class="material-icons-round">check_circle</span>
+                <span>Confirm Putaway</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modalOverlay);
+
+    const closeBtn = modalOverlay.querySelector('#closePutawayModalBtn');
+    const cancelBtn = modalOverlay.querySelector('#cancelPutawayModalBtn');
+    const putawayForm = modalOverlay.querySelector('#putawayForm');
+    const putawayQtyInput = modalOverlay.querySelector('#putawayQtyInput');
+    const putawayLocationInput = modalOverlay.querySelector('#putawayLocationInput');
+    const putawayLocationHelper = modalOverlay.querySelector('#putawayLocationHelper');
+
+    const closeModal = () => modalOverlay.remove();
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+
+    putawayLocationInput.addEventListener('input', () => {
+      const len = putawayLocationInput.value.length;
+      putawayLocationHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
+      if (len === 20) {
+        putawayLocationHelper.style.color = 'var(--success)';
+      } else {
+        putawayLocationHelper.style.color = '';
+      }
+    });
+
+    putawayForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const qty = parseInt(putawayQtyInput.value, 10);
+      const location = putawayLocationInput.value.trim();
+
+      if (isNaN(qty) || qty < 1 || qty > maxQty) {
+        showAlertModal(`Invalid Quantity. Must be between 1 and ${maxQty}.`);
+        return;
+      }
+
+      if (location.length !== 20) {
+        showAlertModal(`Location must be exactly 20 characters long (e.g. CBT-MZF3-35-03-L1-04). Current length is ${location.length} characters.`);
+        return;
+      }
+
+      closeModal();
+      
+      const task = db.pickingTasks.find(t => String(t.pickingId).trim() === String(pickingId).trim());
+      const ticketId = task ? task.ticketId : '';
+      const payload = {
+        pickingId: pickingId,
+        ticketId: ticketId,
+        skuCode: sku,
+        productName: productName,
+        qtyPut: qty,
+        location: location,
+        staffName: currentUser.name
+      };
+      
+      // Submit asynchronously in the background (Optimistic UI)
+      db.savePutawayEntry(payload);
+      
+      showToast(`Logged putaway of ${qty} unit(s) to ${location} (Syncing in background...)`);
+      renderTasks();
+    });
+  }
+
+  function openTaskDetailsModal(pickingId) {
+    const task = db.pickingTasks.find(t => String(t.pickingId).trim() === String(pickingId).trim());
+    if (!task) {
+      showAlertModal(`Picking Task #${pickingId} details could not be found.`);
+      return;
+    }
+
+    const isLostAndFound = task.ticketId && task.ticketId.startsWith('LF-');
+    const sourceProcess = isLostAndFound ? 'Lost & Found' : 'Request Checker';
+    const sourceBadgeColor = isLostAndFound ? 'background: #fef3c7; color: #d97706;' : 'background: #dbeafe; color: #1e40af;';
+
+    // Build matching ticket info
+    let sourceDetailsHtml = '';
+    if (isLostAndFound) {
+      const entry = db.lostAndFound.find(e => String(e.ticketId).trim() === String(task.ticketId).trim());
+      if (entry) {
+        sourceDetailsHtml = `
+          <div style="background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 12px;">
+            <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+              <span class="material-icons-round" style="font-size: 14px; color: var(--primary-600);">travel_explore</span>
+              <span>Lost & Found Ticket Info</span>
+            </div>
+            <div style="font-size: 13px; margin-bottom: 4px;"><strong>BTI Staff:</strong> ${escapeHtml(entry.btiStaff)}</div>
+            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Found At Location:</strong> <span class="location-badge" style="font-family: monospace; font-size: 11px; padding: 2px 6px; font-weight: 700; color: var(--primary-800); background: var(--primary-50); border-radius: 6px;">${escapeHtml(entry.foundAt)}</span></div>
+            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Reason:</strong> ${escapeHtml(entry.reason || '-')}</div>
+            <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${entry.qty}</div>
+          </div>
+        `;
+      } else {
+        sourceDetailsHtml = `
+          <div style="background: #fff5f5; padding: 12px 14px; border-radius: 12px; border: 1.5px dashed #fca5a5; margin-top: 12px; color: #c53030; font-size: 12px; font-weight: 600;">
+            Source Lost & Found entry details not found locally.
+          </div>
+        `;
+      }
+    } else {
+      const entry = db.requests.find(r => String(r.ticketId || r.uniqueid).trim() === String(task.ticketId).trim());
+      if (entry) {
+        sourceDetailsHtml = `
+          <div style="background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 12px;">
+            <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+              <span class="material-icons-round" style="font-size: 14px; color: var(--primary-600);">outbox</span>
+              <span>Request Checker Ticket Info</span>
+            </div>
+            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Line:</strong> ${escapeHtml(entry.checkerLine)}</div>
+            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Name:</strong> ${escapeHtml(entry.checkerName)}</div>
+            <div style="font-size: 13px; margin-bottom: 4px;"><strong>SO Number:</strong> ${escapeHtml(entry.soNumber)}</div>
+            <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${entry.qty}</div>
+          </div>
+        `;
+      } else {
+        sourceDetailsHtml = `
+          <div style="background: #fff5f5; padding: 12px 14px; border-radius: 12px; border: 1.5px dashed #fca5a5; margin-top: 12px; color: #c53030; font-size: 12px; font-weight: 600;">
+            Source pickup request details not found locally.
+          </div>
+        `;
+      }
+    }
+
+    // Build putaway list
+    const putaways = db.putawayRecords.filter(p => String(p.pickingId).trim() === String(task.pickingId).trim());
+    let putawaysHtml = '';
+    if (putaways.length > 0) {
+      putawaysHtml = `
+        <div style="margin-top: 16px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+            <span class="material-icons-round" style="font-size: 14px; color: var(--success);">input</span>
+            <span>Associated Putaway Records</span>
+          </div>
+          <div class="data-table-wrapper" style="border: 1px solid var(--border-light); border-radius: 8px;">
+            <table class="custom-table" style="font-size: 12px;">
+              <thead>
+                <tr style="background: #f8fafc;">
+                  <th style="padding: 8px 12px; font-size: 10px;">Putaway ID</th>
+                  <th style="padding: 8px 12px; font-size: 10px;">Qty Put</th>
+                  <th style="padding: 8px 12px; font-size: 10px;">Location</th>
+                  <th style="padding: 8px 12px; font-size: 10px;">Operator</th>
+                  <th style="padding: 8px 12px; font-size: 10px;">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${putaways.map(p => {
+                  let syncBadge = '';
+                  if (p.syncState === 'pending') {
+                    syncBadge = `<span style="font-size: 9px; background: #f1f5f9; color: #64748b; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; margin-left: 6px;"><span class="material-icons-round" style="font-size: 10px; animation: spin 1s linear infinite;">sync</span>Pending</span>`;
+                  } else if (p.syncState === 'failed') {
+                    syncBadge = `<span style="font-size: 9px; background: #fee2e2; color: #ef4444; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-flex; align-items: center; gap: 3px; margin-left: 6px;"><span class="material-icons-round" style="font-size: 10px;">warning</span>Retry Queued</span>`;
+                  }
+                  
+                  return `
+                    <tr>
+                      <td style="padding: 8px 12px; font-weight: 700; font-family: monospace; display: flex; align-items: center; gap: 4px;">#${p.putawayId} ${syncBadge}</td>
+                      <td style="padding: 8px 12px; font-weight: 700;">${p.qtyPut}</td>
+                      <td style="padding: 8px 12px;"><span class="location-badge" style="font-family: monospace; font-size: 11px; padding: 2px 6px; font-weight: 700; color: var(--primary-800); background: var(--primary-50); border-radius: 6px;">${escapeHtml(p.location)}</span></td>
+                      <td style="padding: 8px 12px;">${escapeHtml(p.staffName)}</td>
+                      <td style="padding: 8px 12px; font-size: 11px; color: var(--text-secondary);">${new Date(p.timestamp).toLocaleString()}</td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    } else {
+      putawaysHtml = `
+        <div style="margin-top: 16px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
+            <span class="material-icons-round" style="font-size: 14px; color: var(--text-muted);">input</span>
+            <span>Associated Putaway Records</span>
+          </div>
+          <div style="text-align: center; padding: 16px; background: #f8fafc; border-radius: 12px; border: 1.5px dashed var(--border-light); color: var(--text-muted); font-size: 12px; font-weight: 600;">
+            No putaway logs found for this picking task yet.
+          </div>
+        </div>
+      `;
+    }
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.id = 'taskDetailsModal';
+
+    const statusClass = (task.status || '').toLowerCase();
+    
+    modalOverlay.innerHTML = `
+      <div class="modal-card form-modal-card" style="max-width: 600px;">
+        <div class="form-modal-header" style="align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="material-icons-round" style="color: var(--primary-600);">visibility</span>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Picking Task Details</h3>
+          </div>
+          <button class="form-modal-close-btn" id="closeDetailsModalBtn" title="Close">
+            <span class="material-icons-round">close</span>
+          </button>
+        </div>
+
+        <div class="form-modal-body" style="padding-top: 14px; max-height: calc(90vh - 80px); overflow-y: auto;">
+          <!-- Header stats -->
+          <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+            <span style="font-size: 12px; font-weight: 700; font-family: monospace; background: var(--primary-50); color: var(--primary-800); padding: 4px 10px; border-radius: 8px;">Picking ID: #${task.pickingId}</span>
+            <span style="font-size: 12px; font-weight: 700; font-family: monospace; background: var(--primary-50); color: var(--primary-800); padding: 4px 10px; border-radius: 8px;">Ticket ID: #${task.ticketId}</span>
+            <span class="status-badge ${statusClass}">${task.status}</span>
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; padding: 4px 10px; border-radius: 8px; ${sourceBadgeColor}">${sourceProcess}</span>
+          </div>
+
+          <!-- Main Info Grid -->
+          <div class="form-grid" style="grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+            <div style="background: #ffffff; padding: 12px 14px; border: 1px solid var(--border-light); border-radius: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">SKU Code</div>
+              <div style="font-size: 13px; font-weight: 800; color: var(--primary-800); margin-top: 4px; font-family: monospace;">${escapeHtml(task.skuCode)}</div>
+            </div>
+            
+            <div style="background: #ffffff; padding: 12px 14px; border: 1px solid var(--border-light); border-radius: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Task Qty</div>
+              <div style="font-size: 13px; font-weight: 800; color: var(--primary-800); margin-top: 4px;">${task.qty} unit(s)</div>
+            </div>
+
+            <div style="background: #ffffff; padding: 12px 14px; border: 1px solid var(--border-light); border-radius: 12px; grid-column: 1 / -1;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Product Name</div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">${escapeHtml(task.productName)}</div>
+            </div>
+
+            <div style="background: #ffffff; padding: 12px 14px; border: 1px solid var(--border-light); border-radius: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Picked By</div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">${escapeHtml(task.pickedBy)}</div>
+            </div>
+
+            <div style="background: #ffffff; padding: 12px 14px; border: 1px solid var(--border-light); border-radius: 12px;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Timestamp</div>
+              <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-top: 4px;">${new Date(task.timestamp).toLocaleString()}</div>
+            </div>
+          </div>
+
+          <!-- Related Source Ticket details -->
+          ${sourceDetailsHtml}
+
+          <!-- Putaway history logs -->
+          ${putawaysHtml}
+
+          <div class="form-modal-footer-actions" style="margin-top: 24px; display: flex; align-items: center; justify-content: flex-end;">
+            <button type="button" class="btn-secondary" id="closeDetailsFooterBtn" style="width: 100%; max-width: 120px;">Close</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modalOverlay);
+
+    const closeBtn = modalOverlay.querySelector('#closeDetailsModalBtn');
+    const closeFooterBtn = modalOverlay.querySelector('#closeDetailsFooterBtn');
+    
+    const closeModal = () => modalOverlay.remove();
+    closeBtn.addEventListener('click', closeModal);
+    if (closeFooterBtn) closeFooterBtn.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+  }
+
   // Initial Render
   renderTasks();
 }
@@ -539,24 +916,4 @@ function escapeHtml(str) {
   return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function showToast(message) {
-  let container = document.querySelector('.toast-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.className = 'toast-container';
-    document.body.appendChild(container);
-  }
 
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerHTML = `
-    <span class="material-icons-round" style="color: var(--success);">check_circle</span>
-    <span>${message}</span>
-  `;
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.animation = 'toastOut 0.3s forwards';
-    setTimeout(() => toast.remove(), 300);
-  }, 3500);
-}

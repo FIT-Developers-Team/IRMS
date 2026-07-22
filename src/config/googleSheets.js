@@ -10,6 +10,9 @@ export const GOOGLE_SHEETS_CONFIG = {
     racks: 'Racks',
     zones: 'Zone',
     lostAndFound: 'Lost_And_Found',
-    checkerLines: 'Checker_Lines'
+    checkerLines: 'Checker_Lines',
+    putaway: 'Putaway',
+    skusDb: 'SKUs_DB',
+    soh: 'SOH'
   }
 };
