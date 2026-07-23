@@ -1669,5 +1669,40 @@ body {
   overflow-y: auto;
 }
 
+/* Bulk Action Bar for Waiting List */
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--primary-50, #eff6ff);
+  border: 1px solid var(--primary-200, #bfdbfe);
+  padding: 12px 20px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.waiting-source-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.waiting-source-badge.request {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.waiting-source-badge.lost-found {
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
 
 
