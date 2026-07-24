@@ -1,7 +1,7 @@
 import Papa from 'papaparse';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets.js';
 
-export const DATA_EXPIRY_DURATION_MS = 15 * 60 * 1000; // 15 minutes TTL
+export const DATA_EXPIRY_DURATION_MS = 1 * 60 * 1000; // 1 minute TTL
 
 class DatabaseService {
   constructor() {
@@ -20,12 +20,15 @@ class DatabaseService {
     this.webAppUrl = GOOGLE_SHEETS_CONFIG.webAppUrl;
     this.isSyncing = false;
     this.lastSyncTime = null;
+    this.lastSectionSyncTime = {};  // { tabId: ISO string } per-section timestamps
     this.syncError = null;
     this.isLoaded = false;
     this.listeners = [];
     
-    // Auto-fetch hardcoded Google Sheets on init
-    this.initPromise = this.syncGoogleSheets();
+    // On fresh start: only fetch userDb to support login credential validation.
+    // Reference data (skusDb, zones, checkerLines) is synced after a successful login.
+    // Section data (soData, pickingTask, lostAndFound, soh, etc.) is synced lazily on navigation.
+    this.initPromise = this.syncGoogleSheets(['userDb']);
 
     // Background interval: Check every 60 seconds if data has reached 15-minute expiry and force refresh from backend
     this.cacheCheckInterval = setInterval(() => {
@@ -218,6 +221,7 @@ class DatabaseService {
 
     this.isSyncing = true;
     this.syncError = null;
+    this.notifyListeners(); // Notify immediately so status bar shows "Syncing…" at start
 
     const userDbTab = GOOGLE_SHEETS_CONFIG.tabs.userDb;
     const soDataTab = GOOGLE_SHEETS_CONFIG.tabs.soData;
@@ -268,11 +272,14 @@ class DatabaseService {
 
     try {
       const results = await Promise.all(fetches);
+      let successCount = 0;
+
       for (const item of results) {
         if (!item || !item.res || !item.res.ok) continue;
         const text = await item.res.text();
         if (text.includes('<!DOCTYPE html>')) continue;
 
+        successCount++;
         if (item.key === 'userDb') this.parseUsers(text);
         if (item.key === 'soData') this.parseSoData(text);
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
@@ -288,7 +295,16 @@ class DatabaseService {
         if (item.key === 'soh') this.parseSoh(text);
       }
 
+      // If fetches were attempted but ALL failed, treat as network error
+      if (fetches.length > 0 && successCount === 0) {
+        this.syncError = 'No data received — check your network connection';
+        this.isSyncing = false;
+        this.notifyListeners();
+        return false;
+      }
+
       this.lastSyncTime = new Date().toISOString();
+      this.syncError = null;
       this.isSyncing = false;
       this.isLoaded = true;
 
@@ -313,17 +329,213 @@ class DatabaseService {
 
   async checkAndRefreshIfExpired() {
     if (this.isDataExpired() && !this.isSyncing) {
-      console.log('[Data Cache Expired] 15 minutes reached. Performing forced data update from Google Sheets backend...');
+      console.log('[Data Cache Expired] 1 minute reached. Performing forced data update from Google Sheets backend...');
       await this.syncGoogleSheets();
       return true;
     }
     return false;
   }
 
+  /**
+   * Returns true if the given section's data is older than DATA_EXPIRY_DURATION_MS
+   * or has never been synced.
+   */
+  isSectionDataExpired(tabId) {
+    const lastSync = this.lastSectionSyncTime[tabId];
+    if (!lastSync) return true;
+    const lastSyncMs = new Date(lastSync).getTime();
+    if (isNaN(lastSyncMs)) return true;
+    return (Date.now() - lastSyncMs) >= DATA_EXPIRY_DURATION_MS;
+  }
+
+  /**
+   * Syncs only the sheet tabs required for a specific dashboard section.
+   * Called lazily on navigation (respects expiry) and by the sync button (force).
+   * Records a per-section timestamp on success so subsequent navigations skip the fetch.
+   */
+  async syncSectionData(tabId) {
+    const tabMap = {
+      home:          [],                                              // No section data needed
+      requestPickup: ['requestChecker', 'soData'],
+      pickingTask:   ['pickingTask', 'requestChecker', 'putaway', 'soh'],
+      lostAndFound:  ['lostAndFound', 'zones'],
+      soh:           ['soh', 'skusDb'],
+    };
+    const tabsToSync = tabMap[tabId];
+    if (!tabsToSync || tabsToSync.length === 0) return true; // Nothing to sync for Home
+    const ok = await this.syncGoogleSheets(tabsToSync);
+    if (ok) {
+      this.lastSectionSyncTime[tabId] = new Date().toISOString();
+    }
+    return ok;
+  }
+
   lookupStaffId(staffId) {
     const trimmed = String(staffId).trim();
     if (!trimmed) return null;
     return this.users.find(u => u.staffId === trimmed) || null;
+  }
+
+  // ── Admin: Users ──────────────────────────────────────────────────────────
+
+  getUsers() {
+    return [...this.users];
+  }
+
+  async addUser(userData) {
+    const { staffId, name, role, access, password } = userData;
+    if (!staffId || !name) throw new Error('Staff ID and Name are required');
+    if (this.users.find(u => u.staffId === String(staffId).trim())) {
+      throw new Error(`Staff ID "${staffId}" already exists`);
+    }
+
+    const newUser = {
+      staffId: String(staffId).trim(),
+      name: String(name).trim(),
+      role: String(role || 'Staff').trim(),
+      access: String(access || '').trim(),
+      password: String(password || '').trim()
+    };
+
+    this.users.push(newUser);
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'addUser', ...newUser })
+        });
+        setTimeout(() => this.syncGoogleSheets(['userDb']), 2500);
+      } catch (err) {
+        console.error('Failed to push addUser to WebApp:', err);
+      }
+    }
+    return newUser;
+  }
+
+  async updateUser(staffId, updates) {
+    const idx = this.users.findIndex(u => u.staffId === String(staffId).trim());
+    if (idx === -1) throw new Error(`User "${staffId}" not found`);
+
+    this.users[idx] = { ...this.users[idx], ...updates };
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'updateUser', staffId: String(staffId).trim(), ...updates })
+        });
+        setTimeout(() => this.syncGoogleSheets(['userDb']), 2500);
+      } catch (err) {
+        console.error('Failed to push updateUser to WebApp:', err);
+      }
+    }
+    return this.users[idx];
+  }
+
+  async deleteUser(staffId) {
+    const idx = this.users.findIndex(u => u.staffId === String(staffId).trim());
+    if (idx === -1) throw new Error(`User "${staffId}" not found`);
+
+    this.users.splice(idx, 1);
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'deleteUser', staffId: String(staffId).trim() })
+        });
+        setTimeout(() => this.syncGoogleSheets(['userDb']), 2500);
+      } catch (err) {
+        console.error('Failed to push deleteUser to WebApp:', err);
+      }
+    }
+  }
+
+  // ── Admin: Zones ──────────────────────────────────────────────────────────
+
+  async addZone(zoneName) {
+    if (!zoneName || !zoneName.trim()) throw new Error('Zone name is required');
+    const name = zoneName.trim();
+    if (this.zones.find(z => z.zoneName.toLowerCase() === name.toLowerCase())) {
+      throw new Error(`Zone "${name}" already exists`);
+    }
+    const newId = String(Date.now());
+    const newZone = { id: newId, zoneName: name };
+
+    this.zones.push(newZone);
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'addZone', id: newId, zoneName: name })
+        });
+        setTimeout(() => this.syncGoogleSheets(['zones']), 2500);
+      } catch (err) {
+        console.error('Failed to push addZone to WebApp:', err);
+      }
+    }
+    return newZone;
+  }
+
+  async updateZone(id, newZoneName) {
+    if (!newZoneName || !newZoneName.trim()) throw new Error('Zone name is required');
+    const idx = this.zones.findIndex(z => z.id === String(id));
+    if (idx === -1) throw new Error(`Zone ID "${id}" not found`);
+    const name = newZoneName.trim();
+
+    this.zones[idx].zoneName = name;
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'updateZone', id: String(id), zoneName: name })
+        });
+        setTimeout(() => this.syncGoogleSheets(['zones']), 2500);
+      } catch (err) {
+        console.error('Failed to push updateZone to WebApp:', err);
+      }
+    }
+    return this.zones[idx];
+  }
+
+  async deleteZone(id) {
+    const idx = this.zones.findIndex(z => z.id === String(id));
+    if (idx === -1) throw new Error(`Zone ID "${id}" not found`);
+
+    this.zones.splice(idx, 1);
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'deleteZone', id: String(id) })
+        });
+        setTimeout(() => this.syncGoogleSheets(['zones']), 2500);
+      } catch (err) {
+        console.error('Failed to push deleteZone to WebApp:', err);
+      }
+    }
   }
 
   getUniqueSoNumbers() {
@@ -1025,14 +1237,40 @@ class DatabaseService {
         const qtySoh = this.findRowValue(row, ['qty soh', 'qty_soh', 'quantity SOH', 'quantity_soh', 'qty', 'quantity']);
         const updatedAt = this.findRowValue(row, ['updated_at', 'updated at', 'timestamp', 'date', 'time']) || new Date().toISOString();
 
+        const qtyOnSo = this.findRowValue(row, ['qty on so', 'qty_on_so', 'qtyonso', 'qty_so', 'qty on sales order']);
+        const countSo = this.findRowValue(row, ['count so', 'count_so', 'countso', 'count_so', 'count sales order']);
+        const qtyOnLdp = this.findRowValue(row, ['qty on ldp', 'qty_on_ldp', 'qtyonldp', 'ldp', 'qty ldp']);
+        const stockAge = this.findRowValue(row, ['stock age', 'stock_age', 'stockage', 'age']);
+        const actionSuggestion = this.findRowValue(row, ['action suggestion', 'action_suggestion', 'actionsuggest', 'suggestion']);
+
         return {
           skuCode: String(skuCode).trim(),
           rackLocation: String(rackLocation).trim(),
           qtySoh: parseInt(String(qtySoh).trim() || '0', 10),
-          updatedAt: String(updatedAt).trim()
+          updatedAt: String(updatedAt).trim(),
+          qtyOnSo: parseFloat(String(qtyOnSo).trim() || '0'),
+          countSo: parseInt(String(countSo).trim() || '0', 10),
+          qtyOnLdp: parseFloat(String(qtyOnLdp).trim() || '0'),
+          stockAge: parseInt(String(stockAge).trim() || '0', 10),
+          actionSuggestion: String(actionSuggestion || '').trim()
         };
       }).filter(s => s.skuCode);
     }
+  }
+
+  getSohList() {
+    return this.soh.map(item => {
+      const skuDetails = this.lookupSkuDetails(item.skuCode) || {};
+      return {
+        ...item,
+        productId: skuDetails.productId || 'N/A',
+        productName: skuDetails.productName || 'Unknown Product',
+        l0CategoryName: skuDetails.l0CategoryName || 'N/A',
+        l1CategoryName: skuDetails.l1CategoryName || 'N/A',
+        l2CategoryName: skuDetails.l2CategoryName || 'N/A',
+        foodOrNonFood: skuDetails.foodOrNonFood || 'N/A'
+      };
+    });
   }
 }
 

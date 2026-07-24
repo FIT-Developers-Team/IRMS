@@ -61,7 +61,13 @@ export function renderPickingTask(container, currentUser) {
           <tbody id="pickingTableBody"></tbody>
         </table>
       </div>
+
+      <!-- Mobile Card List View Container -->
+      <div id="pickingMobileCardList" class="mobile-card-list"></div>
     </div>
+
+    <!-- Mobile Floating Action Bar Container -->
+    <div id="mobileFloatingActionBarContainer" style="display: none;"></div>
 
     <!-- Cancel Confirmation Modal -->
     <div id="cancelConfirmModalOverlay" class="modal-overlay" style="display: none;">
@@ -90,6 +96,7 @@ export function renderPickingTask(container, currentUser) {
   const filterTabs = container.querySelectorAll('.filter-tab');
   const pickingTableHead = container.querySelector('#pickingTableHead');
   const pickingTableBody = container.querySelector('#pickingTableBody');
+  const pickingMobileCardList = container.querySelector('#pickingMobileCardList');
 
   const cancelConfirmModalOverlay = container.querySelector('#cancelConfirmModalOverlay');
   const cancelModalCloseBtn = container.querySelector('#cancelModalCloseBtn');
@@ -124,6 +131,8 @@ export function renderPickingTask(container, currentUser) {
   function renderTasks() {
     const bulkContainer = container.querySelector('#bulkActionBarContainer');
     if (bulkContainer) bulkContainer.style.display = 'none';
+    const mobileActionBar = container.querySelector('#mobileFloatingActionBarContainer');
+    if (mobileActionBar) mobileActionBar.style.display = 'none';
 
     if (activeFilter === 'Waiting') {
       renderWaitingList();
@@ -161,7 +170,7 @@ export function renderPickingTask(container, currentUser) {
     }
 
     if (!tasks.length) {
-      pickingTableBody.innerHTML = `
+      const emptyHtml = `
         <tr>
           <td colspan="8">
             <div class="empty-state">
@@ -171,9 +180,17 @@ export function renderPickingTask(container, currentUser) {
           </td>
         </tr>
       `;
+      pickingTableBody.innerHTML = emptyHtml;
+      pickingMobileCardList.innerHTML = `
+        <div class="empty-state">
+          <span class="material-icons-round">assignment_late</span>
+          <p>No picking tasks found.</p>
+        </div>
+      `;
       return;
     }
 
+    // Render Desktop Table rows
     pickingTableBody.innerHTML = tasks.map(task => {
       const statusClass = (task.status || '').toLowerCase();
       const isPicking = task.status === 'Picking';
@@ -208,9 +225,53 @@ export function renderPickingTask(container, currentUser) {
       `;
     }).join('');
 
-    // Attach Action Listeners
-    pickingTableBody.querySelectorAll('.action-cancel-btn').forEach(btn => {
+    // Render Mobile Cards
+    pickingMobileCardList.innerHTML = tasks.map(task => {
+      const statusClass = (task.status || '').toLowerCase();
+      const isPicking = task.status === 'Picking';
+      const remainingQty = db.getPickingTaskRemainingQty(task.pickingId);
+      
+      return `
+        <div class="mobile-task-card" data-picking-id="${task.pickingId}">
+          <div class="card-header-row">
+            <span class="picking-id-label">Picking: #${task.pickingId}</span>
+            <span class="ticket-id-label">Ticket: #${task.ticketId || 'N/A'}</span>
+            <span class="status-badge ${statusClass}">${task.status}</span>
+          </div>
+          
+          <div class="card-body-content">
+            <div class="product-sku">SKU: <strong>${escapeHtml(task.skuCode)}</strong></div>
+            <div class="product-name">${escapeHtml(task.productName)}</div>
+          </div>
+          
+          <div class="card-footer-row" style="margin-top: 8px; padding-bottom: ${isPicking && remainingQty > 0 ? '10px' : '0'}; border-bottom: ${isPicking && remainingQty > 0 ? '1px solid var(--border-light)' : 'none'};">
+            <div class="footer-meta">
+              <div>Picker: <strong>${escapeHtml(task.pickedBy)}</strong></div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${new Date(task.timestamp).toLocaleString()}</div>
+            </div>
+            <div class="qty-badge">Qty: <strong>${task.qty}</strong></div>
+          </div>
+          
+          ${(isPicking && remainingQty > 0) ? `
+            <div class="card-actions-row" style="display: flex; gap: 8px; padding-top: 10px;">
+              <button class="btn-action-sm action-putaway-btn" data-id="${task.pickingId}" data-sku="${escapeHtml(task.skuCode)}" data-product="${escapeHtml(task.productName)}" data-qty="${remainingQty}" style="flex: 1; height: 36px; background: var(--success-bg); color: var(--success); border: 1px solid #a7f3d0; justify-content: center;">
+                <span class="material-icons-round" style="font-size: 16px;">input</span>
+                <span>Putaway (${remainingQty})</span>
+              </button>
+              <button class="btn-action-sm cancel action-cancel-btn" data-id="${task.pickingId}" style="flex: 0 0 100px; height: 36px; justify-content: center;">
+                <span class="material-icons-round" style="font-size: 16px;">close</span>
+                <span>Cancel</span>
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+
+    // Attach Action Listeners for Desktop and Mobile elements globally
+    container.querySelectorAll('.action-cancel-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const id = btn.dataset.id;
         taskToCancelId = id;
         cancelModalTaskText.textContent = `Are you sure you want to cancel picking task #${id}? This will update status on Google Sheets.`;
@@ -218,8 +279,9 @@ export function renderPickingTask(container, currentUser) {
       });
     });
 
-    pickingTableBody.querySelectorAll('.action-putaway-btn').forEach(btn => {
+    container.querySelectorAll('.action-putaway-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const id = btn.dataset.id;
         const sku = btn.dataset.sku;
         const productName = btn.dataset.product;
@@ -228,11 +290,11 @@ export function renderPickingTask(container, currentUser) {
       });
     });
 
-    // Row clicks for detailed task popup modal
-    pickingTableBody.querySelectorAll('.picking-task-row').forEach(rowEl => {
-      rowEl.addEventListener('click', (e) => {
+    // Row / Card clicks for detailed task popup modal
+    container.querySelectorAll('.picking-task-row, .mobile-task-card').forEach(el => {
+      el.addEventListener('click', (e) => {
         if (e.target.closest('button')) return;
-        const pickingId = rowEl.dataset.pickingId;
+        const pickingId = el.dataset.pickingId;
         if (pickingId) {
           openTaskDetailsModal(pickingId);
         }
@@ -303,15 +365,23 @@ export function renderPickingTask(container, currentUser) {
           <td colspan="8">
             <div class="empty-state">
               <span class="material-icons-round">task_alt</span>
-              <p>No waiting unpicked tasks found.</p>
+              <p>No unpicked waiting tasks found.</p>
             </div>
           </td>
         </tr>
       `;
+      pickingMobileCardList.innerHTML = `
+        <div class="empty-state">
+          <span class="material-icons-round">task_alt</span>
+          <p>No unpicked waiting tasks found.</p>
+        </div>
+      `;
       updateBulkActionBar(waitingItems);
+      updateMobileFloatingActionBar();
       return;
     }
 
+    // Populate desktop table
     pickingTableBody.innerHTML = waitingItems.map(item => {
       const isSelected = selectedWaitingTicketIds.has(item.id);
       const sourceLabel = item.sourceProcess === 'Request_Checker' ? 'Request' : 'Lost & Found';
@@ -343,7 +413,39 @@ export function renderPickingTask(container, currentUser) {
       `;
     }).join('');
 
-    // Select all checkbox event
+    // Populate mobile card list
+    pickingMobileCardList.innerHTML = waitingItems.map(item => {
+      const isSelected = selectedWaitingTicketIds.has(item.id);
+      const sourceLabel = item.sourceProcess === 'Request_Checker' ? 'Request' : 'Lost & Found';
+      const sourceClass = item.sourceProcess === 'Request_Checker' ? 'request' : 'lost-found';
+      
+      return `
+        <div class="mobile-waiting-card ${isSelected ? 'selected' : ''}" data-id="${item.id}">
+          <div class="card-header-row">
+            <span class="waiting-source-badge ${sourceClass}">${sourceLabel}</span>
+            <span class="ticket-id-label">#${item.id}</span>
+            <div class="checkbox-indicator">
+              <span class="material-icons-round check-icon">${isSelected ? 'check_circle' : 'radio_button_unchecked'}</span>
+            </div>
+          </div>
+          
+          <div class="card-body-content">
+            <div class="product-sku">SKU: <strong>${escapeHtml(item.sku)}</strong></div>
+            <div class="product-name">${escapeHtml(item.productName)}</div>
+          </div>
+          
+          <div class="card-footer-row">
+            <div class="footer-meta">
+              <div>By: <strong>${escapeHtml(item.requestedBy)}</strong></div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${item.timestamp ? new Date(item.timestamp).toLocaleString() : 'N/A'}</div>
+            </div>
+            <div class="qty-badge">Qty: <strong>${item.qty}</strong></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Select all checkbox event (desktop)
     const bulkSelectAllCheckbox = container.querySelector('#bulkSelectAllCheckbox');
     if (bulkSelectAllCheckbox) {
       bulkSelectAllCheckbox.checked = waitingItems.length > 0 && waitingItems.every(item => selectedWaitingTicketIds.has(item.id));
@@ -357,7 +459,7 @@ export function renderPickingTask(container, currentUser) {
       });
     }
 
-    // Row selection event
+    // Row selection event (desktop click)
     pickingTableBody.querySelectorAll('.waiting-item-row').forEach(rowEl => {
       const id = rowEl.dataset.id;
       const checkbox = rowEl.querySelector('.waiting-item-checkbox');
@@ -378,10 +480,39 @@ export function renderPickingTask(container, currentUser) {
           bulkSelectAllCheckbox.checked = waitingItems.every(item => selectedWaitingTicketIds.has(item.id));
         }
         updateBulkActionBar(waitingItems);
+        updateMobileFloatingActionBar();
       });
     });
 
-    // Row-level assign buttons
+    // Mobile card selection event (mobile click toggles selection)
+    pickingMobileCardList.querySelectorAll('.mobile-waiting-card').forEach(cardEl => {
+      const id = cardEl.dataset.id;
+      
+      cardEl.addEventListener('click', () => {
+        const isSelected = selectedWaitingTicketIds.has(id);
+        if (isSelected) {
+          selectedWaitingTicketIds.delete(id);
+        } else {
+          selectedWaitingTicketIds.add(id);
+        }
+        
+        cardEl.classList.toggle('selected', !isSelected);
+        const iconEl = cardEl.querySelector('.check-icon');
+        if (iconEl) {
+          iconEl.textContent = !isSelected ? 'check_circle' : 'radio_button_unchecked';
+        }
+        
+        // Sync desktop checkbox state
+        if (bulkSelectAllCheckbox) {
+          bulkSelectAllCheckbox.checked = waitingItems.every(item => selectedWaitingTicketIds.has(item.id));
+        }
+        
+        updateBulkActionBar(waitingItems);
+        updateMobileFloatingActionBar();
+      });
+    });
+
+    // Desktop row-level assign buttons
     pickingTableBody.querySelectorAll('.action-assign-row-btn').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.stopPropagation();
@@ -398,7 +529,6 @@ export function renderPickingTask(container, currentUser) {
           showToast(`Successfully assigned task #${id} to you!`);
           selectedWaitingTicketIds.delete(id);
           
-          // Switch to Picking tab
           activeFilter = 'Picking';
           const tab = Array.from(filterTabs).find(t => t.dataset.filter === 'Picking');
           if (tab) {
@@ -415,6 +545,7 @@ export function renderPickingTask(container, currentUser) {
     });
 
     updateBulkActionBar(waitingItems);
+    updateMobileFloatingActionBar();
   }
 
   function updateBulkActionBar(waitingItems = []) {
@@ -467,7 +598,6 @@ export function renderPickingTask(container, currentUser) {
         showToast(`Successfully assigned ${totalCreated} picking task(s) to you!`);
         selectedWaitingTicketIds.clear();
         
-        // Switch tab to Picking (In Progress)
         activeFilter = 'Picking';
         const tab = Array.from(filterTabs).find(t => t.dataset.filter === 'Picking');
         if (tab) {
@@ -483,26 +613,202 @@ export function renderPickingTask(container, currentUser) {
     });
   }
 
-  // Filter Tabs Event
-  filterTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      filterTabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      activeFilter = tab.dataset.filter;
-      renderTasks();
+  function updateMobileFloatingActionBar() {
+    const containerEl = container.querySelector('#mobileFloatingActionBarContainer');
+    if (!containerEl) return;
+
+    const count = selectedWaitingTicketIds.size;
+    if (activeFilter !== 'Waiting' || count === 0) {
+      containerEl.style.display = 'none';
+      containerEl.innerHTML = '';
+      return;
+    }
+
+    containerEl.style.display = 'block';
+    containerEl.innerHTML = `
+      <button class="mobile-floating-action-bar" id="mobileStartPickBtn">
+        <span class="material-icons-round">play_arrow</span>
+        <span>Start Picking (${count})</span>
+      </button>
+    `;
+
+    containerEl.querySelector('#mobileStartPickBtn').addEventListener('click', () => {
+      openMobileConfirmModal();
     });
-  });
+  }
 
-  // Search Input Event
-  taskSearchInput.addEventListener('input', (e) => {
-    searchQuery = e.target.value.trim();
-    renderTasks();
-  });
+  function openMobileConfirmModal() {
+    const existing = document.getElementById('mobileConfirmModalOverlay');
+    if (existing) existing.remove();
 
-  // Subscribe to DB updates
-  const unsubscribe = db.subscribe(() => {
-    renderTasks();
-  });
+    const pendingRc = db.getPendingRequests();
+    const pendingLf = db.getPendingLostAndFound();
+    
+    const selectedReqsRc = pendingRc.filter(r => selectedWaitingTicketIds.has(String(r.ticketId || r.uniqueid)));
+    const selectedReqsLf = pendingLf.filter(r => selectedWaitingTicketIds.has(String(r.ticketId || r.uniqueid)));
+    const allSelected = [...selectedReqsRc, ...selectedReqsLf];
+
+    const modal = document.createElement('div');
+    modal.id = 'mobileConfirmModalOverlay';
+    modal.className = 'modal-overlay';
+    modal.style.zIndex = '4000';
+
+    modal.innerHTML = `
+      <div class="modal-card form-modal-card" style="max-width: 420px; border-radius: 20px;">
+        <div class="form-modal-header">
+          <h3>
+            <span class="material-icons-round" style="color: var(--primary-600);">playlist_add_check</span>
+            Confirm Picking Tasks
+          </h3>
+          <button class="form-modal-close-btn" id="closeMobileConfirmBtn">&times;</button>
+        </div>
+        
+        <div class="form-modal-body" style="padding: 20px;">
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; font-weight: 600;">
+            You are about to start picking ${allSelected.length} task(s). Confirm task list:
+          </p>
+          
+          <div style="max-height: 180px; overflow-y: auto; margin-bottom: 16px; border: 1px solid var(--border-light); border-radius: 12px; padding: 8px;">
+            ${allSelected.map(r => {
+              const name = r.productName || (r.foundAt ? `Lost & Found (${r.foundAt})` : 'Lost & Found');
+              return `
+                <div style="padding: 6px 8px; border-bottom: 1px solid #f1f5f9; font-size: 12px; display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <span style="font-weight: 700; color: var(--primary-700); font-family: monospace; display: block;">#${r.ticketId || r.uniqueid}</span>
+                    <span style="color: var(--text-primary); font-weight: 600;">${escapeHtml(name)}</span>
+                  </div>
+                  <span style="font-weight: 700;">Qty: ${r.qty || 1}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- Swipe Slider -->
+          <div id="mobileSwipeSliderContainer" class="swipe-slider-container">
+            <div class="swipe-track">
+              <div class="swipe-fill" id="mobileSwipeFill"></div>
+              <span class="swipe-text" id="mobileSwipeText">Swipe right to proceed</span>
+              <div class="swipe-thumb" id="mobileSwipeThumb">
+                <span class="material-icons-round">chevron_right</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeBtn = modal.querySelector('#closeMobileConfirmBtn');
+    const closeModal = () => modal.remove();
+    closeBtn.addEventListener('click', closeModal);
+
+    // Swipe Slider Actions
+    const swipeContainer = modal.querySelector('#mobileSwipeSliderContainer');
+    const swipeThumb = modal.querySelector('#mobileSwipeThumb');
+    const swipeFill = modal.querySelector('#mobileSwipeFill');
+    const swipeText = modal.querySelector('#mobileSwipeText');
+
+    let isDragging = false;
+    let isCompleting = false;
+    let startX = 0;
+    let currentX = 0;
+    let maxDrag = 0;
+
+    function getClientX(e) {
+      return e.touches ? e.touches[0].clientX : e.clientX;
+    }
+
+    function startDrag(e) {
+      if (isCompleting) return;
+      isDragging = true;
+      startX = getClientX(e);
+      const trackWidth = swipeContainer.querySelector('.swipe-track').offsetWidth;
+      const thumbWidth = swipeThumb.offsetWidth;
+      maxDrag = trackWidth - thumbWidth - 4;
+      swipeThumb.style.transition = 'none';
+      swipeFill.style.transition = 'none';
+    }
+
+    function onDrag(e) {
+      if (!isDragging || isCompleting) return;
+      const clientX = getClientX(e);
+      let delta = clientX - startX;
+      if (delta < 0) delta = 0;
+      if (delta > maxDrag) delta = maxDrag;
+
+      currentX = delta;
+      swipeThumb.style.transform = `translateX(${delta}px)`;
+      swipeFill.style.width = `${delta + 20}px`;
+
+      const progress = maxDrag > 0 ? delta / maxDrag : 0;
+      if (progress > 0.85) {
+        completeSwipe();
+      }
+    }
+
+    function endDrag() {
+      if (!isDragging || isCompleting) return;
+      isDragging = false;
+      if ((maxDrag > 0 ? currentX / maxDrag : 0) < 0.85) {
+        currentX = 0;
+        swipeThumb.style.transform = `translateX(0px)`;
+        swipeFill.style.width = `0px`;
+        swipeThumb.style.transition = 'transform 0.2s ease';
+        swipeFill.style.transition = 'width 0.2s ease';
+      }
+    }
+
+    async function completeSwipe() {
+      if (isCompleting) return;
+      isCompleting = true;
+      isDragging = false;
+
+      swipeThumb.style.transform = `translateX(${maxDrag}px)`;
+      swipeFill.style.width = '100%';
+      swipeText.textContent = 'Assigning tasks...';
+
+      try {
+        let totalCreated = 0;
+        if (selectedReqsRc.length > 0) {
+          const createdRc = await db.createPickingTasks(selectedReqsRc, currentUser.name, 'Request_Checker');
+          totalCreated += createdRc.length;
+        }
+        if (selectedReqsLf.length > 0) {
+          const createdLf = await db.createPickingTasks(selectedReqsLf, currentUser.name, 'Lost_And_Found');
+          totalCreated += createdLf.length;
+        }
+
+        showToast(`Successfully assigned ${totalCreated} picking task(s) to you!`);
+        selectedWaitingTicketIds.clear();
+        closeModal();
+
+        // Switch to Picking tab
+        activeFilter = 'Picking';
+        const tab = Array.from(filterTabs).find(t => t.dataset.filter === 'Picking');
+        if (tab) {
+          filterTabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+        }
+        renderTasks();
+      } catch (err) {
+        console.error('Mobile swipe assign failed:', err);
+        isCompleting = false;
+        currentX = 0;
+        swipeThumb.style.transform = `translateX(0px)`;
+        swipeFill.style.width = `0px`;
+        swipeText.textContent = 'Swipe right to proceed';
+      }
+    }
+
+    swipeThumb.addEventListener('mousedown', startDrag);
+    window.addEventListener('mousemove', onDrag);
+    window.addEventListener('mouseup', endDrag);
+
+    swipeThumb.addEventListener('touchstart', startDrag, { passive: true });
+    window.addEventListener('touchmove', onDrag, { passive: true });
+    window.addEventListener('touchend', endDrag);
+  }
 
   function openPutawayModal(pickingId, sku, productName, maxQty) {
     const modalOverlay = document.createElement('div');
@@ -851,6 +1157,34 @@ export function renderPickingTask(container, currentUser) {
       if (e.target === modalOverlay) closeModal();
     });
   }
+
+  // Filter Tabs Event
+  filterTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      filterTabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeFilter = tab.dataset.filter;
+      renderTasks();
+    });
+  });
+
+  // Search Input Event
+  taskSearchInput.addEventListener('input', (e) => {
+    searchQuery = e.target.value.trim();
+    renderTasks();
+  });
+
+  // Capture the root element this component just rendered
+  const ownRoot = container.firstElementChild;
+
+  // Subscribe to DB updates - unsubscribe when this component is no longer active
+  const unsubscribe = db.subscribe(() => {
+    if (!container.isConnected || container.firstElementChild !== ownRoot) {
+      unsubscribe();
+      return;
+    }
+    renderTasks();
+  });
 
   // Initial Render
   renderTasks();

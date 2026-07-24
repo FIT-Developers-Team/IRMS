@@ -58,12 +58,16 @@ export function renderLostAndFound(container, currentUser) {
           <tbody id="lfTableBody"></tbody>
         </table>
       </div>
+
+      <!-- Mobile Card List View Container -->
+      <div id="lfMobileCardList" class="mobile-card-list"></div>
     </div>
   `;
 
   const lfCountBadge = container.querySelector('#lfCountBadge');
   const lfSearchInput = container.querySelector('#lfSearchInput');
   const lfTableBody = container.querySelector('#lfTableBody');
+  const lfMobileCardList = container.querySelector('#lfMobileCardList');
   const openNewLfModalBtn = container.querySelector('#openNewLfModalBtn');
 
   // Table rendering
@@ -82,19 +86,24 @@ export function renderLostAndFound(container, currentUser) {
     lfCountBadge.textContent = `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`;
 
     if (!entries.length) {
+      const emptyHtml = `
+        <div class="empty-state">
+          <span class="material-icons-round">travel_explore</span>
+          <p>No Lost & Found entries found.</p>
+        </div>
+      `;
       lfTableBody.innerHTML = `
         <tr>
           <td colspan="8">
-            <div class="empty-state">
-              <span class="material-icons-round">travel_explore</span>
-              <p>No Lost & Found entries submitted by <strong>${escapeHtml(currentUser.name)}</strong> yet.</p>
-            </div>
+            ${emptyHtml}
           </td>
         </tr>
       `;
+      lfMobileCardList.innerHTML = emptyHtml;
       return;
     }
 
+    // Render Desktop Table
     lfTableBody.innerHTML = entries.map(entry => `
       <tr>
         <td><strong style="color: var(--primary-700); font-family: monospace;">#${entry.ticketId}</strong></td>
@@ -110,10 +119,47 @@ export function renderLostAndFound(container, currentUser) {
         <td><span class="status-badge pending">${entry.status}</span></td>
       </tr>
     `).join('');
+
+    // Render Mobile Cards
+    lfMobileCardList.innerHTML = entries.map(entry => `
+      <div class="mobile-task-card">
+        <div class="card-header-row">
+          <span class="picking-id-label">#${entry.ticketId}</span>
+          <span class="status-badge pending">${entry.status}</span>
+        </div>
+        
+        <div class="card-body-content">
+          <div class="product-sku">SKU: <strong>${escapeHtml(entry.skuCode)}</strong></div>
+          <div class="product-name">${escapeHtml(entry.productName || 'N/A')}</div>
+        </div>
+        
+        <div class="card-footer-row" style="margin-top: 8px;">
+          <div class="footer-meta">
+            <div>Staff: <strong>${escapeHtml(entry.btiStaff)}</strong></div>
+            <div>Location: <span class="location-badge" style="font-weight: 700; font-family: monospace; font-size: 11px; padding: 2px 6px; border-radius: 4px; color: var(--primary-800); background: var(--primary-50);">${escapeHtml(entry.foundAt)}</span></div>
+            <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Reason: ${escapeHtml(entry.reason || '-')}</div>
+            <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${new Date(entry.timestamp).toLocaleString()}</div>
+          </div>
+          <div class="qty-badge">Qty: <strong>${entry.qty}</strong></div>
+        </div>
+      </div>
+    `).join('');
   }
 
   lfSearchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value.trim();
+    renderTable();
+  });
+
+  // Capture the root element this component just rendered
+  const ownRoot = container.firstElementChild;
+
+  // Subscribe to DB updates - unsubscribe when this component is no longer active
+  const unsubscribe = db.subscribe(() => {
+    if (!container.isConnected || container.firstElementChild !== ownRoot) {
+      unsubscribe();
+      return;
+    }
     renderTable();
   });
 
@@ -474,10 +520,7 @@ export function renderLostAndFound(container, currentUser) {
   // Initial render
   renderTable();
 
-  // Subscribe to DB updates
-  const unsubscribe = db.subscribe(() => {
-    renderTable();
-  });
+
 }
 
 function escapeHtml(str) {

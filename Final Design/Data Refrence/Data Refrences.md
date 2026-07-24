@@ -106,6 +106,20 @@ this dataset is to store stock on hand that is used for IRMS process, it will be
 |Count SO|System generated|
 |Qty On LDP|System generated|
 |Stock Age|System generated|
+|Action Suggestion|System generated LDP RECOVERY/WH ADJUST IN|
+
+
+# User_DB 
+this dataset is used to store user data that is used for IRMS process, it will be updated from time to time when theres activity that affect the stock (Putaway, stock deduction, stock movement)
+
+## Data Structure
+|Column|Behaviour|
+|------|---------|
+|Staff ID|System generated|
+|Name|System generated|
+|Role|System generated|
+|Acess|population from all available menu, can multiple, unlock all if role = Super|
+|Password|System generated suggested 4 digit number|
 
 
 

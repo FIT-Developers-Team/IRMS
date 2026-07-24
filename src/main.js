@@ -129,16 +129,97 @@ class IRMSApp {
   }
 
   renderLoadingState() {
-    const viewContainer = document.getElementById('viewContainer');
-    if (!viewContainer) return;
-
-    viewContainer.innerHTML = `
-      <div class="login-page-bg">
-        <div class="login-card" style="text-align: center; padding: 40px 20px;">
-          <div class="spinner" style="width: 40px; height: 40px; border-width: 4px; margin: 0 auto 16px; border-top-color: var(--primary-600);"></div>
-          <h2 style="font-size: 18px; font-weight: 800; color: var(--primary-900);">Syncing Google Sheets...</h2>
-          <p style="font-size: 13px; color: var(--text-secondary); margin-top: 6px;">Fetching live User_DB & SO_DATA tabs</p>
+    this.appRoot.innerHTML = `
+      <div id="app-splash-screen" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #0a2d6c 0%, #0d47a1 50%, #1565c0 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999999; font-family: 'Plus Jakarta Sans', sans-serif; color: #ffffff; transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.5s; overflow: hidden;">
+        
+        <!-- Option 2 Parallax Starfield Background -->
+        <div class="starfield">
+          <div class="star" style="top: 10%; width: 2px; height: 2px; opacity: 0.7; animation-duration: 3s; animation-delay: 0.1s;"></div>
+          <div class="star" style="top: 25%; width: 3px; height: 3px; opacity: 0.9; animation-duration: 2s; animation-delay: 0.5s;"></div>
+          <div class="star" style="top: 40%; width: 1.5px; height: 1.5px; opacity: 0.5; animation-duration: 4.5s; animation-delay: 1.2s;"></div>
+          <div class="star" style="top: 55%; width: 2.5px; height: 2.5px; opacity: 0.8; animation-duration: 2.8s; animation-delay: 0s;"></div>
+          <div class="star" style="top: 70%; width: 2px; height: 2px; opacity: 0.6; animation-duration: 3.5s; animation-delay: 0.7s;"></div>
+          <div class="star" style="top: 85%; width: 3.5px; height: 3.5px; opacity: 0.9; animation-duration: 1.8s; animation-delay: 0.3s;"></div>
+          <div class="star" style="top: 15%; width: 1.5px; height: 1.5px; opacity: 0.4; animation-duration: 5s; animation-delay: 1.5s;"></div>
+          <div class="star" style="top: 30%; width: 2px; height: 2px; opacity: 0.7; animation-duration: 3.2s; animation-delay: 0.8s;"></div>
+          <div class="star" style="top: 50%; width: 3px; height: 3px; opacity: 0.9; animation-duration: 2.2s; animation-delay: 1.1s;"></div>
+          <div class="star" style="top: 65%; width: 1.5px; height: 1.5px; opacity: 0.5; animation-duration: 4.2s; animation-delay: 0.2s;"></div>
+          <div class="star" style="top: 80%; width: 2.5px; height: 2.5px; opacity: 0.8; animation-duration: 2.6s; animation-delay: 0.6s;"></div>
+          <div class="star" style="top: 95%; width: 2px; height: 2px; opacity: 0.6; animation-duration: 3.8s; animation-delay: 1.4s;"></div>
         </div>
+
+        <!-- Combined Flight & Hovering Container -->
+        <div style="text-align: center; display: flex; flex-direction: column; align-items: center; gap: 24px; position: relative; z-index: 10;">
+          
+          <!-- Option 1 Orbiting & Hovering Astronaut Rocket -->
+          <div class="rocket-orbit-wrapper" style="width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+            <img src="/Assets/Loading Image.png" class="rocket-hover-image" alt="Loading Astronaut" style="width: 130px; height: auto;" />
+          </div>
+          
+          <!-- App Title and Label -->
+          <div style="display: flex; flex-direction: column; gap: 6px; background: rgba(10, 45, 108, 0.4); padding: 16px 28px; border-radius: 16px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 12px 32px rgba(0,0,0,0.15);">
+            <h1 style="font-size: 24px; font-weight: 800; letter-spacing: 2px; margin: 0; color: #ffffff; text-transform: uppercase;">IRMS</h1>
+            <span style="font-size: 11px; font-weight: 700; color: #38bdf8; letter-spacing: 2px; text-transform: uppercase; margin-top: 2px;">Syncing live Google Sheets...</span>
+          </div>
+
+          <!-- Custom animated typing dots -->
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <div style="width: 8px; height: 8px; background: #38bdf8; border-radius: 50%; animation: splashDot 1.4s infinite both;"></div>
+            <div style="width: 8px; height: 8px; background: #38bdf8; border-radius: 50%; animation: splashDot 1.4s infinite both; animation-delay: 0.2s;"></div>
+            <div style="width: 8px; height: 8px; background: #38bdf8; border-radius: 50%; animation: splashDot 1.4s infinite both; animation-delay: 0.4s;"></div>
+          </div>
+        </div>
+
+        <style>
+          .starfield {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 1;
+            pointer-events: none;
+          }
+          
+          .star {
+            position: absolute;
+            background: #ffffff;
+            border-radius: 50%;
+            animation: starFly linear infinite;
+          }
+
+          .rocket-orbit-wrapper {
+            animation: rocketOrbit 8s ease-in-out infinite;
+          }
+
+          .rocket-hover-image {
+            animation: rocketHover 2.5s ease-in-out infinite;
+          }
+
+          @keyframes starFly {
+            from { transform: translateX(100vw); }
+            to { transform: translateX(-10vw); }
+          }
+
+          @keyframes rocketOrbit {
+            0% { transform: translate(-140px, -40px) rotate(15deg); }
+            25% { transform: translate(140px, -60px) rotate(30deg); }
+            50% { transform: translate(110px, 60px) rotate(-15deg); }
+            75% { transform: translate(-140px, 40px) rotate(-35deg); }
+            100% { transform: translate(-140px, -40px) rotate(15deg); }
+          }
+
+          @keyframes rocketHover {
+            0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+            50% { transform: translateY(-10px) rotate(6deg) scale(1.03); }
+          }
+
+          @keyframes splashDot {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+            40% { transform: scale(1); opacity: 1; }
+          }
+        </style>
       </div>
     `;
   }
@@ -166,29 +247,13 @@ class IRMSApp {
           // Show the detailed sync progress popup modal
           this.showSyncProgressModal();
         } else {
-          // Perform live data refresh only
-          showToast('Refreshing live data from Google Sheets...');
-          const activeTab = window.irmsActiveTab || 'requestPickup';
-          let tabsToSync = [];
-          let syncLabel = 'Syncing data from Google Sheets...';
-
-          if (activeTab === 'requestPickup') {
-            tabsToSync = ['requestChecker', 'soData'];
-            syncLabel = 'Syncing Pickup Requests from Google Sheets...';
-          } else if (activeTab === 'pickingTask') {
-            tabsToSync = ['pickingTask', 'requestChecker', 'putaway', 'soh', 'skusDb'];
-            syncLabel = 'Syncing Picking Tasks, Putaway & SOH...';
-          } else if (activeTab === 'lostAndFound') {
-            tabsToSync = ['lostAndFound', 'racks', 'skusDb'];
-            syncLabel = 'Syncing Lost & Found & SKU Reference...';
-          }
-
+          // Trigger a fresh sync for the active section.
+          // The sync status bar in dashboard.js reflects progress automatically via db.subscribe.
+          const activeTab = window.irmsActiveTab || 'home';
           try {
-            await db.syncGoogleSheets(tabsToSync);
-            this.renderCurrentView();
-            showToast('Refreshed data successfully!');
+            await db.syncSectionData(activeTab);
           } catch(e) {
-            showToast('Refresh failed. Please check network.');
+            console.warn('[Manual sync failed]', e);
           }
         }
       });
@@ -210,8 +275,10 @@ class IRMSApp {
       renderLogin(viewContainer, async (userSession) => {
         this.saveUserSession(userSession);
         
-        // Trigger live Google Sheets sync every time login happens
-        await db.syncGoogleSheets();
+        // After login: sync reference data needed app-wide.
+        // userDb is already loaded (fetched on startup for credentials check).
+        // Section data is synced lazily when the user navigates to each section.
+        await db.syncGoogleSheets(['skusDb', 'zones', 'checkerLines']);
         
         this.renderCurrentView();
       });

@@ -49,10 +49,14 @@ export function renderRequestPickup(container, currentUser) {
           <tbody id="requestTableBody"></tbody>
         </table>
       </div>
+
+      <!-- Mobile Card List View Container -->
+      <div id="requestMobileCardList" class="mobile-card-list"></div>
     </div>
   `;
 
   const requestTableBody = container.querySelector('#requestTableBody');
+  const requestMobileCardList = container.querySelector('#requestMobileCardList');
   const requestCountBadge = container.querySelector('#requestCountBadge');
   const openNewRequestModalBtn = container.querySelector('#openNewRequestModalBtn');
 
@@ -62,19 +66,24 @@ export function renderRequestPickup(container, currentUser) {
     requestCountBadge.textContent = `${userRequests.length} request(s)`;
 
     if (!userRequests.length) {
+      const emptyHtml = `
+        <div class="empty-state">
+          <span class="material-icons-round">lock_clock</span>
+          <p>No pickup requests submitted by <strong>${currentUser.name}</strong> yet.</p>
+        </div>
+      `;
       requestTableBody.innerHTML = `
         <tr>
           <td colspan="9">
-            <div class="empty-state">
-              <span class="material-icons-round">lock_clock</span>
-              <p>No pickup requests submitted by <strong>${currentUser.name}</strong> yet.</p>
-            </div>
+            ${emptyHtml}
           </td>
         </tr>
       `;
+      requestMobileCardList.innerHTML = emptyHtml;
       return;
     }
 
+    // Render Desktop Table
     requestTableBody.innerHTML = userRequests.map(req => `
       <tr>
         <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
@@ -90,6 +99,30 @@ export function renderRequestPickup(container, currentUser) {
         <td><strong style="font-size: 14px;">${req.qty}</strong></td>
         <td><span class="status-badge pending">${req.status}</span></td>
       </tr>
+    `).join('');
+
+    // Render Mobile Cards
+    requestMobileCardList.innerHTML = userRequests.map(req => `
+      <div class="mobile-task-card">
+        <div class="card-header-row">
+          <span class="picking-id-label">#${req.ticketId || req.uniqueid}</span>
+          <span class="status-badge pending">${req.status}</span>
+        </div>
+        
+        <div class="card-body-content">
+          <div class="product-sku">SKU: <strong>${escapeHtml(req.skuNumber)}</strong></div>
+          <div class="product-name">${escapeHtml(req.productName)}</div>
+        </div>
+        
+        <div class="card-footer-row" style="margin-top: 8px;">
+          <div class="footer-meta">
+            <div>Line: <strong>${escapeHtml(req.checkerLine || '-')}</strong> • SO: <strong>${escapeHtml(req.soNumber)}</strong></div>
+            <div>Picker: ${escapeHtml(req.pickerName || 'N/A')} • Checker: <strong>${escapeHtml(req.checkerName)}</strong></div>
+            <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${new Date(req.timestamp).toLocaleString()}</div>
+          </div>
+          <div class="qty-badge">Qty: <strong>${req.qty}</strong></div>
+        </div>
+      </div>
     `).join('');
   }
 
@@ -515,8 +548,15 @@ export function renderRequestPickup(container, currentUser) {
   // Initial table refresh
   refreshTable();
 
-  // Subscribe to DB updates
+  // Capture the root element this component just rendered
+  const ownRoot = container.firstElementChild;
+
+  // Subscribe to DB updates - unsubscribe when this component is no longer active
   const unsubscribe = db.subscribe(() => {
+    if (!container.isConnected || container.firstElementChild !== ownRoot) {
+      unsubscribe();
+      return;
+    }
     refreshTable();
   });
 }
