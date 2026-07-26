@@ -954,7 +954,7 @@ export function renderPickingTask(container, currentUser) {
       // Submit asynchronously in the background (Optimistic UI)
       db.savePutawayEntry(payload);
       
-      showToast(`Logged putaway of ${qty} unit(s) to ${location} (Syncing in background...)`);
+      showToast(`Logged putaway of ${qty} unit(s) to ${location}.`);
       renderTasks();
     });
   }

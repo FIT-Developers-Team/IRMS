@@ -13,6 +13,8 @@ export const GOOGLE_SHEETS_CONFIG = {
     checkerLines: 'Checker_Lines',
     putaway: 'Putaway',
     skusDb: 'SKUs_DB',
-    soh: 'SOH'
+    soh: 'SOH',
+    stockMovement: 'Stock_Movement',
+    stockActivity: 'Stock_Activity'
   }
 };

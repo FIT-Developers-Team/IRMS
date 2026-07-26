@@ -227,37 +227,9 @@ class IRMSApp {
   renderShell() {
     document.body.innerHTML = `
       <div id="app"></div>
-
-      <div id="floatingSyncStatusBtn" class="floating-sync-status-btn synced" title="All changes synced with Google Sheets" style="display: none;">
-        <span class="material-icons-round font-icon">cloud_done</span>
-        <span class="status-label">All synced</span>
-      </div>
     `;
 
     this.appRoot = document.getElementById('app');
-    const floatingSyncStatusBtn = document.getElementById('floatingSyncStatusBtn');
-
-    if (floatingSyncStatusBtn) {
-      floatingSyncStatusBtn.addEventListener('click', async () => {
-        const pendingCount = db.putawayRecords.filter(p => p.syncState === 'pending').length;
-        const failedCount = db.putawayRecords.filter(p => p.syncState === 'failed').length;
-        const isSyncActive = db.isSyncing || pendingCount > 0 || failedCount > 0;
-
-        if (isSyncActive) {
-          // Show the detailed sync progress popup modal
-          this.showSyncProgressModal();
-        } else {
-          // Trigger a fresh sync for the active section.
-          // The sync status bar in dashboard.js reflects progress automatically via db.subscribe.
-          const activeTab = window.irmsActiveTab || 'home';
-          try {
-            await db.syncSectionData(activeTab);
-          } catch(e) {
-            console.warn('[Manual sync failed]', e);
-          }
-        }
-      });
-    }
   }
 
   renderCurrentView() {
@@ -401,46 +373,7 @@ class IRMSApp {
   }
 
   updateSyncStatusUI() {
-    const btn = document.getElementById('floatingSyncStatusBtn');
-    if (!btn) return;
-    if (!this.currentUser) {
-      btn.style.display = 'none';
-      return;
-    }
-    btn.style.display = 'flex';
-
-    const pendingCount = db.putawayRecords.filter(p => p.syncState === 'pending').length;
-    const failedCount = db.putawayRecords.filter(p => p.syncState === 'failed').length;
-
-    if (db.isSyncing) {
-      btn.className = 'floating-sync-status-btn syncing';
-      btn.innerHTML = `
-        <span class="material-icons-round font-icon">sync</span>
-        <span class="status-label">Syncing...</span>
-      `;
-      btn.title = 'Synchronizing with Google Sheets...';
-    } else if (failedCount > 0) {
-      btn.className = 'floating-sync-status-btn failed';
-      btn.innerHTML = `
-        <span class="material-icons-round font-icon">sync_problem</span>
-        <span class="status-label">${failedCount} unsynced (Retry)</span>
-      `;
-      btn.title = `${failedCount} transactions failed to sync. Click to retry syncing now.`;
-    } else if (pendingCount > 0) {
-      btn.className = 'floating-sync-status-btn syncing';
-      btn.innerHTML = `
-        <span class="material-icons-round font-icon">sync</span>
-        <span class="status-label">${pendingCount} queueing...</span>
-      `;
-      btn.title = `${pendingCount} transactions sync in progress...`;
-    } else {
-      btn.className = 'floating-sync-status-btn synced';
-      btn.innerHTML = `
-        <span class="material-icons-round font-icon">cloud_done</span>
-        <span class="status-label">All synced</span>
-      `;
-      btn.title = 'All changes synced successfully with Google Sheets';
-    }
+    // Sync status is managed directly inside the top page content header in dashboard.js
   }
 }
 

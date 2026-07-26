@@ -20,18 +20,22 @@ export function renderSoh(container, currentUser) {
 
   container.innerHTML = `
     <div class="card-panel">
-      <div class="card-title-group" style="flex-wrap: wrap; gap: 12px;">
-        <div>
-          <h3>
-            <span class="material-icons-round" style="color: var(--primary-600);">inventory_2</span>
-            Stock On Hand (SOH)
+      <div class="card-title-group" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); margin-bottom: 0; width: 100%; box-sizing: border-box;">
+        <div style="min-width: 0;">
+          <h3 style="display: flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-size: 15px;">
+            <span class="material-icons-round" style="color: var(--primary-600); flex-shrink: 0; font-size: 20px;">inventory_2</span>
+            <span>Stock On Hand (SOH)</span>
           </h3>
-          <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 2px;">
-            Real-time stock levels and sales allocation status
+          <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: 2px;">
+            Real-time stock levels & allocation
           </span>
         </div>
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 13px; font-weight: 700; color: var(--text-secondary);" id="sohCountBadge">0 SKUs</span>
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); white-space: nowrap;" id="sohCountBadge">0 SKUs</span>
+          <button id="toggleSohKpiBtn" class="btn-secondary" title="Toggle KPI summary cards" style="height: 28px; padding: 0 10px; font-size: 11px; font-weight: 700; gap: 4px; border-radius: 20px; flex-shrink: 0; white-space: nowrap;">
+            <span class="material-icons-round" id="toggleSohKpiIcon" style="font-size: 15px;">${localStorage.getItem('irms_hide_kpis') === 'true' ? 'expand_more' : 'expand_less'}</span>
+            <span id="toggleSohKpiText">${localStorage.getItem('irms_hide_kpis') === 'true' ? 'Show KPIs' : 'Hide KPIs'}</span>
+          </button>
         </div>
       </div>
 
@@ -278,6 +282,40 @@ export function renderSoh(container, currentUser) {
   const sohTableBody = container.querySelector('#sohTableBody');
   const sohMobileCardList = container.querySelector('#sohMobileCardList');
   const sohCountBadge = container.querySelector('#sohCountBadge');
+
+  // SOH KPI Cards Toggle Handler
+  const sohKpiGrid = container.querySelector('.soh-kpi-grid');
+  const toggleSohKpiBtn = container.querySelector('#toggleSohKpiBtn');
+
+  function applyKpiVisibility() {
+    const isHidden = localStorage.getItem('irms_hide_kpis') === 'true';
+    if (sohKpiGrid) {
+      if (isHidden) {
+        sohKpiGrid.classList.add('kpi-grid-hidden');
+        sohKpiGrid.style.display = 'none';
+      } else {
+        sohKpiGrid.classList.remove('kpi-grid-hidden');
+        sohKpiGrid.style.display = '';
+      }
+    }
+  }
+
+  if (toggleSohKpiBtn) {
+    toggleSohKpiBtn.addEventListener('click', () => {
+      const isHidden = localStorage.getItem('irms_hide_kpis') === 'true';
+      const newHidden = !isHidden;
+      localStorage.setItem('irms_hide_kpis', newHidden);
+
+      const icon = container.querySelector('#toggleSohKpiIcon');
+      const text = container.querySelector('#toggleSohKpiText');
+      if (icon) icon.textContent = newHidden ? 'expand_more' : 'expand_less';
+      if (text) text.textContent = newHidden ? 'Show KPIs' : 'Hide KPIs';
+
+      applyKpiVisibility();
+    });
+  }
+
+  applyKpiVisibility();
 
   const statUniqueSkus = container.querySelector('#statUniqueSkus');
   const statTotalQty = container.querySelector('#statTotalQty');
@@ -768,6 +806,7 @@ export function renderSoh(container, currentUser) {
                   <th style="padding: 8px 12px; width: 80px;">Qty SOH</th>
                   <th style="padding: 8px 12px; width: 80px;">Stock Age</th>
                   <th style="padding: 8px 12px; width: 140px;">Last Updated</th>
+                  <th style="padding: 8px 12px; width: 100px; text-align: center;">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -777,6 +816,12 @@ export function renderSoh(container, currentUser) {
                     <td style="padding: 8px 12px;"><strong style="font-size: 13px;">${loc.qtySoh}</strong></td>
                     <td style="padding: 8px 12px;"><strong style="font-size: 12px; color: ${loc.stockAge > 30 ? 'var(--danger)' : 'var(--text-secondary)'};">${loc.stockAge} days</strong></td>
                     <td style="padding: 8px 12px; color: var(--text-muted); font-size: 11px;">${loc.updatedAt ? new Date(loc.updatedAt).toLocaleString() : 'N/A'}</td>
+                    <td style="padding: 8px 12px; text-align: center;">
+                      <button type="button" class="btn-primary assign-loc-btn" data-rack="${escapeHtml(loc.rackLocation)}" style="padding: 4px 8px; font-size: 11px; height: 26px; gap: 4px; border-radius: 6px; width: 100%;">
+                        <span class="material-icons-round" style="font-size: 13px;">swap_horiz</span>
+                        <span>Assign</span>
+                      </button>
+                    </td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -800,6 +845,23 @@ export function renderSoh(container, currentUser) {
     closeFooterBtn.addEventListener('click', closeModal);
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) closeModal();
+    });
+
+    modalOverlay.querySelectorAll('.assign-loc-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rack = btn.dataset.rack;
+        const locItem = skuItem.locations.find(l => l.rackLocation === rack);
+        if (locItem) {
+          openAssignMovementModal(skuItem, locItem, currentUser, (newMovement) => {
+            closeModal();
+            let toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#087f5b;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.2);';
+            toast.innerHTML = `<span class="material-icons-round" style="font-size:16px;">check_circle</span>Movement task ${newMovement.movementId} created & assigned to ${newMovement.staffName}!`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3500);
+          });
+        }
+      });
     });
   }
 
@@ -917,3 +979,407 @@ export function renderSoh(container, currentUser) {
 function escapeHtml(str) {
   return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+
+export function openAssignMovementModal(skuItem, locationItem, currentUser, onCompleteCallback) {
+  const users = db.getUsers();
+
+  const modalOverlay = document.createElement('div');
+  modalOverlay.className = 'modal-overlay';
+  modalOverlay.id = 'assignMovementModal';
+  modalOverlay.style.zIndex = '3600';
+
+  const defaultType = 'Transfer location';
+  const defaultReason = 'Bad/Damaged/Expired';
+
+  modalOverlay.innerHTML = `
+    <div class="modal-card form-modal-card" style="max-width: 520px; border-radius: 20px;">
+      <div class="form-modal-header" style="align-items: center;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="material-icons-round" style="color: var(--primary-600);">swap_horiz</span>
+          <h3 style="margin: 0; font-size: 16px; font-weight: 700;">Assign Stock Movement / Deduction</h3>
+        </div>
+        <button class="form-modal-close-btn" id="closeAssignModalBtn" title="Close" style="border: none; background: transparent; cursor: pointer;">
+          <span class="material-icons-round">close</span>
+        </button>
+      </div>
+
+      <div class="form-modal-body" style="padding-top: 14px; max-height: calc(90vh - 80px); overflow-y: auto;">
+        
+        <!-- Context Summary Card -->
+        <div style="background: var(--surface-body); padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;">
+            <div>
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Selected SKU</div>
+              <div style="font-size: 14px; font-weight: 800; color: var(--primary-800); font-family: monospace;">${escapeHtml(skuItem.skuCode)}</div>
+              <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">${escapeHtml(skuItem.productName)}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">From Location</div>
+              <span class="location-badge" style="font-family: monospace; font-size: 12px; font-weight: 700; color: var(--primary-800); background: var(--primary-50); padding: 4px 8px; border-radius: 6px; display: inline-block; margin-top: 2px;">
+                ${escapeHtml(locationItem.rackLocation)}
+              </span>
+              <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">Available Qty: <strong>${locationItem.qtySoh}</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <form id="assignMovementForm" style="display: flex; flex-direction: column; gap: 14px;">
+          <!-- Movement Type (Custom Dropdown) -->
+          <div class="form-group">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+              Movement Type <span style="color: var(--danger);">*</span>
+            </label>
+            <div class="custom-dropdown-container" id="dropdown-assign-type">
+              <button type="button" class="custom-dropdown-trigger" style="height: 38px; padding: 0 12px; font-size: 13px; font-weight: 600; width: 100%;">
+                <span class="trigger-label">Transfer location (Rack to Rack)</span>
+                <span class="material-icons-round trigger-icon">expand_more</span>
+              </button>
+              <div class="custom-dropdown-menu" style="width: 100%; z-index: 4000;"></div>
+            </div>
+          </div>
+
+          <!-- Reason (Custom Dropdown) -->
+          <div class="form-group">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+              Reason <span style="color: var(--danger);">*</span>
+            </label>
+            <div class="custom-dropdown-container" id="dropdown-assign-reason">
+              <button type="button" class="custom-dropdown-trigger" style="height: 38px; padding: 0 12px; font-size: 13px; font-weight: 600; width: 100%;">
+                <span class="trigger-label">Bad/Damaged/Expired</span>
+                <span class="material-icons-round trigger-icon">expand_more</span>
+              </button>
+              <div class="custom-dropdown-menu" style="width: 100%; z-index: 4000;"></div>
+            </div>
+          </div>
+
+          <!-- Custom Explanation (Hidden unless "Other (explain)" is selected) -->
+          <div class="form-group" id="otherReasonGroup" style="display: none;">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+              Reason Explanation <span style="color: var(--danger);">*</span>
+            </label>
+            <input type="text" id="otherReasonInput" class="text-control" placeholder="Specify explanation..." style="width: 100%; height: 38px; font-size: 13px;" />
+          </div>
+
+          <!-- Quantity -->
+          <div class="form-group">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+              Quantity to Move / Deduct <span style="color: var(--danger);">*</span>
+            </label>
+            <input type="number" id="movementQtyInput" class="text-control" value="1" min="1" max="${locationItem.qtySoh}" style="width: 100%; height: 38px; font-size: 14px; font-weight: 700;" />
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Max allowed: ${locationItem.qtySoh} units</div>
+          </div>
+
+          <!-- To Location (Storage Location rule / Deduction parameter) -->
+          <div class="form-group" id="toLocationGroup">
+            <label id="toLocationLabel" style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+              Storage Location (Exactly 20 chars) <span style="color: var(--danger);">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="targetLocationInput" 
+              class="text-control" 
+              placeholder="e.g. CBT-MZF3-35-03-L1-04" 
+              maxlength="20"
+              style="width: 100%; height: 38px; font-family: monospace; font-weight: 700; font-size: 13px;"
+            />
+            <span class="input-helper-text" id="targetLocationHelper" style="font-size: 11px; margin-top: 4px; display: block; color: var(--text-muted);">
+              Should contain exactly 20 characters. Current length: 0
+            </span>
+          </div>
+
+          <!-- Assigned Staff Name (Custom Dropdown) -->
+          <div class="form-group">
+            <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
+              Assign Staff Member <span style="color: var(--danger);">*</span>
+            </label>
+            <div class="custom-dropdown-container" id="dropdown-assign-staff">
+              <button type="button" class="custom-dropdown-trigger" style="height: 38px; padding: 0 12px; font-size: 13px; font-weight: 600; width: 100%;">
+                <span class="trigger-label">-- Select Staff --</span>
+                <span class="material-icons-round trigger-icon">expand_more</span>
+              </button>
+              <div class="custom-dropdown-menu" style="width: 100%; z-index: 4000;"></div>
+            </div>
+          </div>
+
+          <!-- Error Alert -->
+          <div id="assignModalError" style="display: none; background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 600;"></div>
+
+          <div style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="btn-secondary" id="cancelAssignBtn" style="height: 38px; padding: 0 16px;">Cancel</button>
+            <button type="submit" class="btn-primary" id="submitAssignBtn" style="height: 38px; padding: 0 20px; gap: 6px;">
+              <span class="material-icons-round" style="font-size: 16px;">send</span>
+              <span>Assign Task</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modalOverlay);
+
+  // Setup Custom Dropdowns Helper
+  function setupCustomDropdown(containerEl, initialVal, options, onChange) {
+    const triggerBtn = containerEl.querySelector('.custom-dropdown-trigger');
+    const menuEl = containerEl.querySelector('.custom-dropdown-menu');
+    let currentVal = initialVal;
+
+    function renderMenu() {
+      menuEl.innerHTML = options.map(opt => `
+        <div class="custom-dropdown-option ${opt.value === currentVal ? 'active' : ''}" data-value="${escapeHtml(opt.value)}">
+          ${escapeHtml(opt.label || opt.value)}
+        </div>
+      `).join('');
+    }
+
+    renderMenu();
+
+    triggerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.custom-dropdown-container.open').forEach(el => {
+        if (el !== containerEl) el.classList.remove('open', 'open-up');
+      });
+
+      const isOpen = containerEl.classList.contains('open');
+      if (isOpen) {
+        containerEl.classList.remove('open', 'open-up');
+      } else {
+        const rect = triggerBtn.getBoundingClientRect();
+        const modalBody = triggerBtn.closest('.form-modal-body') || triggerBtn.closest('.modal-card');
+        let spaceBelow = window.innerHeight - rect.bottom;
+        if (modalBody) {
+          const bodyRect = modalBody.getBoundingClientRect();
+          spaceBelow = Math.min(spaceBelow, bodyRect.bottom - rect.bottom);
+        }
+
+        if (spaceBelow < 210) {
+          containerEl.classList.add('open-up');
+        } else {
+          containerEl.classList.remove('open-up');
+        }
+        containerEl.classList.add('open');
+      }
+    });
+
+    menuEl.addEventListener('click', (e) => {
+      const optEl = e.target.closest('.custom-dropdown-option');
+      if (!optEl) return;
+      currentVal = optEl.dataset.value;
+      triggerBtn.querySelector('.trigger-label').textContent = optEl.textContent.trim();
+      containerEl.classList.remove('open', 'open-up');
+      renderMenu();
+      if (typeof onChange === 'function') onChange(currentVal);
+    });
+
+    return {
+      getValue: () => currentVal,
+      updateOptions: (newOpts, newVal) => {
+        options = newOpts;
+        if (newVal !== undefined) currentVal = newVal;
+        const found = options.find(o => o.value === currentVal) || options[0];
+        if (found) {
+          currentVal = found.value;
+          triggerBtn.querySelector('.trigger-label').textContent = found.label || found.value;
+        }
+        renderMenu();
+      }
+    };
+  }
+
+  // Reason Options Mapping
+  const transferReasons = [
+    { value: 'Bad/Damaged/Expired', label: 'Bad/Damaged/Expired' },
+    { value: 'Buffer SO', label: 'Buffer SO' },
+    { value: 'Other (explain)', label: 'Other (explain)' }
+  ];
+  const deductionReasons = [
+    { value: 'Recovery LDP', label: 'Recovery LDP' },
+    { value: 'Recovery SO', label: 'Recovery SO' },
+    { value: 'WH Adjust IN', label: 'WH Adjust IN' }
+  ];
+
+  // Element handles
+  const otherGroup = modalOverlay.querySelector('#otherReasonGroup');
+  const otherInput = modalOverlay.querySelector('#otherReasonInput');
+  const toLocGroup = modalOverlay.querySelector('#toLocationGroup');
+  const toLocLabel = modalOverlay.querySelector('#toLocationLabel');
+  const targetLocationInput = modalOverlay.querySelector('#targetLocationInput');
+  const targetLocationHelper = modalOverlay.querySelector('#targetLocationHelper');
+  const form = modalOverlay.querySelector('#assignMovementForm');
+  const errorEl = modalOverlay.querySelector('#assignModalError');
+
+  // Wire Reason Dropdown
+  const reasonDropdown = setupCustomDropdown(
+    modalOverlay.querySelector('#dropdown-assign-reason'),
+    'Bad/Damaged/Expired',
+    transferReasons,
+    (newReason) => {
+      if (typeDropdown.getValue() === 'Transfer location' && newReason === 'Other (explain)') {
+        otherGroup.style.display = 'block';
+      } else {
+        otherGroup.style.display = 'none';
+      }
+      if (typeDropdown.getValue() === 'Stock deduction') {
+        targetLocationInput.value = `Deduction - ${newReason}`;
+      }
+    }
+  );
+
+  // Wire Type Dropdown
+  const typeDropdown = setupCustomDropdown(
+    modalOverlay.querySelector('#dropdown-assign-type'),
+    'Transfer location',
+    [
+      { value: 'Transfer location', label: 'Transfer location (Rack to Rack)' },
+      { value: 'Stock deduction', label: 'Stock deduction (Shrinkage / Recovery)' }
+    ],
+    (newType) => {
+      toLocGroup.style.display = 'block';
+      if (newType === 'Stock deduction') {
+        reasonDropdown.updateOptions(deductionReasons, 'Recovery LDP');
+        otherGroup.style.display = 'none';
+        toLocLabel.innerHTML = 'To Location (Deduction Parameter / Bin) <span style="color: var(--danger);">*</span>';
+        targetLocationInput.removeAttribute('maxlength');
+        targetLocationInput.value = `Deduction - ${reasonDropdown.getValue()}`;
+        targetLocationHelper.textContent = 'Enter target deduction location parameter or bin.';
+        targetLocationHelper.style.color = 'var(--text-muted)';
+      } else {
+        reasonDropdown.updateOptions(transferReasons, 'Bad/Damaged/Expired');
+        toLocLabel.innerHTML = 'Storage Location (Exactly 20 chars) <span style="color: var(--danger);">*</span>';
+        targetLocationInput.setAttribute('maxlength', '20');
+        targetLocationInput.value = '';
+        const len = targetLocationInput.value.length;
+        targetLocationHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
+        targetLocationHelper.style.color = 'var(--text-muted)';
+        if (reasonDropdown.getValue() === 'Other (explain)') {
+          otherGroup.style.display = 'block';
+        } else {
+          otherGroup.style.display = 'none';
+        }
+      }
+    }
+  );
+
+  // Wire Staff Dropdown
+  const staffOptions = users.map(u => ({
+    value: u.name,
+    label: `${u.name} (${u.role} - ${u.staffId})`
+  }));
+  if (staffOptions.length === 0) {
+    staffOptions.push({ value: '', label: '-- No Staff Found --' });
+  }
+
+  const staffDropdown = setupCustomDropdown(
+    modalOverlay.querySelector('#dropdown-assign-staff'),
+    staffOptions[0] ? staffOptions[0].value : '',
+    staffOptions,
+    null
+  );
+
+  // Storage Location Live Helper
+  targetLocationInput.addEventListener('input', () => {
+    if (typeDropdown.getValue() === 'Transfer location') {
+      const len = targetLocationInput.value.length;
+      targetLocationHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
+      if (len === 20) {
+        targetLocationHelper.style.color = 'var(--success)';
+      } else {
+        targetLocationHelper.style.color = '';
+      }
+    }
+  });
+
+  // Global document click handler to close open custom dropdowns
+  const closeDropdownsOnClick = (e) => {
+    if (!e.target.closest('.custom-dropdown-container')) {
+      modalOverlay.querySelectorAll('.custom-dropdown-container.open').forEach(el => el.classList.remove('open'));
+    }
+  };
+  modalOverlay.addEventListener('click', closeDropdownsOnClick);
+
+  const closeModal = () => modalOverlay.remove();
+  modalOverlay.querySelector('#closeAssignModalBtn').addEventListener('click', closeModal);
+  modalOverlay.querySelector('#cancelAssignBtn').addEventListener('click', closeModal);
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.style.display = 'none';
+
+    const type = typeDropdown.getValue();
+    let reason = reasonDropdown.getValue();
+    if (type === 'Transfer location' && reason === 'Other (explain)') {
+      const explanation = otherInput.value.trim();
+      if (!explanation) {
+        errorEl.textContent = 'Please provide an explanation for "Other" reason.';
+        errorEl.style.display = 'block';
+        return;
+      }
+      reason = `Other: ${explanation}`;
+    }
+
+    const qty = parseInt(modalOverlay.querySelector('#movementQtyInput').value, 10);
+    if (!qty || qty <= 0 || qty > locationItem.qtySoh) {
+      errorEl.textContent = `Please enter a valid quantity between 1 and ${locationItem.qtySoh}.`;
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const locVal = targetLocationInput.value.trim();
+    if (!locVal) {
+      errorEl.textContent = 'Please enter a target To Location parameter.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    if (type === 'Transfer location') {
+      if (locVal.length !== 20) {
+        errorEl.textContent = `Storage Location must contain exactly 20 characters (current length: ${locVal.length}).`;
+        errorEl.style.display = 'block';
+        return;
+      }
+      if (locVal === locationItem.rackLocation) {
+        errorEl.textContent = 'To Location cannot be the same as From Location.';
+        errorEl.style.display = 'block';
+        return;
+      }
+    }
+
+    const toLocation = locVal;
+
+    const staffName = staffDropdown.getValue();
+    if (!staffName) {
+      errorEl.textContent = 'Please select a staff member to assign.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const submitBtn = modalOverlay.querySelector('#submitAssignBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="material-icons-round" style="font-size: 16px; animation: spinIcon 1s linear infinite;">sync</span> Creating...';
+
+    try {
+      const newMovement = await db.createStockMovement({
+        skuCode: skuItem.skuCode,
+        productName: skuItem.productName,
+        fromLocation: locationItem.rackLocation,
+        sourceQty: locationItem.qtySoh,
+        qty,
+        type,
+        reason,
+        toLocation,
+        staffName
+      }, currentUser);
+
+      closeModal();
+      if (typeof onCompleteCallback === 'function') {
+        onCompleteCallback(newMovement);
+      }
+    } catch (err) {
+      errorEl.textContent = err.message || 'Error creating movement task.';
+      errorEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span class="material-icons-round" style="font-size: 16px;">send</span><span>Assign Task</span>';
+    }
+  });
+}
+

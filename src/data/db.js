@@ -14,6 +14,8 @@ class DatabaseService {
     this.checkerLines = [];
     this.lostAndFound = this.loadSavedLostAndFound();
     this.putawayRecords = this.loadSavedPutawayRecords();
+    this.stockMovements = this.loadSavedStockMovements();
+    this.stockActivities = this.loadSavedStockActivities();
     this.skus = [];
     this.soh = [];
     this.spreadsheetId = GOOGLE_SHEETS_CONFIG.spreadsheetId;
@@ -234,6 +236,8 @@ class DatabaseService {
     const putawayTab = GOOGLE_SHEETS_CONFIG.tabs.putaway || 'Putaway';
     const skusDbTab = GOOGLE_SHEETS_CONFIG.tabs.skusDb || 'SKUs_DB';
     const sohTab = GOOGLE_SHEETS_CONFIG.tabs.soh || 'SOH';
+    const stockMovementTab = GOOGLE_SHEETS_CONFIG.tabs.stockMovement || 'Stock_Movement';
+    const stockActivityTab = GOOGLE_SHEETS_CONFIG.tabs.stockActivity || 'Stock_Activity';
     const cacheBuster = `_t=${Date.now()}`;
 
     const shouldSync = (tabKey) => !tabsToSync || tabsToSync.includes(tabKey);
@@ -269,6 +273,12 @@ class DatabaseService {
     if (shouldSync('soh')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sohTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'soh', res: r })).catch(() => null));
     }
+    if (shouldSync('stockMovement')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(stockMovementTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'stockMovement', res: r })).catch(() => null));
+    }
+    if (shouldSync('stockActivity')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(stockActivityTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'stockActivity', res: r })).catch(() => null));
+    }
 
     try {
       const results = await Promise.all(fetches);
@@ -293,6 +303,8 @@ class DatabaseService {
         if (item.key === 'putaway') this.parsePutaway(text);
         if (item.key === 'skusDb') this.parseSkusDb(text);
         if (item.key === 'soh') this.parseSoh(text);
+        if (item.key === 'stockMovement') this.parseStockMovement(text);
+        if (item.key === 'stockActivity') this.parseStockActivity(text);
       }
 
       // If fetches were attempted but ALL failed, treat as network error
@@ -360,6 +372,7 @@ class DatabaseService {
       pickingTask:   ['pickingTask', 'requestChecker', 'putaway', 'soh'],
       lostAndFound:  ['lostAndFound', 'zones'],
       soh:           ['soh', 'skusDb'],
+      stockMovement: ['soh', 'zones', 'userDb'],
     };
     const tabsToSync = tabMap[tabId];
     if (!tabsToSync || tabsToSync.length === 0) return true; // Nothing to sync for Home
@@ -1271,6 +1284,358 @@ class DatabaseService {
         foodOrNonFood: skuDetails.foodOrNonFood || 'N/A'
       };
     });
+  }
+
+  parseStockMovement(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    if (result.data && result.data.length > 0) {
+      const remoteMovements = result.data.map(row => {
+        const movementId = this.findRowValue(row, ['movement id', 'movement_id', 'movementid', 'id']);
+        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
+        const assignedBy = this.findRowValue(row, ['assigned by', 'assigned_by', 'assignedby']);
+        const staffName = this.findRowValue(row, ['staff name', 'staff_name', 'staffname', 'staff']);
+        const skuCode = this.findRowValue(row, ['sku code', 'sku_code', 'skucode', 'sku number', 'sku']);
+        const productName = this.findRowValue(row, ['product name', 'product_name', 'productname', 'product']);
+        const sourceQty = this.findRowValue(row, ['source qty', 'source_qty', 'sourceqty']);
+        const qty = this.findRowValue(row, ['qty', 'quantity']);
+        const type = this.findRowValue(row, ['type']);
+        const reason = this.findRowValue(row, ['reason']);
+        const fromLocation = this.findRowValue(row, ['from location', 'from_location', 'fromlocation']);
+        const toLocation = this.findRowValue(row, ['to location', 'to_location', 'tolocation']);
+        const status = this.findRowValue(row, ['status']) || 'Pending';
+
+        return {
+          movementId: String(movementId).trim(),
+          timestamp: String(timestamp).trim(),
+          assignedBy: String(assignedBy).trim(),
+          staffName: String(staffName).trim(),
+          skuCode: String(skuCode).trim(),
+          productName: String(productName).trim(),
+          sourceQty: parseInt(String(sourceQty).trim() || '0', 10),
+          qty: parseInt(String(qty).trim() || '1', 10),
+          type: String(type).trim(),
+          reason: String(reason).trim(),
+          fromLocation: String(fromLocation).trim(),
+          toLocation: String(toLocation).trim(),
+          status: String(status).trim()
+        };
+      }).filter(m => m.movementId);
+
+      const mergedMap = new Map();
+      this.stockMovements.forEach(m => mergedMap.set(m.movementId, m));
+      remoteMovements.forEach(m => mergedMap.set(m.movementId, m));
+      
+      this.stockMovements = Array.from(mergedMap.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      this.persistStockMovements();
+    }
+  }
+
+  parseStockActivity(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    if (result.data && result.data.length > 0) {
+      const remoteActs = result.data.map(row => {
+        const activityId = this.findRowValue(row, ['activity id', 'activity_id', 'activityid', 'id']);
+        const ticketId = this.findRowValue(row, ['ticket id', 'ticket_id', 'ticketid']);
+        const skuCode = this.findRowValue(row, ['sku code', 'sku_code', 'skucode', 'sku']);
+        const productName = this.findRowValue(row, ['product name', 'product_name', 'productname', 'product']);
+        const qty = this.findRowValue(row, ['qty', 'quantity']);
+        const operator = this.findRowValue(row, ['operator']);
+        const fromLocation = this.findRowValue(row, ['from location', 'from_location', 'fromlocation']);
+        const toLocation = this.findRowValue(row, ['to location', 'to_location', 'tolocation']);
+        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
+
+        return {
+          activityId: String(activityId).trim(),
+          ticketId: String(ticketId).trim(),
+          skuCode: String(skuCode).trim(),
+          productName: String(productName).trim(),
+          qty: parseInt(String(qty).trim() || '0', 10),
+          operator: String(operator).trim(),
+          fromLocation: String(fromLocation).trim(),
+          toLocation: String(toLocation).trim(),
+          timestamp: String(timestamp).trim()
+        };
+      }).filter(a => a.activityId);
+
+      const mergedMap = new Map();
+      this.stockActivities.forEach(a => mergedMap.set(a.activityId, a));
+      remoteActs.forEach(a => mergedMap.set(a.activityId, a));
+
+      this.stockActivities = Array.from(mergedMap.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      this.persistStockActivities();
+    }
+  }
+
+  // ── Stock Movement & Deduction ──────────────────────────────────────────
+
+  loadSavedStockMovements() {
+    try {
+      const saved = localStorage.getItem('irms_stock_movements');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  persistStockMovements() {
+    try {
+      localStorage.setItem('irms_stock_movements', JSON.stringify(this.stockMovements));
+    } catch (e) {
+      console.error('Failed to persist stockMovements', e);
+    }
+  }
+
+  loadSavedStockActivities() {
+    try {
+      const saved = localStorage.getItem('irms_stock_activities');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  persistStockActivities() {
+    try {
+      localStorage.setItem('irms_stock_activities', JSON.stringify(this.stockActivities));
+    } catch (e) {
+      console.error('Failed to persist stockActivities', e);
+    }
+  }
+
+  getStockMovements() {
+    return [...this.stockMovements].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  getStockActivities() {
+    return [...this.stockActivities].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+
+  async createStockMovement(data, currentUser) {
+    const movementId = 'SM' + this.generate6DigitId();
+    const timestamp = new Date().toISOString();
+    const assignedBy = currentUser ? (currentUser.name || currentUser.staffId) : 'System';
+
+    const qty = parseInt(String(data.qty || '1').trim(), 10) || 1;
+    const sourceQty = parseInt(String(data.sourceQty || '0').trim(), 10) || 0;
+
+    const newMovement = {
+      movementId,
+      timestamp,
+      assignedBy,
+      staffName: String(data.staffName || '').trim(),
+      skuCode: String(data.skuCode || '').trim(),
+      productName: String(data.productName || '').trim(),
+      sourceQty,
+      qty,
+      type: String(data.type || 'Transfer location').trim(),
+      reason: String(data.reason || '').trim(),
+      fromLocation: String(data.fromLocation || '').trim(),
+      toLocation: data.type === 'Stock deduction' ? 'Deduction' : String(data.toLocation || '').trim(),
+      status: 'Pending'
+    };
+
+    this.stockMovements.unshift(newMovement);
+    this.persistStockMovements();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'createStockMovement', ...newMovement })
+        });
+        setTimeout(() => this.syncGoogleSheets(['soh']), 2500);
+      } catch (err) {
+        console.error('Failed to push createStockMovement to WebApp:', err);
+      }
+    }
+
+    return newMovement;
+  }
+
+  async updateStockMovement(movementId, updates) {
+    const idx = this.stockMovements.findIndex(m => String(m.movementId).trim() === String(movementId).trim());
+    if (idx === -1) throw new Error(`Stock movement "${movementId}" not found`);
+
+    if (this.stockMovements[idx].status !== 'Pending') {
+      throw new Error('Only pending stock movement tasks can be edited');
+    }
+
+    const updated = {
+      ...this.stockMovements[idx],
+      ...updates
+    };
+
+    if (updates.type === 'Stock deduction') {
+      updated.toLocation = 'Deduction';
+    }
+
+    this.stockMovements[idx] = updated;
+    this.persistStockMovements();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'updateStockMovement', movementId, ...updates })
+        });
+      } catch (err) {
+        console.error('Failed to push updateStockMovement to WebApp:', err);
+      }
+    }
+
+    return updated;
+  }
+
+  async completeStockMovement(movementId, operatorUser) {
+    const idx = this.stockMovements.findIndex(m => String(m.movementId).trim() === String(movementId).trim());
+    if (idx === -1) throw new Error(`Stock movement "${movementId}" not found`);
+
+    const movement = this.stockMovements[idx];
+    if (movement.status === 'Done') {
+      throw new Error(`Stock movement "${movementId}" is already completed`);
+    }
+
+    // 1. Mark status as Done
+    movement.status = 'Done';
+    movement.completedAt = new Date().toISOString();
+    movement.completedBy = operatorUser ? (operatorUser.name || operatorUser.staffId) : 'System';
+
+    // 2. Affect Stock On Hand (SOH)
+    const moveQty = movement.qty || 0;
+    const sku = movement.skuCode;
+    const fromLoc = movement.fromLocation;
+    const toLoc = movement.toLocation;
+
+    // Deduct from source rack location
+    const sourceSohIdx = this.soh.findIndex(s => s.skuCode === sku && s.rackLocation === fromLoc);
+    if (sourceSohIdx !== -1) {
+      this.soh[sourceSohIdx].qtySoh = Math.max(0, this.soh[sourceSohIdx].qtySoh - moveQty);
+      this.soh[sourceSohIdx].updatedAt = new Date().toISOString();
+    }
+
+    // If Transfer Location, add to destination rack location
+    if (movement.type === 'Transfer location' && toLoc && toLoc !== 'Deduction') {
+      const destSohIdx = this.soh.findIndex(s => s.skuCode === sku && s.rackLocation === toLoc);
+      if (destSohIdx !== -1) {
+        this.soh[destSohIdx].qtySoh += moveQty;
+        this.soh[destSohIdx].updatedAt = new Date().toISOString();
+      } else {
+        // Create new rack entry in SOH
+        this.soh.push({
+          skuCode: sku,
+          rackLocation: toLoc,
+          qtySoh: moveQty,
+          updatedAt: new Date().toISOString(),
+          qtyOnSo: 0,
+          countSo: 0,
+          qtyOnLdp: 0,
+          stockAge: 0,
+          actionSuggestion: ''
+        });
+      }
+    }
+
+    // 3. Populate Stock Activity Log
+    const actTimestamp = new Date().toISOString();
+    const act1 = {
+      activityId: 'SA' + this.generate6DigitId(),
+      ticketId: movement.movementId,
+      skuCode: movement.skuCode,
+      productName: movement.productName,
+      qty: moveQty,
+      operator: '-',
+      fromLocation: fromLoc,
+      toLocation: movement.type === 'Transfer location' ? toLoc : 'Deduction',
+      timestamp: actTimestamp,
+      assignedBy: movement.assignedBy,
+      executedBy: movement.staffName || (operatorUser ? operatorUser.name : 'System'),
+      type: movement.type,
+      reason: movement.reason
+    };
+    this.stockActivities.unshift(act1);
+
+    if (movement.type === 'Transfer location' && toLoc && toLoc !== 'Deduction') {
+      const act2 = {
+        activityId: 'SA' + this.generate6DigitId(),
+        ticketId: movement.movementId,
+        skuCode: movement.skuCode,
+        productName: movement.productName,
+        qty: moveQty,
+        operator: '+',
+        fromLocation: fromLoc,
+        toLocation: toLoc,
+        timestamp: actTimestamp,
+        assignedBy: movement.assignedBy,
+        executedBy: movement.staffName || (operatorUser ? operatorUser.name : 'System'),
+        type: movement.type,
+        reason: movement.reason
+      };
+      this.stockActivities.unshift(act2);
+    }
+
+    this.persistStockMovements();
+    this.persistStockActivities();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'completeStockMovement', movementId, completedBy: movement.completedBy })
+        });
+        setTimeout(() => this.syncGoogleSheets(['soh']), 2500);
+      } catch (err) {
+        console.error('Failed to push completeStockMovement to WebApp:', err);
+      }
+    }
+
+    return movement;
+  }
+
+  async cancelStockMovement(movementId) {
+    const idx = this.stockMovements.findIndex(m => String(m.movementId).trim() === String(movementId).trim());
+    if (idx === -1) throw new Error(`Stock movement "${movementId}" not found`);
+
+    if (this.stockMovements[idx].status !== 'Pending') {
+      throw new Error('Only pending tasks can be cancelled');
+    }
+
+    this.stockMovements.splice(idx, 1);
+    this.persistStockMovements();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'cancelStockMovement', movementId })
+        });
+      } catch (err) {
+        console.error('Failed to push cancelStockMovement to WebApp:', err);
+      }
+    }
   }
 }
 

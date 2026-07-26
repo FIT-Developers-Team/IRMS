@@ -22,6 +22,26 @@ function doPost(e) {
       return handleCreateLostAndFound(ss, data);
     } else if (action === 'createPutaway') {
       return handleCreatePutaway(ss, data);
+    } else if (action === 'createStockMovement') {
+      return handleCreateStockMovement(ss, data);
+    } else if (action === 'updateStockMovement') {
+      return handleUpdateStockMovement(ss, data);
+    } else if (action === 'completeStockMovement') {
+      return handleCompleteStockMovement(ss, data);
+    } else if (action === 'cancelStockMovement') {
+      return handleCancelStockMovement(ss, data);
+    } else if (action === 'addUser') {
+      return handleAddUser(ss, data);
+    } else if (action === 'updateUser') {
+      return handleUpdateUser(ss, data);
+    } else if (action === 'deleteUser') {
+      return handleDeleteUser(ss, data);
+    } else if (action === 'addZone') {
+      return handleAddZone(ss, data);
+    } else if (action === 'updateZone') {
+      return handleUpdateZone(ss, data);
+    } else if (action === 'deleteZone') {
+      return handleDeleteZone(ss, data);
     } else {
       // Default: Create Request_Checker entry
       return handleCreateRequestChecker(ss, data);
@@ -201,6 +221,36 @@ function getValueForHeader(cleanHeader, payload) {
   }
   if (cleanHeader === 'stockage') {
     return payload.stockAge || '';
+  }
+  if (cleanHeader === 'movementid') {
+    return payload.movementId || payload.id || '';
+  }
+  if (cleanHeader === 'assignedby') {
+    return payload.assignedBy || '';
+  }
+  if (cleanHeader === 'sourceqty') {
+    return payload.sourceQty || 0;
+  }
+  if (cleanHeader === 'type') {
+    return payload.type || '';
+  }
+  if (cleanHeader === 'staffid') {
+    return payload.staffId || payload.id || '';
+  }
+  if (cleanHeader === 'name') {
+    return payload.name || '';
+  }
+  if (cleanHeader === 'role') {
+    return payload.role || '';
+  }
+  if (cleanHeader === 'acess' || cleanHeader === 'access') {
+    return payload.access || '';
+  }
+  if (cleanHeader === 'password') {
+    return payload.password || '';
+  }
+  if (cleanHeader === 'zone' || cleanHeader === 'zonename') {
+    return payload.zoneName || payload.zone || '';
   }
 
   return '';
@@ -548,6 +598,399 @@ function getCellValueByHeader(sheet, idColHeader, targetIdVal, targetColHeader) 
     }
   }
   return '';
+}
+
+// ── Stock Movement & Deduction Handlers ─────────────────────────────────────
+
+function handleCreateStockMovement(ss, data) {
+  var defaultHeaders = [
+    "Movement ID",
+    "Timestamp",
+    "Assigned By",
+    "Staff Name",
+    "Sku Code",
+    "Product Name",
+    "source Qty",
+    "Qty",
+    "Type",
+    "Reason",
+    "From Location",
+    "To Location",
+    "Status"
+  ];
+  var sheet = getOrCreateSheet(ss, "Stock_Movement", defaultHeaders);
+  var movementIdVal = data.movementId || '';
+  
+  appendRowByHeader(sheet, data, defaultHeaders);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", movementId: movementIdVal }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateStockMovement(ss, data) {
+  var sheet = ss.getSheetByName("Stock_Movement");
+  var movementIdVal = String(data.movementId || '').trim();
+
+  if (sheet && movementIdVal) {
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var movementIdCol = -1, staffNameCol = -1, qtyCol = -1, typeCol = -1, reasonCol = -1, toLocCol = -1;
+
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'movementid' || cleanH === 'id') movementIdCol = h;
+        if (cleanH === 'staffname') staffNameCol = h;
+        if (cleanH === 'qty' || cleanH === 'quantity') qtyCol = h;
+        if (cleanH === 'type') typeCol = h;
+        if (cleanH === 'reason') reasonCol = h;
+        if (cleanH === 'tolocation') toLocCol = h;
+      }
+
+      if (movementIdCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][movementIdCol]).trim() === movementIdVal) {
+            if (staffNameCol !== -1 && data.staffName !== undefined) sheet.getRange(i + 1, staffNameCol + 1).setValue(data.staffName);
+            if (qtyCol !== -1 && data.qty !== undefined) sheet.getRange(i + 1, qtyCol + 1).setValue(data.qty);
+            if (typeCol !== -1 && data.type !== undefined) sheet.getRange(i + 1, typeCol + 1).setValue(data.type);
+            if (reasonCol !== -1 && data.reason !== undefined) sheet.getRange(i + 1, reasonCol + 1).setValue(data.reason);
+            if (toLocCol !== -1 && data.toLocation !== undefined) sheet.getRange(i + 1, toLocCol + 1).setValue(data.toLocation);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", movementId: movementIdVal }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleCompleteStockMovement(ss, data) {
+  var smSheet = ss.getSheetByName("Stock_Movement");
+  var movementId = String(data.movementId || '').trim();
+
+  if (smSheet && movementId) {
+    // 1. Update status in Stock_Movement sheet to Done
+    updateStatusByHeader(smSheet, "Movement ID", movementId, "Done");
+
+    // 2. Fetch full movement details from row
+    var smValues = smSheet.getDataRange().getValues();
+    var headers = smValues[0];
+    var rowData = {};
+
+    var mIdx = -1;
+    for (var h = 0; h < headers.length; h++) {
+      var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanH === 'movementid' || cleanH === 'id') mIdx = h;
+    }
+
+    if (mIdx !== -1) {
+      for (var r = 1; r < smValues.length; r++) {
+        if (String(smValues[r][mIdx]).trim() === movementId) {
+          for (var c = 0; c < headers.length; c++) {
+            var colKey = String(headers[c]).toLowerCase().replace(/[^a-z0-9]/g, '');
+            rowData[colKey] = smValues[r][c];
+          }
+          break;
+        }
+      }
+    }
+
+    var skuCode = data.skuCode || rowData['skucode'] || rowData['skunumber'] || '';
+    var productName = data.productName || rowData['productname'] || '';
+    var qty = parseInt(data.qty || rowData['qty'] || 1, 10);
+    var type = data.type || rowData['type'] || 'Transfer location';
+    var reason = data.reason || rowData['reason'] || '';
+    var fromLocation = data.fromLocation || rowData['fromlocation'] || '';
+    var toLocation = data.toLocation || rowData['tolocation'] || '';
+    var assignedBy = data.assignedBy || rowData['assignedby'] || '';
+    var staffName = data.staffName || rowData['staffname'] || '';
+
+    // 3. Record Stock Activity log
+    try {
+      var saHeaders = [
+        "Activity ID",
+        "Ticket ID",
+        "Sku Code",
+        "Product Name",
+        "Qty",
+        "Operator",
+        "From Location",
+        "To Location",
+        "Timestamp"
+      ];
+      var saSheet = getOrCreateSheet(ss, "Stock_Activity", saHeaders);
+      
+      var nowStr = new Date().toISOString();
+
+      var saPayload1 = {
+        activityId: "SA-" + Math.floor(100000 + Math.random() * 900000),
+        ticketId: movementId,
+        skuCode: skuCode,
+        productName: productName,
+        qty: qty,
+        operator: '[-]',
+        fromLocation: fromLocation,
+        toLocation: type === 'Transfer location' ? toLocation : 'Deduction',
+        timestamp: nowStr
+      };
+      appendRowByHeader(saSheet, saPayload1, saHeaders);
+
+      if (type === 'Transfer location' && toLocation && toLocation !== 'Deduction') {
+        var saPayload2 = {
+          activityId: "SA-" + Math.floor(100000 + Math.random() * 900000),
+          ticketId: movementId,
+          skuCode: skuCode,
+          productName: productName,
+          qty: qty,
+          operator: '[+]',
+          fromLocation: fromLocation,
+          toLocation: toLocation,
+          timestamp: nowStr
+        };
+        appendRowByHeader(saSheet, saPayload2, saHeaders);
+      }
+    } catch (saErr) {
+      Logger.log("Stock Activity logging error: " + saErr.toString());
+    }
+
+    // 4. Update SOH sheet
+    try {
+      var sohHeaders = [
+        "Updated At",
+        "Product ID",
+        "Product Name",
+        "Sku Number",
+        "L0 Category Name",
+        "L1 Category Name",
+        "L2 Category Name",
+        "Food or Non Food",
+        "Rack Location",
+        "Qty SOH",
+        "Qty On SO",
+        "Count SO",
+        "Qty On LDP",
+        "Stock Age"
+      ];
+      var sohSheet = getOrCreateSheet(ss, "SOH", sohHeaders);
+      var sohValues = sohSheet.getDataRange().getValues();
+      var sHeaders = sohValues[0];
+      
+      var sUpdatedAtCol = -1, sSkuCol = -1, sLocCol = -1, sQtySohCol = -1;
+      for (var col = 0; col < sHeaders.length; col++) {
+        var cleanH = String(sHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'updatedat') sUpdatedAtCol = col;
+        if (cleanH === 'skunumber' || cleanH === 'skucode' || cleanH === 'sku') sSkuCol = col;
+        if (cleanH === 'racklocation' || cleanH === 'location') sLocCol = col;
+        if (cleanH === 'qtysoh' || cleanH === 'qty') sQtySohCol = col;
+      }
+
+      var formattedNowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+
+      // Deduct from source rack location
+      if (sSkuCol !== -1 && sLocCol !== -1 && sQtySohCol !== -1) {
+        for (var r = 1; r < sohValues.length; r++) {
+          var rowSku = String(sohValues[r][sSkuCol]).trim();
+          var rowLoc = String(sohValues[r][sLocCol]).trim();
+          if (rowSku === String(skuCode).trim() && rowLoc === String(fromLocation).trim()) {
+            var currQty = parseInt(sohValues[r][sQtySohCol] || 0, 10);
+            var newQty = Math.max(0, currQty - qty);
+            sohSheet.getRange(r + 1, sQtySohCol + 1).setValue(newQty);
+            if (sUpdatedAtCol !== -1) sohSheet.getRange(r + 1, sUpdatedAtCol + 1).setValue(formattedNowStr);
+            break;
+          }
+        }
+      }
+
+      // Add to destination rack location if Transfer location
+      if (type === 'Transfer location' && toLocation && toLocation !== 'Deduction') {
+        var destRowIdx = -1;
+        if (sSkuCol !== -1 && sLocCol !== -1) {
+          for (var r2 = 1; r2 < sohValues.length; r2++) {
+            var rowSku2 = String(sohValues[r2][sSkuCol]).trim();
+            var rowLoc2 = String(sohValues[r2][sLocCol]).trim();
+            if (rowSku2 === String(skuCode).trim() && rowLoc2 === String(toLocation).trim()) {
+              destRowIdx = r2;
+              break;
+            }
+          }
+        }
+
+        if (destRowIdx !== -1) {
+          var currQty2 = parseInt(sohValues[destRowIdx][sQtySohCol] || 0, 10);
+          sohSheet.getRange(destRowIdx + 1, sQtySohCol + 1).setValue(currQty2 + qty);
+          if (sUpdatedAtCol !== -1) sohSheet.getRange(destRowIdx + 1, sUpdatedAtCol + 1).setValue(formattedNowStr);
+        } else {
+          var sohPayload = {
+            updatedAt: formattedNowStr,
+            skuNumber: skuCode,
+            productName: productName,
+            rackLocation: toLocation,
+            qtySoh: qty,
+            qtyOnSo: 0,
+            countSo: 0,
+            qtyOnLdp: 0,
+            stockAge: ''
+          };
+          appendRowByHeader(sohSheet, sohPayload, sohHeaders);
+        }
+      }
+
+    } catch (sohErr) {
+      Logger.log("SOH update error in stock movement completion: " + sohErr.toString());
+    }
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", movementId: movementId }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleCancelStockMovement(ss, data) {
+  var smSheet = ss.getSheetByName("Stock_Movement");
+  if (smSheet && data.movementId) {
+    updateStatusByHeader(smSheet, "Movement ID", data.movementId, "Cancelled");
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", movementId: data.movementId || '' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ── Admin Handlers ──────────────────────────────────────────────────────────
+
+function handleAddUser(ss, data) {
+  var defaultHeaders = ["Staff ID", "Name", "Role", "Acess", "Password"];
+  var sheet = getOrCreateSheet(ss, "User_DB", defaultHeaders);
+  appendRowByHeader(sheet, data, defaultHeaders);
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", staffId: data.staffId }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateUser(ss, data) {
+  var sheet = ss.getSheetByName("User_DB");
+  if (sheet && data.staffId) {
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var idCol = -1, nameCol = -1, roleCol = -1, accessCol = -1, passCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'staffid' || cleanH === 'id') idCol = h;
+        if (cleanH === 'name') nameCol = h;
+        if (cleanH === 'role') roleCol = h;
+        if (cleanH === 'acess' || cleanH === 'access') accessCol = h;
+        if (cleanH === 'password' || cleanH === 'pwd') passCol = h;
+      }
+
+      if (idCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][idCol]).trim() === String(data.staffId).trim()) {
+            if (nameCol !== -1 && data.name !== undefined) sheet.getRange(i + 1, nameCol + 1).setValue(data.name);
+            if (roleCol !== -1 && data.role !== undefined) sheet.getRange(i + 1, roleCol + 1).setValue(data.role);
+            if (accessCol !== -1 && data.access !== undefined) sheet.getRange(i + 1, accessCol + 1).setValue(data.access);
+            if (passCol !== -1 && data.password !== undefined) sheet.getRange(i + 1, passCol + 1).setValue(data.password);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", staffId: data.staffId }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleDeleteUser(ss, data) {
+  var sheet = ss.getSheetByName("User_DB");
+  if (sheet && data.staffId) {
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var idCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'staffid' || cleanH === 'id') { idCol = h; break; }
+      }
+      if (idCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][idCol]).trim() === String(data.staffId).trim()) {
+            sheet.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", staffId: data.staffId }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAddZone(ss, data) {
+  var defaultHeaders = ["Id", "Zone"];
+  var sheet = getOrCreateSheet(ss, "Zone", defaultHeaders);
+  appendRowByHeader(sheet, data, defaultHeaders);
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", id: data.id }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateZone(ss, data) {
+  var sheet = ss.getSheetByName("Zone");
+  if (sheet && data.id) {
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var idCol = -1, zoneCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'id') idCol = h;
+        if (cleanH === 'zone' || cleanH === 'zonename') zoneCol = h;
+      }
+      if (idCol !== -1 && zoneCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][idCol]).trim() === String(data.id).trim()) {
+            sheet.getRange(i + 1, zoneCol + 1).setValue(data.zoneName || data.zone || '');
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", id: data.id }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleDeleteZone(ss, data) {
+  var sheet = ss.getSheetByName("Zone");
+  if (sheet && data.id) {
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var idCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'id') { idCol = h; break; }
+      }
+      if (idCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][idCol]).trim() === String(data.id).trim()) {
+            sheet.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", id: data.id }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // lookupSkuDetails removed (lookups are performed client-side to improve save response latency)
