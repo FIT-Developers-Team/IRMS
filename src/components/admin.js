@@ -45,7 +45,7 @@ export function renderAdmin(container, currentUser) {
           <span>Zones</span>
         </button>
         <button class="admin-subtab" data-subtab="racks">
-          <span class="material-icons-round">shelves</span>
+          <span class="material-icons-round">inventory_2</span>
           <span>Racks</span>
         </button>
         <button class="admin-subtab" data-subtab="checkerLines">
@@ -55,7 +55,7 @@ export function renderAdmin(container, currentUser) {
       </div>
 
       <!-- Sub-tab Content -->
-      <div id="adminSubContent" style="flex: 1; overflow-y: auto; min-height: 0; margin-top: 16px;">
+      <div id="adminSubContent" style="flex: 1; overflow-y: auto; min-height: 0; margin-top: 12px;">
       </div>
 
     </div>
@@ -100,10 +100,10 @@ function renderUsersTab(container) {
   const users = db.getUsers();
 
   container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
 
       <!-- Toolbar -->
-      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
         <div style="font-size: 13px; color: var(--text-secondary);">
           <strong style="color: var(--text-primary);">${users.length}</strong> users registered
         </div>
@@ -169,6 +169,21 @@ function renderUsersTab(container) {
       }
     });
   });
+
+  // Wire password toggle buttons
+  container.querySelectorAll('.toggle-pwd-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pwdSpan = btn.previousElementSibling;
+      if (pwdSpan) {
+        const raw = pwdSpan.dataset.pwd;
+        const isHidden = pwdSpan.textContent === '••••';
+        pwdSpan.textContent = isHidden ? (raw || '••••') : '••••';
+        const icon = btn.querySelector('.material-icons-round');
+        if (icon) icon.textContent = isHidden ? 'visibility_off' : 'visibility';
+      }
+    });
+  });
 }
 
 function renderUserRow(u) {
@@ -184,7 +199,14 @@ function renderUserRow(u) {
       <td><span style="font-weight: 600; color: var(--text-primary);">${escHtml(u.name)}</span></td>
       <td><span class="admin-role-badge admin-role-${(u.role || '').toLowerCase()}">${escHtml(u.role)}</span></td>
       <td><div style="display: flex; flex-wrap: wrap; gap: 4px;">${accessBadges || '<span style="color:var(--text-muted);font-size:11px;">None</span>'}</div></td>
-      <td><span style="font-family: monospace; letter-spacing: 2px; color: var(--text-secondary);">${u.password ? escHtml(u.password) : '••••'}</span></td>
+      <td>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="user-pwd-text" data-pwd="${escHtml(u.password)}" style="font-family: monospace; letter-spacing: 2px; color: var(--text-secondary);">••••</span>
+          <button class="toggle-pwd-btn icon-action-btn" title="Show / Hide Password" style="padding: 2px; width: 26px; height: 26px;">
+            <span class="material-icons-round" style="font-size: 15px;">visibility</span>
+          </button>
+        </div>
+      </td>
       <td style="text-align: center;">
         <div style="display: flex; gap: 6px; justify-content: center;">
           <button class="edit-user-btn icon-action-btn" data-staffid="${escHtml(u.staffId)}" title="Edit">
@@ -282,7 +304,12 @@ function openUserModal(existingUser) {
               <span class="material-icons-round" style="font-size: 13px;">autorenew</span> Generate PIN
             </button>
           </div>
-          <input type="text" id="userPassword" class="text-control" placeholder="e.g. 1234" maxlength="4" value="${isEdit ? escHtml(existingUser.password) : ''}" style="font-family: monospace; font-size: 14px; font-weight: 700; letter-spacing: 2px;">
+          <div style="position: relative;">
+            <input type="password" id="userPassword" class="text-control" placeholder="••••" maxlength="4" value="${isEdit ? escHtml(existingUser.password) : ''}" style="font-family: monospace; font-size: 14px; font-weight: 700; letter-spacing: 4px; padding-right: 36px;">
+            <button type="button" id="toggleModalPwdBtn" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); border: none; background: transparent; cursor: pointer; color: var(--text-muted); padding: 4px; display: flex; align-items: center;" title="Show / Hide Password">
+              <span class="material-icons-round" style="font-size: 18px;">visibility</span>
+            </button>
+          </div>
         </div>
 
         <div class="form-field-group">
@@ -319,6 +346,16 @@ function openUserModal(existingUser) {
   const accessMenuList = modal.querySelector('#accessMenuList');
   const accessBatchBtns = modal.querySelector('#accessBatchBtns');
   const userPasswordInput = modal.querySelector('#userPassword');
+
+  // Toggle modal password visibility
+  const toggleModalPwdBtn = modal.querySelector('#toggleModalPwdBtn');
+  if (toggleModalPwdBtn && userPasswordInput) {
+    toggleModalPwdBtn.addEventListener('click', () => {
+      const isPwd = userPasswordInput.type === 'password';
+      userPasswordInput.type = isPwd ? 'text' : 'password';
+      toggleModalPwdBtn.querySelector('.material-icons-round').textContent = isPwd ? 'visibility_off' : 'visibility';
+    });
+  }
 
   // Auto PIN Generator
   modal.querySelector('#genPinBtn').addEventListener('click', () => {
@@ -414,10 +451,10 @@ function renderZonesTab(container) {
   const zones = db.getZones();
 
   container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 10px;">
 
       <!-- Toolbar -->
-      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
         <div style="font-size: 13px; color: var(--text-secondary);">
           <strong style="color: var(--text-primary);">${zones.length}</strong> zones configured
         </div>
@@ -582,10 +619,10 @@ function renderRacksTab(container) {
     }
 
     container.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 10px;">
 
         <!-- Toolbar -->
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
           <div style="font-size: 13px; color: var(--text-secondary);">
             <strong style="color: var(--text-primary);">${racks.length}</strong> rack storage locations
           </div>
@@ -876,7 +913,7 @@ function renderCheckerLinesTab(container) {
     }
 
     container.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 14px;">
 
         <!-- Toolbar -->
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
@@ -895,37 +932,12 @@ function renderCheckerLinesTab(container) {
           </div>
         </div>
 
-        <!-- Desktop Table -->
-        <div class="data-table-wrapper admin-table-wrapper">
-          <table class="custom-table">
-            <thead>
-              <tr>
-                <th style="width: 100px;">ID</th>
-                <th>Line Name</th>
-                <th style="width: 100px; text-align: center;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filtered.length === 0 ? `
-                <tr>
-                  <td colspan="3">
-                    <div class="empty-state">
-                      <span class="material-icons-round">rule</span>
-                      <p>No checker lines configured. Add one to get started.</p>
-                    </div>
-                  </td>
-                </tr>
-              ` : filtered.map(l => renderCheckerLineRow(l)).join('')}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Mobile Card List -->
-        <div class="mobile-card-list" id="checkerLinesMobileList">
+        <!-- Checker Line Grid (Matches Zone View) -->
+        <div class="admin-zone-grid" id="checkerLinesGrid">
           ${filtered.length === 0 ? `
             <div class="empty-state">
               <span class="material-icons-round">rule</span>
-              <p>No checker lines found.</p>
+              <p>No checker lines configured. Add one to get started.</p>
             </div>
           ` : filtered.map(l => renderCheckerLineCard(l)).join('')}
         </div>
@@ -972,35 +984,17 @@ function renderCheckerLinesTab(container) {
   draw();
 }
 
-function renderCheckerLineRow(l) {
-  return `
-    <tr>
-      <td><span style="font-family: monospace; font-size: 11px; font-weight: 700; color: var(--text-muted);">${escHtml(l.id)}</span></td>
-      <td><strong style="color: var(--text-primary); font-size: 13px;">${escHtml(l.lineName)}</strong></td>
-      <td style="text-align: center;">
-        <div style="display: flex; gap: 6px; justify-content: center;">
-          <button class="edit-line-btn icon-action-btn" data-id="${escHtml(l.id)}" title="Edit">
-            <span class="material-icons-round">edit</span>
-          </button>
-          <button class="delete-line-btn icon-action-btn icon-action-btn-danger" data-id="${escHtml(l.id)}" title="Delete">
-            <span class="material-icons-round">delete</span>
-          </button>
-        </div>
-      </td>
-    </tr>
-  `;
-}
-
 function renderCheckerLineCard(l) {
   return `
-    <div class="mobile-task-card">
-      <div class="card-header-row">
-        <span class="picking-id-label" style="font-size: 13px;">ID: ${escHtml(l.id)}</span>
+    <div class="admin-zone-card">
+      <div class="admin-zone-icon">
+        <span class="material-icons-round">rule</span>
       </div>
-      <div class="card-body-content" style="margin-top: 8px;">
-        <div style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${escHtml(l.lineName)}</div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 15px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escHtml(l.lineName)}</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px; font-family: monospace;">ID: ${escHtml(l.id)}</div>
       </div>
-      <div class="card-action-bar" style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px;">
+      <div style="display: flex; gap: 6px; flex-shrink: 0;">
         <button class="edit-line-btn icon-action-btn" data-id="${escHtml(l.id)}" title="Edit">
           <span class="material-icons-round">edit</span>
         </button>

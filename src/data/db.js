@@ -240,7 +240,42 @@ class DatabaseService {
     const stockActivityTab = GOOGLE_SHEETS_CONFIG.tabs.stockActivity || 'Stock_Activity';
     const cacheBuster = `_t=${Date.now()}`;
 
-    const shouldSync = (tabKey) => !tabsToSync || tabsToSync.includes(tabKey);
+    let normalizedTabSet = null;
+    if (tabsToSync && Array.isArray(tabsToSync)) {
+      normalizedTabSet = new Set();
+      tabsToSync.forEach(t => {
+        if (t === 'admin') {
+          normalizedTabSet.add('userDb');
+          normalizedTabSet.add('zones');
+          normalizedTabSet.add('racks');
+          normalizedTabSet.add('checkerLines');
+        } else if (t === 'requestPickup') {
+          normalizedTabSet.add('requestChecker');
+          normalizedTabSet.add('soData');
+          normalizedTabSet.add('checkerLines');
+          normalizedTabSet.add('skusDb');
+        } else if (t === 'pickingTask') {
+          normalizedTabSet.add('pickingTask');
+          normalizedTabSet.add('racks');
+          normalizedTabSet.add('soh');
+        } else if (t === 'lostAndFound') {
+          normalizedTabSet.add('lostAndFound');
+        } else if (t === 'soh') {
+          normalizedTabSet.add('soh');
+          normalizedTabSet.add('skusDb');
+          normalizedTabSet.add('racks');
+        } else if (t === 'stockMovement') {
+          normalizedTabSet.add('stockMovement');
+          normalizedTabSet.add('stockActivity');
+          normalizedTabSet.add('racks');
+          normalizedTabSet.add('soh');
+        } else {
+          normalizedTabSet.add(t);
+        }
+      });
+    }
+
+    const shouldSync = (tabKey) => !normalizedTabSet || normalizedTabSet.has(tabKey);
 
     const fetches = [];
     if (shouldSync('userDb')) {
@@ -255,7 +290,10 @@ class DatabaseService {
     if (shouldSync('pickingTask')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(pickingTaskTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'pickingTask', res: r })).catch(() => null));
     }
-    if (shouldSync('racks') || shouldSync('zones')) {
+    if (shouldSync('racks')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(racksTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'racks', res: r })).catch(() => null));
+    }
+    if (shouldSync('zones')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(zonesTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'zones', res: r })).catch(() => null));
     }
     if (shouldSync('lostAndFound')) {
@@ -294,10 +332,8 @@ class DatabaseService {
         if (item.key === 'soData') this.parseSoData(text);
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
-        if (item.key === 'zones') {
-          this.parseRacks(text);
-          this.parseZones(text);
-        }
+        if (item.key === 'racks') this.parseRacks(text);
+        if (item.key === 'zones') this.parseZones(text);
         if (item.key === 'lostAndFound') this.parseLostAndFound(text);
         if (item.key === 'checkerLines') this.parseCheckerLines(text);
         if (item.key === 'putaway') this.parsePutaway(text);
