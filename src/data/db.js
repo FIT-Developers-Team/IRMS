@@ -551,6 +551,187 @@ class DatabaseService {
     }
   }
 
+  // ── Admin: Racks ──────────────────────────────────────────────────────────
+
+  async addRack(rackData) {
+    const locationName = String(rackData.locationName || rackData.rackName || '').trim();
+    if (!locationName) throw new Error('Location Name is required');
+
+    const existing = this.racks.find(r => (r.locationName || r.rackName || '').toLowerCase() === locationName.toLowerCase());
+    if (existing) throw new Error(`Rack "${locationName}" already exists`);
+
+    const newRack = {
+      id: locationName,
+      rackName: locationName,
+      locationName: locationName,
+      facility: String(rackData.facility || '').trim(),
+      zone: String(rackData.zone || '').trim(),
+      aisle: String(rackData.aisle || '').trim(),
+      bay: String(rackData.bay || '').trim(),
+      partisi: String(rackData.partisi || '').trim(),
+      level: String(rackData.level || '').trim(),
+      priority: String(rackData.priority || '').trim(),
+      capacity: String(rackData.capacity || '').trim(),
+      environment: String(rackData.environment || '').trim()
+    };
+
+    this.racks.push(newRack);
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'addRack', ...newRack })
+        });
+        setTimeout(() => this.syncGoogleSheets(['racks']), 2500);
+      } catch (err) {
+        console.error('Failed to push addRack to WebApp:', err);
+      }
+    }
+    return newRack;
+  }
+
+  async updateRack(locationName, rackData) {
+    const key = String(locationName || '').trim().toLowerCase();
+    const idx = this.racks.findIndex(r => (r.locationName || r.rackName || '').toLowerCase() === key);
+    if (idx === -1) throw new Error(`Rack Location "${locationName}" not found`);
+
+    const updated = {
+      ...this.racks[idx],
+      facility: rackData.facility !== undefined ? String(rackData.facility).trim() : this.racks[idx].facility,
+      zone: rackData.zone !== undefined ? String(rackData.zone).trim() : this.racks[idx].zone,
+      aisle: rackData.aisle !== undefined ? String(rackData.aisle).trim() : this.racks[idx].aisle,
+      bay: rackData.bay !== undefined ? String(rackData.bay).trim() : this.racks[idx].bay,
+      partisi: rackData.partisi !== undefined ? String(rackData.partisi).trim() : this.racks[idx].partisi,
+      level: rackData.level !== undefined ? String(rackData.level).trim() : this.racks[idx].level,
+      priority: rackData.priority !== undefined ? String(rackData.priority).trim() : this.racks[idx].priority,
+      capacity: rackData.capacity !== undefined ? String(rackData.capacity).trim() : this.racks[idx].capacity,
+      environment: rackData.environment !== undefined ? String(rackData.environment).trim() : this.racks[idx].environment
+    };
+
+    this.racks[idx] = updated;
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'updateRack', ...updated })
+        });
+        setTimeout(() => this.syncGoogleSheets(['racks']), 2500);
+      } catch (err) {
+        console.error('Failed to push updateRack to WebApp:', err);
+      }
+    }
+    return updated;
+  }
+
+  async deleteRack(locationName) {
+    const key = String(locationName || '').trim().toLowerCase();
+    const idx = this.racks.findIndex(r => (r.locationName || r.rackName || '').toLowerCase() === key);
+    if (idx === -1) throw new Error(`Rack Location "${locationName}" not found`);
+
+    const deleted = this.racks.splice(idx, 1)[0];
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'deleteRack', locationName: deleted.locationName || deleted.rackName })
+        });
+        setTimeout(() => this.syncGoogleSheets(['racks']), 2500);
+      } catch (err) {
+        console.error('Failed to push deleteRack to WebApp:', err);
+      }
+    }
+    return deleted;
+  }
+
+  // ── Admin: Checker Lines ──────────────────────────────────────────────────
+
+  async addCheckerLine(lineName) {
+    if (!lineName || !lineName.trim()) throw new Error('Checker Line Name is required');
+    const name = lineName.trim();
+    if (this.checkerLines.find(l => l.lineName.toLowerCase() === name.toLowerCase())) {
+      throw new Error(`Checker Line "${name}" already exists`);
+    }
+    const newId = String(Date.now());
+    const newLine = { id: newId, lineName: name };
+
+    this.checkerLines.push(newLine);
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'addCheckerLine', id: newId, lineName: name })
+        });
+        setTimeout(() => this.syncGoogleSheets(['checkerLines']), 2500);
+      } catch (err) {
+        console.error('Failed to push addCheckerLine to WebApp:', err);
+      }
+    }
+    return newLine;
+  }
+
+  async updateCheckerLine(id, newName) {
+    if (!newName || !newName.trim()) throw new Error('Checker Line Name is required');
+    const idx = this.checkerLines.findIndex(l => l.id === String(id));
+    if (idx === -1) throw new Error(`Checker Line ID "${id}" not found`);
+    const name = newName.trim();
+
+    this.checkerLines[idx].lineName = name;
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'updateCheckerLine', id: String(id), lineName: name })
+        });
+        setTimeout(() => this.syncGoogleSheets(['checkerLines']), 2500);
+      } catch (err) {
+        console.error('Failed to push updateCheckerLine to WebApp:', err);
+      }
+    }
+    return this.checkerLines[idx];
+  }
+
+  async deleteCheckerLine(id) {
+    const idx = this.checkerLines.findIndex(l => l.id === String(id));
+    if (idx === -1) throw new Error(`Checker Line ID "${id}" not found`);
+
+    this.checkerLines.splice(idx, 1);
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'deleteCheckerLine', id: String(id) })
+        });
+        setTimeout(() => this.syncGoogleSheets(['checkerLines']), 2500);
+      } catch (err) {
+        console.error('Failed to push deleteCheckerLine to WebApp:', err);
+      }
+    }
+  }
+
   getUniqueSoNumbers() {
     this.checkAndRefreshIfExpired();
     const map = new Map();

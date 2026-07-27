@@ -16,11 +16,12 @@ Today's session delivered major operational enhancements, safety verification wo
 - **User_DB Role-Based Security**: Implemented strict security routing where `Role = Super` unlocks all modules, while non-Super users access only the pages listed in their `Acess` column.
 - **Route Guard Protection**: `switchTab()` checks permissions before rendering. Unauthorized navigation attempts block access, display an "Access Denied" toast alert, and return to `Home`.
 
-### 2. User Registration Admin Panel (`admin.js`)
+### 2. User Registration & Master Data Admin Panel (`admin.js`, `gas/Code.gs`)
 - **Full Module Coverage**: Admin registration form includes access selection checkboxes covering all existing modules (`requestPickup`, `pickingTask`, `lostAndFound`, `soh`, `stockMovement`, `admin`).
 - **Role Selection Updates**: Removed obsolete `Checker` role. Supported roles: `Super`, `Supervisor`, `Staff`, `Manager`.
 - **Auto PIN Generator**: Added a "Generate PIN" button for auto-producing 4-digit PIN credentials.
-- **Google Sheets Sync**: User additions and updates sync directly to the `User_DB` Google Sheets tab.
+- **Racks & Checker Lines Management**: Added interactive sub-tabs for **Racks** (`# Racks`) and **Checker Lines** (`# Checker_Lines`). Admins can search, create, edit, and delete rack locations and receiving checker lines with instant Google Sheets sync.
+- **Google Sheets Sync**: User, Zone, Rack, and Checker Line additions and updates sync directly to their respective Google Sheets tabs (`User_DB`, `Zone`, `Racks`, `Checker_Lines`).
 
 ### 3. Private User-Level Data Filtering & Notification Badges (`stockMovement.js`, `pickingTask.js`, `dashboard.js`)
 - **Private Movement Tasks & Activity Log**: Non-Super users see only movement tasks and trailing activity logs assigned to or created by them. Super users view system-wide data.

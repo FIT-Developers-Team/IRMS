@@ -42,6 +42,18 @@ function doPost(e) {
       return handleUpdateZone(ss, data);
     } else if (action === 'deleteZone') {
       return handleDeleteZone(ss, data);
+    } else if (action === 'addRack') {
+      return handleAddRack(ss, data);
+    } else if (action === 'updateRack') {
+      return handleUpdateRack(ss, data);
+    } else if (action === 'deleteRack') {
+      return handleDeleteRack(ss, data);
+    } else if (action === 'addCheckerLine') {
+      return handleAddCheckerLine(ss, data);
+    } else if (action === 'updateCheckerLine') {
+      return handleUpdateCheckerLine(ss, data);
+    } else if (action === 'deleteCheckerLine') {
+      return handleDeleteCheckerLine(ss, data);
     } else {
       // Default: Create Request_Checker entry
       return handleCreateRequestChecker(ss, data);
@@ -969,6 +981,142 @@ function handleUpdateZone(ss, data) {
 
 function handleDeleteZone(ss, data) {
   var sheet = ss.getSheetByName("Zone");
+  if (sheet && data.id) {
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var idCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'id') { idCol = h; break; }
+      }
+      if (idCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][idCol]).trim() === String(data.id).trim()) {
+            sheet.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", id: data.id }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAddRack(ss, data) {
+  var defaultHeaders = ["Location Name", "Facillity", "Zone", "Aisle", "Bay", "Partisi", "Level", "Priority", "Capacity", "Environment"];
+  var sheet = getOrCreateSheet(ss, "Racks", defaultHeaders);
+  appendRowByHeader(sheet, data, defaultHeaders);
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", locationName: data.locationName || data.rackName }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateRack(ss, data) {
+  var sheet = ss.getSheetByName("Racks");
+  if (sheet && (data.locationName || data.rackName || data.id)) {
+    var target = String(data.locationName || data.rackName || data.id).trim().toLowerCase();
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var locCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'locationname' || cleanH === 'rackname' || cleanH === 'id' || cleanH === 'location') { locCol = h; break; }
+      }
+      if (locCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][locCol]).trim().toLowerCase() === target) {
+            headers.forEach(function(header, colIdx) {
+              var clean = String(header).toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (clean === 'zone' && data.zone !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.zone);
+              if ((clean === 'facillity' || clean === 'facility') && data.facility !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.facility);
+              if (clean === 'aisle' && data.aisle !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.aisle);
+              if (clean === 'bay' && data.bay !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.bay);
+              if (clean === 'partisi' && data.partisi !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.partisi);
+              if (clean === 'level' && data.level !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.level);
+              if (clean === 'priority' && data.priority !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.priority);
+              if (clean === 'capacity' && data.capacity !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.capacity);
+              if (clean === 'environment' && data.environment !== undefined) sheet.getRange(i + 1, colIdx + 1).setValue(data.environment);
+            });
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleDeleteRack(ss, data) {
+  var sheet = ss.getSheetByName("Racks");
+  if (sheet && (data.locationName || data.rackName || data.id)) {
+    var target = String(data.locationName || data.rackName || data.id).trim().toLowerCase();
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var locCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'locationname' || cleanH === 'rackname' || cleanH === 'id' || cleanH === 'location') { locCol = h; break; }
+      }
+      if (locCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][locCol]).trim().toLowerCase() === target) {
+            sheet.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success" }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAddCheckerLine(ss, data) {
+  var defaultHeaders = ["Id", "Line Name"];
+  var sheet = getOrCreateSheet(ss, "Checker_Lines", defaultHeaders);
+  appendRowByHeader(sheet, data, defaultHeaders);
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", id: data.id }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUpdateCheckerLine(ss, data) {
+  var sheet = ss.getSheetByName("Checker_Lines");
+  if (sheet && data.id) {
+    var values = sheet.getDataRange().getValues();
+    if (values.length > 1) {
+      var headers = values[0];
+      var idCol = -1, lineCol = -1;
+      for (var h = 0; h < headers.length; h++) {
+        var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'id') idCol = h;
+        if (cleanH === 'linename' || cleanH === 'line' || cleanH === 'checkerline') lineCol = h;
+      }
+      if (idCol !== -1 && lineCol !== -1) {
+        for (var i = 1; i < values.length; i++) {
+          if (String(values[i][idCol]).trim() === String(data.id).trim()) {
+            sheet.getRange(i + 1, lineCol + 1).setValue(data.lineName || data.line || '');
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", id: data.id }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleDeleteCheckerLine(ss, data) {
+  var sheet = ss.getSheetByName("Checker_Lines");
   if (sheet && data.id) {
     var values = sheet.getDataRange().getValues();
     if (values.length > 1) {
