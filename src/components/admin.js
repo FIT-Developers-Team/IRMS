@@ -591,63 +591,56 @@ function renderRacksTab(container) {
           </div>
           <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
             <div style="position: relative; width: 220px;">
-              <input type="text" id="rackSearchInput" class="text-control" value="${escHtml(searchQ)}" placeholder="Search rack or zone..." style="padding-left: 32px; height: 36px; font-size: 12px;" />
+              <input type="text" id="rackSearchInput" class="text-control" value="${escHtml(searchQ)}" placeholder="Search rack location..." style="padding-left: 32px; height: 36px; font-size: 12px;" />
               <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
             </div>
-            <button id="addRackBtn" class="btn-primary" style="gap: 6px; height: 36px; font-size: 12px;">
+            <button id="addRackBtn" class="btn-primary" style="gap: 6px;">
               <span class="material-icons-round" style="font-size: 16px;">add_location</span>
               Add New Rack
             </button>
           </div>
         </div>
 
-        <!-- Table -->
-        <div class="data-table-wrapper" style="border: 1px solid var(--border-light); border-radius: 12px;">
-          <table class="custom-table" style="font-size: 12px; width: 100%;">
+        <!-- Desktop Table -->
+        <div class="data-table-wrapper admin-table-wrapper">
+          <table class="custom-table">
             <thead>
               <tr>
-                <th style="min-width: 150px;">Location Name</th>
+                <th style="min-width: 160px;">Location Name</th>
                 <th style="min-width: 90px;">Zone</th>
                 <th style="min-width: 90px;">Facility</th>
                 <th style="min-width: 70px;">Aisle</th>
                 <th style="min-width: 70px;">Bay</th>
                 <th style="min-width: 70px;">Level</th>
                 <th style="min-width: 80px;">Capacity</th>
-                <th style="width: 100px; text-align: right;">Actions</th>
+                <th style="width: 100px; text-align: center;">Actions</th>
               </tr>
             </thead>
             <tbody>
               ${filtered.length === 0 ? `
                 <tr>
-                  <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 32px;">
-                    <span class="material-icons-round" style="font-size: 32px; color: var(--text-muted);">shelves</span>
-                    <div style="margin-top: 8px; font-weight: 600;">No rack locations found.</div>
-                  </td>
-                </tr>
-              ` : filtered.map(r => `
-                <tr>
-                  <td><strong style="font-family: monospace; font-size: 12px; color: var(--primary-700);">${escHtml(r.locationName || r.rackName)}</strong></td>
-                  <td><span class="badge" style="background: var(--primary-50); color: var(--primary-700); font-weight: 700;">${escHtml(r.zone || 'N/A')}</span></td>
-                  <td style="color: var(--text-muted);">${escHtml(r.facility || '-')}</td>
-                  <td style="color: var(--text-secondary); font-weight: 600;">${escHtml(r.aisle || '-')}</td>
-                  <td style="color: var(--text-secondary); font-weight: 600;">${escHtml(r.bay || '-')}</td>
-                  <td style="color: var(--text-secondary); font-weight: 600;">${escHtml(r.level || '-')}</td>
-                  <td style="color: var(--text-muted);">${escHtml(r.capacity || '-')}</td>
-                  <td style="text-align: right;">
-                    <div style="display: flex; gap: 6px; justify-content: flex-end;">
-                      <button class="btn-secondary edit-rack-btn" data-loc="${escHtml(r.locationName || r.rackName)}" style="padding: 4px 8px; font-size: 11px;">
-                        <span class="material-icons-round" style="font-size: 14px;">edit</span>
-                      </button>
-                      <button class="btn-danger delete-rack-btn" data-loc="${escHtml(r.locationName || r.rackName)}" style="padding: 4px 8px; font-size: 11px;">
-                        <span class="material-icons-round" style="font-size: 14px;">delete</span>
-                      </button>
+                  <td colspan="8">
+                    <div class="empty-state">
+                      <span class="material-icons-round">shelves</span>
+                      <p>No rack locations found. Add one to get started.</p>
                     </div>
                   </td>
                 </tr>
-              `).join('')}
+              ` : filtered.map(r => renderRackRow(r)).join('')}
             </tbody>
           </table>
         </div>
+
+        <!-- Mobile Card List -->
+        <div class="mobile-card-list" id="racksMobileList">
+          ${filtered.length === 0 ? `
+            <div class="empty-state">
+              <span class="material-icons-round">shelves</span>
+              <p>No rack locations found.</p>
+            </div>
+          ` : filtered.map(r => renderRackCard(r)).join('')}
+        </div>
+
       </div>
     `;
 
@@ -659,10 +652,11 @@ function renderRacksTab(container) {
       });
     }
 
-    container.querySelector('#addRackBtn').addEventListener('click', () => openRackModal());
+    container.querySelector('#addRackBtn').addEventListener('click', () => openRackModal(null));
 
     container.querySelectorAll('.edit-rack-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const loc = btn.dataset.loc;
         const targetRack = racks.find(r => (r.locationName || r.rackName) === loc);
         if (targetRack) openRackModal(targetRack);
@@ -670,15 +664,15 @@ function renderRacksTab(container) {
     });
 
     container.querySelectorAll('.delete-rack-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
         const loc = btn.dataset.loc;
-        if (confirm(`Are you sure you want to delete rack location "${loc}"?`)) {
-          try {
-            await db.deleteRack(loc);
-            showAdminToast(`Rack "${loc}" deleted.`, 'success');
-          } catch (err) {
-            showAdminToast(err.message, 'error');
-          }
+        if (!confirm(`Delete rack location "${loc}"? This cannot be undone.`)) return;
+        try {
+          await db.deleteRack(loc);
+          showAdminToast(`Rack "${loc}" deleted.`, 'success');
+        } catch (err) {
+          showAdminToast(err.message, 'error');
         }
       });
     });
@@ -687,76 +681,123 @@ function renderRacksTab(container) {
   draw();
 }
 
+function renderRackRow(r) {
+  const locName = r.locationName || r.rackName;
+  return `
+    <tr>
+      <td><strong style="font-family: monospace; color: var(--primary-700); font-size: 13px;">${escHtml(locName)}</strong></td>
+      <td><span class="admin-access-chip" style="font-weight: 700;">${escHtml(r.zone || '-')}</span></td>
+      <td><span style="color: var(--text-secondary);">${escHtml(r.facility || '-')}</span></td>
+      <td><span style="color: var(--text-secondary); font-weight: 600;">${escHtml(r.aisle || '-')}</span></td>
+      <td><span style="color: var(--text-secondary); font-weight: 600;">${escHtml(r.bay || '-')}</span></td>
+      <td><span style="color: var(--text-secondary); font-weight: 600;">${escHtml(r.level || '-')}</span></td>
+      <td><span style="color: var(--text-muted);">${escHtml(r.capacity || '-')}</span></td>
+      <td style="text-align: center;">
+        <div style="display: flex; gap: 6px; justify-content: center;">
+          <button class="edit-rack-btn icon-action-btn" data-loc="${escHtml(locName)}" title="Edit">
+            <span class="material-icons-round">edit</span>
+          </button>
+          <button class="delete-rack-btn icon-action-btn icon-action-btn-danger" data-loc="${escHtml(locName)}" title="Delete">
+            <span class="material-icons-round">delete</span>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderRackCard(r) {
+  const locName = r.locationName || r.rackName;
+  return `
+    <div class="mobile-task-card">
+      <div class="card-header-row">
+        <span class="picking-id-label" style="font-size: 13px;">${escHtml(locName)}</span>
+        <span class="admin-access-chip" style="font-weight: 700;">Zone: ${escHtml(r.zone || '-')}</span>
+      </div>
+      <div class="card-body-content" style="margin-top: 8px;">
+        <div style="display: flex; gap: 12px; font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+          <span>Facility: <strong>${escHtml(r.facility || '-')}</strong></span>
+          <span>Aisle: <strong>${escHtml(r.aisle || '-')}</strong></span>
+          <span>Bay: <strong>${escHtml(r.bay || '-')}</strong></span>
+          <span>Level: <strong>${escHtml(r.level || '-')}</strong></span>
+        </div>
+      </div>
+      <div class="card-action-bar" style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="edit-rack-btn icon-action-btn" data-loc="${escHtml(locName)}" title="Edit">
+          <span class="material-icons-round">edit</span>
+        </button>
+        <button class="delete-rack-btn icon-action-btn icon-action-btn-danger" data-loc="${escHtml(locName)}" title="Delete">
+          <span class="material-icons-round">delete</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function openRackModal(existingRack = null) {
   const isEdit = !!existingRack;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
-  modal.style.cssText = 'z-index: 5000; display: flex; align-items: center; justify-content: center;';
-
-  const zones = db.getZones ? db.getZones() : [];
 
   modal.innerHTML = `
-    <div class="modal-card form-modal-card" style="width: 100%; max-width: 500px; border-radius: 20px; padding: 0; overflow: hidden; background: #ffffff;">
-      <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+    <div class="modal-panel" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
           <span class="material-icons-round" style="color: var(--primary-600);">${isEdit ? 'edit_location' : 'add_location'}</span>
-          ${isEdit ? 'Edit Rack Location' : 'Add New Rack Location'}
+          ${isEdit ? `Edit Rack · ${escHtml(existingRack.locationName || existingRack.rackName)}` : 'Add New Rack Location'}
         </h3>
-        <button id="closeRackModal" style="border: none; background: transparent; cursor: pointer; color: var(--text-muted);">
+        <button class="modal-close-btn" id="closeRackModal">
           <span class="material-icons-round">close</span>
         </button>
       </div>
 
-      <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px; max-height: 70vh; overflow-y: auto;">
+      <div class="modal-body" style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; max-height: 70vh; overflow-y: auto;">
         <div id="rackModalError" style="display: none; background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 600;"></div>
 
-        <div class="form-group">
-          <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Location Name (Rack ID) <span style="color: var(--danger);">*</span></label>
-          <input type="text" id="rackLocationInput" class="text-control" value="${isEdit ? escHtml(existingRack.locationName || existingRack.rackName) : ''}" ${isEdit ? 'disabled' : ''} placeholder="e.g. CBT-MZF3-35-03-L1-04" style="height: 38px; font-family: monospace; font-weight: 700; font-size: 13px;" />
+        <div class="form-field-group">
+          <label class="form-label">Location Name (Rack ID) <span style="color: var(--danger);">*</span></label>
+          <input type="text" id="rackLocationInput" class="text-control" value="${isEdit ? escHtml(existingRack.locationName || existingRack.rackName) : ''}" ${isEdit ? 'disabled' : ''} placeholder="e.g. CBT-MZF3-35-03-L1-04" style="font-family: monospace; font-weight: 700;" />
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div class="form-group">
-            <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Zone</label>
-            <select id="rackZoneInput" class="text-control" style="height: 38px; font-size: 13px;">
-              <option value="">-- Select Zone --</option>
-              ${zones.map(z => `<option value="${escHtml(z.zoneName)}" ${existingRack && existingRack.zone === z.zoneName ? 'selected' : ''}>${escHtml(z.zoneName)}</option>`).join('')}
-            </select>
+          <div class="form-field-group">
+            <label class="form-label">Zone</label>
+            <input type="text" id="rackZoneInput" class="text-control" value="${isEdit ? escHtml(existingRack.zone) : ''}" placeholder="e.g. Zone A / General" />
           </div>
-          <div class="form-group">
-            <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Facility</label>
-            <input type="text" id="rackFacilityInput" class="text-control" value="${isEdit ? escHtml(existingRack.facility) : ''}" placeholder="e.g. CBT" style="height: 38px; font-size: 13px;" />
+          <div class="form-field-group">
+            <label class="form-label">Facility</label>
+            <input type="text" id="rackFacilityInput" class="text-control" value="${isEdit ? escHtml(existingRack.facility) : ''}" placeholder="e.g. CBT" />
           </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">Aisle</label>
-            <input type="text" id="rackAisleInput" class="text-control" value="${isEdit ? escHtml(existingRack.aisle) : ''}" placeholder="35" style="height: 36px; font-size: 12px;" />
+          <div class="form-field-group">
+            <label class="form-label" style="font-size: 11px;">Aisle</label>
+            <input type="text" id="rackAisleInput" class="text-control" value="${isEdit ? escHtml(existingRack.aisle) : ''}" placeholder="35" />
           </div>
-          <div class="form-group">
-            <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">Bay</label>
-            <input type="text" id="rackBayInput" class="text-control" value="${isEdit ? escHtml(existingRack.bay) : ''}" placeholder="03" style="height: 36px; font-size: 12px;" />
+          <div class="form-field-group">
+            <label class="form-label" style="font-size: 11px;">Bay</label>
+            <input type="text" id="rackBayInput" class="text-control" value="${isEdit ? escHtml(existingRack.bay) : ''}" placeholder="03" />
           </div>
-          <div class="form-group">
-            <label style="font-size: 11px; font-weight: 700; color: var(--text-secondary);">Level</label>
-            <input type="text" id="rackLevelInput" class="text-control" value="${isEdit ? escHtml(existingRack.level) : ''}" placeholder="L1" style="height: 36px; font-size: 12px;" />
+          <div class="form-field-group">
+            <label class="form-label" style="font-size: 11px;">Level</label>
+            <input type="text" id="rackLevelInput" class="text-control" value="${isEdit ? escHtml(existingRack.level) : ''}" placeholder="L1" />
           </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div class="form-group">
-            <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Capacity</label>
-            <input type="text" id="rackCapacityInput" class="text-control" value="${isEdit ? escHtml(existingRack.capacity) : ''}" placeholder="e.g. 100" style="height: 38px; font-size: 13px;" />
+          <div class="form-field-group">
+            <label class="form-label">Capacity</label>
+            <input type="text" id="rackCapacityInput" class="text-control" value="${isEdit ? escHtml(existingRack.capacity) : ''}" placeholder="e.g. 100" />
           </div>
-          <div class="form-group">
-            <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Priority</label>
-            <input type="text" id="rackPriorityInput" class="text-control" value="${isEdit ? escHtml(existingRack.priority) : ''}" placeholder="e.g. Normal" style="height: 38px; font-size: 13px;" />
+          <div class="form-field-group">
+            <label class="form-label">Priority</label>
+            <input type="text" id="rackPriorityInput" class="text-control" value="${isEdit ? escHtml(existingRack.priority) : ''}" placeholder="e.g. Normal" />
           </div>
         </div>
       </div>
 
-      <div class="modal-footer" style="padding: 16px 20px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border-light);">
+      <div class="modal-footer" style="padding: 16px 24px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border-light);">
         <button id="cancelRackBtn" class="btn-secondary">Cancel</button>
         <button id="saveRackBtn" class="btn-primary">
           <span class="material-icons-round" style="font-size: 16px;">${isEdit ? 'save' : 'add_location'}</span>
@@ -813,6 +854,7 @@ function openRackModal(existingRack = null) {
   });
 
   modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  setTimeout(() => modal.querySelector('#rackLocationInput').focus(), 50);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -846,50 +888,48 @@ function renderCheckerLinesTab(container) {
               <input type="text" id="checkerSearchInput" class="text-control" value="${escHtml(searchQ)}" placeholder="Search checker line..." style="padding-left: 32px; height: 36px; font-size: 12px;" />
               <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
             </div>
-            <button id="addCheckerLineBtn" class="btn-primary" style="gap: 6px; height: 36px; font-size: 12px;">
+            <button id="addCheckerLineBtn" class="btn-primary" style="gap: 6px;">
               <span class="material-icons-round" style="font-size: 16px;">add</span>
               Add Checker Line
             </button>
           </div>
         </div>
 
-        <!-- Table -->
-        <div class="data-table-wrapper" style="border: 1px solid var(--border-light); border-radius: 12px;">
-          <table class="custom-table" style="font-size: 12px; width: 100%;">
+        <!-- Desktop Table -->
+        <div class="data-table-wrapper admin-table-wrapper">
+          <table class="custom-table">
             <thead>
               <tr>
                 <th style="width: 100px;">ID</th>
                 <th>Line Name</th>
-                <th style="width: 100px; text-align: right;">Actions</th>
+                <th style="width: 100px; text-align: center;">Actions</th>
               </tr>
             </thead>
             <tbody>
               ${filtered.length === 0 ? `
                 <tr>
-                  <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 32px;">
-                    <span class="material-icons-round" style="font-size: 32px; color: var(--text-muted);">rule</span>
-                    <div style="margin-top: 8px; font-weight: 600;">No checker lines found.</div>
-                  </td>
-                </tr>
-              ` : filtered.map(l => `
-                <tr>
-                  <td><span style="font-family: monospace; font-size: 11px; font-weight: 700; color: var(--text-muted);">${escHtml(l.id)}</span></td>
-                  <td><strong style="color: var(--text-primary); font-size: 13px;">${escHtml(l.lineName)}</strong></td>
-                  <td style="text-align: right;">
-                    <div style="display: flex; gap: 6px; justify-content: flex-end;">
-                      <button class="btn-secondary edit-line-btn" data-id="${escHtml(l.id)}" style="padding: 4px 8px; font-size: 11px;">
-                        <span class="material-icons-round" style="font-size: 14px;">edit</span>
-                      </button>
-                      <button class="btn-danger delete-line-btn" data-id="${escHtml(l.id)}" style="padding: 4px 8px; font-size: 11px;">
-                        <span class="material-icons-round" style="font-size: 14px;">delete</span>
-                      </button>
+                  <td colspan="3">
+                    <div class="empty-state">
+                      <span class="material-icons-round">rule</span>
+                      <p>No checker lines configured. Add one to get started.</p>
                     </div>
                   </td>
                 </tr>
-              `).join('')}
+              ` : filtered.map(l => renderCheckerLineRow(l)).join('')}
             </tbody>
           </table>
         </div>
+
+        <!-- Mobile Card List -->
+        <div class="mobile-card-list" id="checkerLinesMobileList">
+          ${filtered.length === 0 ? `
+            <div class="empty-state">
+              <span class="material-icons-round">rule</span>
+              <p>No checker lines found.</p>
+            </div>
+          ` : filtered.map(l => renderCheckerLineCard(l)).join('')}
+        </div>
+
       </div>
     `;
 
@@ -901,10 +941,11 @@ function renderCheckerLinesTab(container) {
       });
     }
 
-    container.querySelector('#addCheckerLineBtn').addEventListener('click', () => openCheckerLineModal());
+    container.querySelector('#addCheckerLineBtn').addEventListener('click', () => openCheckerLineModal(null));
 
     container.querySelectorAll('.edit-line-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         const id = btn.dataset.id;
         const targetLine = lines.find(l => String(l.id) === String(id));
         if (targetLine) openCheckerLineModal(targetLine);
@@ -912,17 +953,17 @@ function renderCheckerLinesTab(container) {
     });
 
     container.querySelectorAll('.delete-line-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
         const id = btn.dataset.id;
         const targetLine = lines.find(l => String(l.id) === String(id));
         const lineName = targetLine ? targetLine.lineName : id;
-        if (confirm(`Are you sure you want to delete checker line "${lineName}"?`)) {
-          try {
-            await db.deleteCheckerLine(id);
-            showAdminToast(`Checker line "${lineName}" deleted.`, 'success');
-          } catch (err) {
-            showAdminToast(err.message, 'error');
-          }
+        if (!confirm(`Delete checker line "${lineName}"? This cannot be undone.`)) return;
+        try {
+          await db.deleteCheckerLine(id);
+          showAdminToast(`Checker line "${lineName}" deleted.`, 'success');
+        } catch (err) {
+          showAdminToast(err.message, 'error');
         }
       });
     });
@@ -931,34 +972,73 @@ function renderCheckerLinesTab(container) {
   draw();
 }
 
+function renderCheckerLineRow(l) {
+  return `
+    <tr>
+      <td><span style="font-family: monospace; font-size: 11px; font-weight: 700; color: var(--text-muted);">${escHtml(l.id)}</span></td>
+      <td><strong style="color: var(--text-primary); font-size: 13px;">${escHtml(l.lineName)}</strong></td>
+      <td style="text-align: center;">
+        <div style="display: flex; gap: 6px; justify-content: center;">
+          <button class="edit-line-btn icon-action-btn" data-id="${escHtml(l.id)}" title="Edit">
+            <span class="material-icons-round">edit</span>
+          </button>
+          <button class="delete-line-btn icon-action-btn icon-action-btn-danger" data-id="${escHtml(l.id)}" title="Delete">
+            <span class="material-icons-round">delete</span>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function renderCheckerLineCard(l) {
+  return `
+    <div class="mobile-task-card">
+      <div class="card-header-row">
+        <span class="picking-id-label" style="font-size: 13px;">ID: ${escHtml(l.id)}</span>
+      </div>
+      <div class="card-body-content" style="margin-top: 8px;">
+        <div style="font-size: 15px; font-weight: 700; color: var(--text-primary);">${escHtml(l.lineName)}</div>
+      </div>
+      <div class="card-action-bar" style="margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="edit-line-btn icon-action-btn" data-id="${escHtml(l.id)}" title="Edit">
+          <span class="material-icons-round">edit</span>
+        </button>
+        <button class="delete-line-btn icon-action-btn icon-action-btn-danger" data-id="${escHtml(l.id)}" title="Delete">
+          <span class="material-icons-round">delete</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 function openCheckerLineModal(existingLine = null) {
   const isEdit = !!existingLine;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
-  modal.style.cssText = 'z-index: 5000; display: flex; align-items: center; justify-content: center;';
 
   modal.innerHTML = `
-    <div class="modal-card form-modal-card" style="width: 100%; max-width: 420px; border-radius: 20px; padding: 0; overflow: hidden; background: #ffffff;">
-      <div class="modal-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+    <div class="modal-panel" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3 style="display: flex; align-items: center; gap: 8px;">
           <span class="material-icons-round" style="color: var(--primary-600);">${isEdit ? 'edit' : 'add'}</span>
-          ${isEdit ? 'Edit Checker Line' : 'Add New Checker Line'}
+          ${isEdit ? `Edit Line · ${escHtml(existingLine.lineName)}` : 'Add New Checker Line'}
         </h3>
-        <button id="closeLineModal" style="border: none; background: transparent; cursor: pointer; color: var(--text-muted);">
+        <button class="modal-close-btn" id="closeLineModal">
           <span class="material-icons-round">close</span>
         </button>
       </div>
 
-      <div class="modal-body" style="padding: 20px; display: flex; flex-direction: column; gap: 14px;">
+      <div class="modal-body" style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;">
         <div id="lineModalError" style="display: none; background: #fee2e2; color: #991b1b; padding: 10px; border-radius: 8px; font-size: 12px; font-weight: 600;"></div>
 
-        <div class="form-group">
-          <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">Checker Line Name <span style="color: var(--danger);">*</span></label>
-          <input type="text" id="lineNameInput" class="text-control" value="${isEdit ? escHtml(existingLine.lineName) : ''}" placeholder="e.g. Line 01 / Receiving Line 01" style="height: 38px; font-size: 13px; font-weight: 600;" />
+        <div class="form-field-group">
+          <label class="form-label">Checker Line Name <span style="color: var(--danger);">*</span></label>
+          <input type="text" id="lineNameInput" class="text-control" value="${isEdit ? escHtml(existingLine.lineName) : ''}" placeholder="e.g. Line 01 / Receiving Line 01" style="font-weight: 600;" />
         </div>
       </div>
 
-      <div class="modal-footer" style="padding: 16px 20px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border-light);">
+      <div class="modal-footer" style="padding: 16px 24px; display: flex; gap: 10px; justify-content: flex-end; border-top: 1px solid var(--border-light);">
         <button id="cancelLineBtn" class="btn-secondary">Cancel</button>
         <button id="saveLineBtn" class="btn-primary">
           <span class="material-icons-round" style="font-size: 16px;">${isEdit ? 'save' : 'add'}</span>
