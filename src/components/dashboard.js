@@ -6,10 +6,73 @@ import { renderHome } from './home.js';
 import { renderAdmin } from './admin.js';
 import { renderStockMovement } from './stockMovement.js';
 import { db } from '../data/db.js';
+import { hasUserAccess, getUserAccessiblePages } from '../utils/security.js';
 
 export function renderDashboard(container, currentUser, onLogout) {
   let activeTab = 'home';
   let isCollapsed = localStorage.getItem('irms_sidebar_collapsed') === 'true';
+
+  // Evaluate accessible tabs for user
+  const accessiblePages = getUserAccessiblePages(currentUser);
+  const showMoreButton = accessiblePages.length > 4;
+
+  const primaryTabs = showMoreButton ? accessiblePages.slice(0, 4) : accessiblePages;
+  const extendedTabs = showMoreButton ? accessiblePages.slice(4) : [];
+
+  const canPickup = hasUserAccess(currentUser, 'requestPickup');
+  const canPicking = hasUserAccess(currentUser, 'pickingTask');
+  const canSoh = hasUserAccess(currentUser, 'soh');
+  const canLostFound = hasUserAccess(currentUser, 'lostAndFound');
+  const canMovement = hasUserAccess(currentUser, 'stockMovement');
+  const canAdmin = hasUserAccess(currentUser, 'admin');
+
+  // 1. Primary mobile tabs (up to 4) - rendered for both desktop & mobile
+  const primaryTabsHtml = primaryTabs.map(page => {
+    let badgeHtml = '';
+    if (page.key === 'requestPickup' || page.key === 'pickingTask' || page.key === 'stockMovement') {
+      badgeHtml = `<span class="nav-badge-count" data-badge="${page.key}" style="display: none;">0</span>`;
+    }
+    return `
+      <button class="nav-tab-item ${page.key === 'home' ? 'active' : ''}" data-tab="${page.key}" title="${page.label}">
+        <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+          <span class="material-icons-round">${page.icon}</span>
+          ${badgeHtml}
+        </div>
+        <span class="nav-label">${page.label}</span>
+      </button>
+    `;
+  }).join('');
+
+  // 2. Extended tabs (5th+ items) - visible on desktop sidebar only, opened via "More" modal on mobile
+  const extendedTabsHtml = extendedTabs.map(page => {
+    const isDivider = page.key === 'admin';
+    let badgeHtml = '';
+    if (page.key === 'requestPickup' || page.key === 'pickingTask' || page.key === 'stockMovement') {
+      badgeHtml = `<span class="nav-badge-count" data-badge="${page.key}" style="display: none;">0</span>`;
+    }
+
+    return `
+      ${isDivider ? '<div class="sidebar-divider desktop-only-nav-item"></div>' : ''}
+      <button class="nav-tab-item desktop-only-nav-item ${page.key === 'admin' ? 'nav-tab-admin' : ''}" data-tab="${page.key}" title="${page.label}">
+        <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+          <span class="material-icons-round">${page.icon}</span>
+          ${badgeHtml}
+        </div>
+        <span class="nav-label">${page.label}</span>
+      </button>
+    `;
+  }).join('');
+
+  // 3. More button (5th item on mobile if showMoreButton is true)
+  const mobileMoreBtnHtml = showMoreButton ? `
+    <button class="nav-tab-item mobile-only-nav-item" id="mobileMoreNavBtn" title="More Modules">
+      <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+        <span class="material-icons-round">grid_view</span>
+        <span class="nav-badge-count" data-badge="moreNavBtn" style="display: none;">0</span>
+      </div>
+      <span class="nav-label">More</span>
+    </button>
+  ` : '';
 
   container.innerHTML = `
     <div class="app-layout-root">
@@ -54,70 +117,9 @@ export function renderDashboard(container, currentUser, onLogout) {
         </div>
 
         <div class="sidebar-menu">
-          <!-- 4 Primary Mobile Nav Items -->
-          <button class="nav-tab-item active" data-tab="home" title="Home">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">home</span>
-            </div>
-            <span class="nav-label">Home</span>
-          </button>
-
-          <button class="nav-tab-item" data-tab="requestPickup" title="Request Pickup">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">outbox</span>
-              <span class="nav-badge-count" data-badge="requestPickup" style="display: none;">0</span>
-            </div>
-            <span class="nav-label">Pickup</span>
-          </button>
-
-          <button class="nav-tab-item" data-tab="pickingTask" title="Picking Task">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">fact_check</span>
-              <span class="nav-badge-count" data-badge="pickingTask" style="display: none;">0</span>
-            </div>
-            <span class="nav-label">Picking</span>
-          </button>
-
-          <button class="nav-tab-item" data-tab="soh" title="Stock On Hand">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">inventory_2</span>
-            </div>
-            <span class="nav-label">SOH</span>
-          </button>
-
-          <!-- Extended Modules (Desktop Only in Sidebar) -->
-          <button class="nav-tab-item desktop-only-nav-item" data-tab="lostAndFound" title="Lost & Found">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">travel_explore</span>
-            </div>
-            <span class="nav-label">Lost & Found</span>
-          </button>
-
-          <button class="nav-tab-item desktop-only-nav-item" data-tab="stockMovement" title="Stock Movement">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">swap_horiz</span>
-              <span class="nav-badge-count" data-badge="stockMovement" style="display: none;">0</span>
-            </div>
-            <span class="nav-label">Stock Movement</span>
-          </button>
-
-          ${currentUser.role === 'Super' ? `
-          <div class="sidebar-divider desktop-only-nav-item"></div>
-          <button class="nav-tab-item nav-tab-admin desktop-only-nav-item" data-tab="admin" title="Admin Panel">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">admin_panel_settings</span>
-            </div>
-            <span class="nav-label">Admin</span>
-          </button>` : ''}
-
-          <!-- 5th Mobile Bottom Nav Item (View More Modal Trigger) -->
-          <button class="nav-tab-item mobile-only-nav-item" id="mobileMoreNavBtn" title="More Modules">
-            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-              <span class="material-icons-round">grid_view</span>
-              <span class="nav-badge-count" data-badge="moreNavBtn" style="display: none;">0</span>
-            </div>
-            <span class="nav-label">More</span>
-          </button>
+          ${primaryTabsHtml}
+          ${extendedTabsHtml}
+          ${mobileMoreBtnHtml}
         </div>
 
         <div class="sidebar-footer">
@@ -138,169 +140,162 @@ export function renderDashboard(container, currentUser, onLogout) {
       <div class="main-content-wrapper" style="display: flex; flex-direction: column; height: 100%; flex: 1; min-width: 0;">
 
         <!-- Top Page Content Header Bar (Desktop Only) -->
-        <div class="top-page-header-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; background: #ffffff; border-bottom: 1px solid var(--border-light); flex-shrink: 0; flex-wrap: wrap; gap: 10px;">
-          <!-- Unified Refresh & Sync Status Button -->
-          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <button class="inline-sync-status-badge synced headerSyncBtn" title="Click to refresh live data from Google Sheets">
-              <span class="material-icons-round badge-icon headerSyncIcon" style="font-size: 15px;">cloud_done</span>
-              <span class="badge-label headerSyncText">All synced</span>
+        <div class="top-page-header-bar" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 24px; background: #ffffff; border-bottom: 1.5px solid var(--border-light); z-index: 50; box-sizing: border-box;">
+          
+          <!-- Sync Status Indicator Pill (Top Bar) -->
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button class="inline-sync-status-badge synced headerSyncBtn" title="Click to refresh live data from Google Sheets" style="cursor: pointer; border: 1.5px solid var(--border-light); border-radius: 20px; padding: 4px 10px;">
+              <span class="material-icons-round badge-icon headerSyncIcon" style="font-size: 14px;">cloud_done</span>
+              <span class="badge-label headerSyncText" style="font-weight: 700; font-size: 12px;">All synced</span>
             </button>
           </div>
 
-          <!-- User Profile & Action Info (Desktop Only) -->
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <div class="user-profile-header-chip desktop-only-nav-item" style="display: flex; align-items: center; gap: 8px;">
-              <div class="user-avatar" style="width: 32px; height: 32px; font-size: 13px; background: var(--primary-600); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700;">
-                ${currentUser.name.charAt(0).toUpperCase()}
-              </div>
-              <div style="display: flex; flex-direction: column;">
-                <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">${currentUser.name}</span>
-                <span style="font-size: 10px; color: var(--text-muted); font-weight: 600;">${currentUser.role} • ID: ${currentUser.staffId}</span>
-              </div>
+          <!-- Logged In User Profile Chip (Desktop Only) -->
+          <div class="user-profile-header-chip" style="display: flex; align-items: center; gap: 10px; background: var(--surface-body); padding: 4px 12px 4px 4px; border-radius: 20px; border: 1px solid var(--border-light);">
+            <div class="user-avatar" style="width: 28px; height: 28px; font-size: 12px; font-weight: 800; background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-800) 100%); color: #ffffff; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+              ${currentUser.name.charAt(0).toUpperCase()}
+            </div>
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 12px; font-weight: 700; color: var(--text-primary); line-height: 1.2;">${currentUser.name}</span>
+              <span style="font-size: 10px; font-weight: 600; color: var(--text-muted); line-height: 1;">${currentUser.role} • ID: ${currentUser.staffId}</span>
             </div>
           </div>
         </div>
 
-        <!-- Main Module Body Container -->
-        <main class="page-content-container" id="tabContentArea" style="flex: 1; overflow-y: auto; min-height: 0;"></main>
+        <!-- Main Tab Content Area -->
+        <main class="page-content-container" id="tabContentArea" style="flex: 1; overflow: hidden; position: relative;">
+          <!-- Dynamically loaded tabs -->
+        </main>
       </div>
-
     </div>
   `;
 
+  // DOM references
   const sidebarNav = container.querySelector('#sidebarNav');
   const toggleSidebarBtn = container.querySelector('#toggleSidebarBtn');
+  const navTabs = container.querySelectorAll('.nav-tab-item');
+  const tabContentArea = container.querySelector('#tabContentArea');
   const logoutBtn = container.querySelector('#logoutBtn');
   const mobileLogoutBtn = container.querySelector('#mobileLogoutBtn');
-  const tabContentArea = container.querySelector('#tabContentArea');
-  const navTabs = container.querySelectorAll('.nav-tab-item');
-  const mobileMoreNavBtn = container.querySelector('#mobileMoreNavBtn');
-  const headerSyncBtns = container.querySelectorAll('.headerSyncBtn');
-  const headerSyncIcons = container.querySelectorAll('.headerSyncIcon');
-  const headerSyncTexts = container.querySelectorAll('.headerSyncText');
 
-  // ── Unified Refresh & Sync Status Logic ────────────────────────────────────
+  // Wire Top Header Sync Buttons
+  container.querySelectorAll('.headerSyncBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (db.isSyncing) return;
+      btn.style.opacity = '0.6';
+      btn.style.pointerEvents = 'none';
+      
+      const icons = container.querySelectorAll('.headerSyncIcon');
+      const texts = container.querySelectorAll('.headerSyncText');
+      
+      icons.forEach(ic => { ic.textContent = 'sync'; ic.style.animation = 'spinIcon 1s linear infinite'; });
+      texts.forEach(tx => tx.textContent = 'Syncing...');
 
-  async function triggerManualRefresh() {
-    headerSyncBtns.forEach(btn => { btn.disabled = true; });
-    headerSyncIcons.forEach(icon => { icon.style.animation = 'spin 1s linear infinite'; });
-    try {
-      await db.syncSectionData(activeTab);
-    } catch (err) {
-      console.warn('[Manual Refresh Error]', err);
-    } finally {
-      if (!db.isSyncing) {
-        headerSyncIcons.forEach(icon => { icon.style.animation = 'none'; });
+      try {
+        await db.syncGoogleSheets([activeTab]);
+        icons.forEach(ic => { ic.textContent = 'cloud_done'; ic.style.animation = 'none'; });
+        texts.forEach(tx => tx.textContent = 'All synced');
+      } catch (err) {
+        icons.forEach(ic => { ic.textContent = 'error'; ic.style.animation = 'none'; });
+        texts.forEach(tx => tx.textContent = 'Sync failed (Retry)');
+      } finally {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
       }
-      headerSyncBtns.forEach(btn => { btn.disabled = false; });
-    }
-  }
-
-  headerSyncBtns.forEach(btn => {
-    btn.addEventListener('click', triggerManualRefresh);
+    });
   });
 
-  function updateInlineSyncStatus() {
-    if (!headerSyncBtns.length) return;
+  // ── Reactive Badge Counters Update Function ──────────────────────────────
+  function updateNavBadgeCounters() {
+    const isSuper = (currentUser.role || '').toLowerCase() === 'super';
+    const myName = (currentUser.name || '').trim().toLowerCase();
+    const myId = (currentUser.staffId || '').trim().toLowerCase();
 
-    const pendingCount = db.putawayRecords ? db.putawayRecords.filter(p => p.syncState === 'pending').length : 0;
-    const failedCount = db.putawayRecords ? db.putawayRecords.filter(p => p.syncState === 'failed').length : 0;
-
-    let className = 'inline-sync-status-badge synced';
-    let iconText = 'cloud_done';
-    let labelText = 'All synced';
-    let isSpinning = false;
-
-    if (db.isSyncing) {
-      className = 'inline-sync-status-badge syncing';
-      iconText = 'sync';
-      labelText = 'Syncing...';
-      isSpinning = true;
-    } else if (db.syncError || failedCount > 0) {
-      className = 'inline-sync-status-badge failed';
-      iconText = 'cloud_off';
-      labelText = failedCount > 0 ? `${failedCount} unsynced (Retry)` : 'Sync failed (Retry)';
-    } else if (pendingCount > 0) {
-      className = 'inline-sync-status-badge syncing';
-      iconText = 'sync';
-      labelText = `${pendingCount} queueing...`;
-      isSpinning = true;
-    } else {
-      const lastSync = db.lastSyncTime
-        ? new Date(db.lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : '';
-      labelText = lastSync ? `All synced (${lastSync})` : 'All synced';
-    }
-
-    headerSyncBtns.forEach(btn => { btn.className = className; });
-    headerSyncIcons.forEach(icon => {
-      icon.textContent = iconText;
-      icon.style.animation = isSpinning ? 'spin 1.2s linear infinite' : 'none';
-    });
-    headerSyncTexts.forEach(txt => { txt.textContent = labelText; });
-  }
-
-  // ── Reactive Tab Badge Counter Indicators ────────────────────────────────────
-
-  function updateNavBadgeCounts() {
-    // 1. Request Pickup: count tasks where status is NOT Done / Completed / Cancelled
-    const pickups = db.getPickupRequests ? db.getPickupRequests() : (db.pickupRequests || []);
-    const activePickupCount = pickups.filter(p => {
-      const st = String(p.status || '').toLowerCase();
-      return st !== 'done' && st !== 'completed' && st !== 'cancelled' && st !== 'canceled';
+    // 1. Pickup Requests Active Count (Private per user unless Super)
+    const rawRequests = db.requests || [];
+    const activePickupCount = rawRequests.filter(r => {
+      const st = String(r.status || '').toLowerCase();
+      if (st === 'completed' || st === 'done' || st === 'cancelled' || st === 'canceled') return false;
+      if (isSuper) return true;
+      const reqBy = String(r.requestedBy || r.staffName || '').trim().toLowerCase();
+      return reqBy === myName || reqBy === myId || reqBy.includes(myName);
     }).length;
 
-    // 2. Picking Task: count tasks where status is NOT Done / Completed / Cancelled
-    const pickings = db.getPickingTasks ? db.getPickingTasks() : (db.pickingTasks || []);
-    const activePickingCount = pickings.filter(p => {
-      const st = String(p.status || '').toLowerCase();
+    // 2. Picking Tasks Active Count (Private per user unless Super)
+    const rawPickingTasks = (isSuper && db.getPickingTasks)
+      ? db.getPickingTasks()
+      : (db.getPickingTasksForUser ? db.getPickingTasksForUser(currentUser) : []);
+    
+    const activePickingCount = rawPickingTasks.filter(pt => {
+      const st = String(pt.status || '').toLowerCase();
       return st !== 'completed' && st !== 'done' && st !== 'cancelled' && st !== 'canceled';
     }).length;
 
-    // 3. Stock Movement: count tasks where status is NOT Done / Completed / Cancelled (e.g. 'Pending')
+    // 3. Stock Movements Active Count (Private per user unless Super)
     const movements = db.getStockMovements ? db.getStockMovements() : (db.stockMovements || []);
     const activeMovementCount = movements.filter(m => {
       const st = String(m.status || '').toLowerCase();
-      return st !== 'done' && st !== 'completed' && st !== 'cancelled' && st !== 'canceled';
+      if (st === 'completed' || st === 'done' || st === 'cancelled' || st === 'canceled') {
+        return false;
+      }
+      if (isSuper) return true;
+      const sName = (m.staffName || '').trim().toLowerCase();
+      const aBy = (m.assignedBy || '').trim().toLowerCase();
+      return sName === myName || sName === myId || aBy === myName || aBy === myId;
     }).length;
 
-    // Update DOM badges
-    updateBadgeElement('requestPickup', activePickupCount);
-    updateBadgeElement('pickingTask', activePickingCount);
-    updateBadgeElement('stockMovement', activeMovementCount);
-    updateBadgeElement('moreNavBtn', activeMovementCount);
-  }
+    // Total count for Mobile More Button Badge
+    const totalMoreActiveCount = (canMovement ? activeMovementCount : 0);
 
-  function updateBadgeElement(tabId, count) {
-    const badgeElements = container.querySelectorAll(`.nav-badge-count[data-badge="${tabId}"]`);
-    badgeElements.forEach(badge => {
-      if (count > 0) {
-        badge.textContent = count > 99 ? '99+' : count;
-        badge.style.display = 'inline-flex';
-        badge.setAttribute('data-count', String(count));
+    // Apply to badge elements in DOM
+    container.querySelectorAll('.nav-badge-count[data-badge="requestPickup"]').forEach(el => {
+      if (canPickup && activePickupCount > 0) {
+        el.textContent = activePickupCount > 99 ? '99+' : activePickupCount;
+        el.style.display = 'inline-flex';
       } else {
-        badge.style.display = 'none';
-        badge.setAttribute('data-count', '0');
+        el.style.display = 'none';
+      }
+    });
+
+    container.querySelectorAll('.nav-badge-count[data-badge="pickingTask"]').forEach(el => {
+      if (canPicking && activePickingCount > 0) {
+        el.textContent = activePickingCount > 99 ? '99+' : activePickingCount;
+        el.style.display = 'inline-flex';
+      } else {
+        el.style.display = 'none';
+      }
+    });
+
+    container.querySelectorAll('.nav-badge-count[data-badge="stockMovement"]').forEach(el => {
+      if (canMovement && activeMovementCount > 0) {
+        el.textContent = activeMovementCount > 99 ? '99+' : activeMovementCount;
+        el.style.display = 'inline-flex';
+      } else {
+        el.style.display = 'none';
+      }
+    });
+
+    container.querySelectorAll('.nav-badge-count[data-badge="moreNavBtn"]').forEach(el => {
+      if (totalMoreActiveCount > 0) {
+        el.textContent = totalMoreActiveCount > 99 ? '99+' : totalMoreActiveCount;
+        el.style.display = 'inline-flex';
+      } else {
+        el.style.display = 'none';
       }
     });
   }
 
-  // Subscribe to DB changes to update status elements & tab badges in real-time
-  const unsubscribeSyncBar = db.subscribe(() => {
-    if (!container.isConnected) {
-      unsubscribeSyncBar();
-      return;
+  // Initial calculation & subscription for live updates
+  updateNavBadgeCounters();
+  const unsubscribeBadges = db.subscribe(() => {
+    if (container.isConnected) {
+      updateNavBadgeCounters();
+    } else {
+      unsubscribeBadges();
     }
-    updateInlineSyncStatus();
-    updateNavBadgeCounts();
   });
 
-  // Initial calls
-  updateInlineSyncStatus();
-  updateNavBadgeCounts();
-
-  // ── Sidebar Toggle ─────────────────────────────────────────────────────────
-
+  // Toggle Sidebar Collapse (Desktop)
   if (toggleSidebarBtn) {
     toggleSidebarBtn.addEventListener('click', () => {
       isCollapsed = !isCollapsed;
@@ -312,11 +307,25 @@ export function renderDashboard(container, currentUser, onLogout) {
   if (logoutBtn) logoutBtn.addEventListener('click', onLogout);
   if (mobileLogoutBtn) mobileLogoutBtn.addEventListener('click', onLogout);
 
-  // ── Tab Routing & Mobile Navigation Drawer ──────────────────────────────────
+  // ── Security Filtered Route Guard & Navigation ─────────────────────────────
   const secondaryTabs = ['lostAndFound', 'stockMovement', 'admin'];
+
+  function showAccessDeniedToast(msg) {
+    let toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#c92a2a;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.25);';
+    toast.innerHTML = `<span class="material-icons-round" style="font-size:16px;">lock</span>${msg}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+  }
 
   function switchTab(tabId) {
     try {
+      // Security Guard: Check user permission
+      if (!hasUserAccess(currentUser, tabId)) {
+        showAccessDeniedToast(`Access Denied: You do not have permission to access "${tabId}".`);
+        tabId = 'home';
+      }
+
       activeTab = tabId;
       window.irmsActiveTab = tabId;
       db.checkAndRefreshIfExpired();
@@ -327,8 +336,10 @@ export function renderDashboard(container, currentUser, onLogout) {
         }
       });
 
-      if (mobileMoreNavBtn) {
-        mobileMoreNavBtn.classList.toggle('active', secondaryTabs.includes(tabId));
+      const moreBtn = container.querySelector('#mobileMoreNavBtn');
+      if (moreBtn) {
+        const isExtendedActive = extendedTabs.some(t => t.key === tabId);
+        moreBtn.classList.toggle('active', isExtendedActive);
       }
 
       const targetArea = tabContentArea || container.querySelector('#tabContentArea');
@@ -336,31 +347,16 @@ export function renderDashboard(container, currentUser, onLogout) {
         throw new Error('tabContentArea container (#tabContentArea) is missing in DOM');
       }
 
-      // Render section immediately with cached data
-      if (tabId === 'home') {
-        renderHome(targetArea, currentUser);
-      } else if (tabId === 'pickingTask') {
-        renderPickingTask(targetArea, currentUser);
-      } else if (tabId === 'lostAndFound') {
-        renderLostAndFound(targetArea, currentUser);
-      } else if (tabId === 'soh') {
-        renderSoh(targetArea, currentUser);
-      } else if (tabId === 'requestPickup') {
-        renderRequestPickup(targetArea, currentUser);
-      } else if (tabId === 'stockMovement') {
-        renderStockMovement(targetArea, currentUser);
-      } else if (tabId === 'admin') {
-        renderAdmin(targetArea, currentUser);
-      } else {
-        renderHome(targetArea, currentUser);
-      }
+      // Render section
+      if (tabId === 'home') renderHome(targetArea, currentUser);
+      else if (tabId === 'pickingTask') renderPickingTask(targetArea, currentUser);
+      else if (tabId === 'lostAndFound') renderLostAndFound(targetArea, currentUser);
+      else if (tabId === 'soh') renderSoh(targetArea, currentUser);
+      else if (tabId === 'requestPickup') renderRequestPickup(targetArea, currentUser);
+      else if (tabId === 'stockMovement') renderStockMovement(targetArea, currentUser);
+      else if (tabId === 'admin') renderAdmin(targetArea, currentUser);
+      else renderHome(targetArea, currentUser);
 
-      // Lazy-load section data in background — only if TTL has expired for this section.
-      if (tabId !== 'home' && db.isSectionDataExpired(tabId)) {
-        db.syncSectionData(tabId).catch(err => {
-          console.warn(`[Section Data Sync Error for ${tabId}]`, err);
-        });
-      }
     } catch (err) {
       console.error(`[SwitchTab Error for "${tabId}"]`, err);
     }
@@ -373,9 +369,11 @@ export function renderDashboard(container, currentUser, onLogout) {
     }
   });
 
-  // Attach Mobile More Menu button listener
-  if (mobileMoreNavBtn) {
-    mobileMoreNavBtn.addEventListener('click', () => {
+  // Attach Mobile More Menu button listener dynamically
+  const mobileMoreBtn = container.querySelector('#mobileMoreNavBtn');
+  if (mobileMoreBtn) {
+    mobileMoreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       openMobileMoreNavigationModal();
     });
   }
@@ -385,16 +383,48 @@ export function renderDashboard(container, currentUser, onLogout) {
     const existing = document.getElementById('mobileMoreNavModal');
     if (existing) existing.remove();
 
+    if (!extendedTabs || extendedTabs.length === 0) return;
+
+    const isSuper = (currentUser.role || '').toLowerCase() === 'super';
+    const myName = (currentUser.name || '').trim().toLowerCase();
+    const myId = (currentUser.staffId || '').trim().toLowerCase();
+
     const movements = db.getStockMovements ? db.getStockMovements() : (db.stockMovements || []);
     const activeMovementCount = movements.filter(m => {
       const st = String(m.status || '').toLowerCase();
-      return st !== 'done' && st !== 'completed' && st !== 'cancelled' && st !== 'canceled';
+      if (st === 'completed' || st === 'done' || st === 'cancelled' || st === 'canceled') {
+        return false;
+      }
+      if (isSuper) return true;
+      const sName = (m.staffName || '').trim().toLowerCase();
+      const aBy = (m.assignedBy || '').trim().toLowerCase();
+      return sName === myName || sName === myId || aBy === myName || aBy === myId;
     }).length;
 
     const modalOverlay = document.createElement('div');
     modalOverlay.id = 'mobileMoreNavModal';
     modalOverlay.className = 'modal-overlay';
-    modalOverlay.style.cssText = 'z-index: 3800; align-items: flex-end; padding: 0; animation: fadeIn 0.2s ease;';
+    modalOverlay.style.cssText = 'z-index: 5000; align-items: flex-end; padding: 0; animation: fadeIn 0.2s ease;';
+
+    const cardsHtml = extendedTabs.map(t => {
+      const isActive = activeTab === t.key;
+      let badgeHtml = '';
+      if (t.key === 'stockMovement' && activeMovementCount > 0) {
+        badgeHtml = `<span class="nav-badge-count" style="top: -4px; right: -4px;">${activeMovementCount}</span>`;
+      }
+      return `
+        <button class="more-nav-card ${isActive ? 'active' : ''}" data-tab="${t.key}" style="display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 14px; border: 1.5px solid ${isActive ? 'var(--primary-600)' : 'var(--border-light)'}; background: ${isActive ? 'var(--primary-50)' : '#ffffff'}; text-align: left; cursor: pointer;">
+          <div style="width: 38px; height: 38px; border-radius: 10px; background: #eff6ff; color: var(--primary-600); display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative;">
+            <span class="material-icons-round" style="font-size: 20px;">${t.icon}</span>
+            ${badgeHtml}
+          </div>
+          <div>
+            <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">${t.label}</div>
+            <div style="font-size: 10px; color: var(--text-muted);">Access module</div>
+          </div>
+        </button>
+      `;
+    }).join('');
 
     modalOverlay.innerHTML = `
       <div class="modal-card form-modal-card" style="width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: 20px 18px 28px; box-sizing: border-box; background: #ffffff; animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
@@ -414,41 +444,10 @@ export function renderDashboard(container, currentUser, onLogout) {
 
         <!-- Extended Menu Options Grid -->
         <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">All Modules</div>
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Permitted Modules</div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            <button class="more-nav-card ${activeTab === 'lostAndFound' ? 'active' : ''}" data-tab="lostAndFound" style="display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 14px; border: 1.5px solid ${activeTab === 'lostAndFound' ? 'var(--primary-600)' : 'var(--border-light)'}; background: ${activeTab === 'lostAndFound' ? 'var(--primary-50)' : '#ffffff'}; text-align: left; cursor: pointer;">
-              <div style="width: 38px; height: 38px; border-radius: 10px; background: #f0f9ff; color: #0284c7; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <span class="material-icons-round" style="font-size: 20px;">travel_explore</span>
-              </div>
-              <div>
-                <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Lost & Found</div>
-                <div style="font-size: 10px; color: var(--text-muted);">Untracked items</div>
-              </div>
-            </button>
-
-            <button class="more-nav-card ${activeTab === 'stockMovement' ? 'active' : ''}" data-tab="stockMovement" style="display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 14px; border: 1.5px solid ${activeTab === 'stockMovement' ? 'var(--primary-600)' : 'var(--border-light)'}; background: ${activeTab === 'stockMovement' ? 'var(--primary-50)' : '#ffffff'}; text-align: left; cursor: pointer;">
-              <div style="width: 38px; height: 38px; border-radius: 10px; background: #eff6ff; color: #2563eb; display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative;">
-                <span class="material-icons-round" style="font-size: 20px;">swap_horiz</span>
-                ${activeMovementCount > 0 ? `<span class="nav-badge-count" style="top: -4px; right: -4px;">${activeMovementCount}</span>` : ''}
-              </div>
-              <div>
-                <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Stock Movement</div>
-                <div style="font-size: 10px; color: var(--text-muted);">Rack transfers & deduction</div>
-              </div>
-            </button>
-
-            ${currentUser.role === 'Super' ? `
-              <button class="more-nav-card ${activeTab === 'admin' ? 'active' : ''}" data-tab="admin" style="display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 14px; border: 1.5px solid ${activeTab === 'admin' ? 'var(--primary-600)' : 'var(--border-light)'}; background: ${activeTab === 'admin' ? 'var(--primary-50)' : '#ffffff'}; text-align: left; cursor: pointer; grid-column: span 2;">
-                <div style="width: 38px; height: 38px; border-radius: 10px; background: #fdf4ff; color: #c026d3; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                  <span class="material-icons-round" style="font-size: 20px;">admin_panel_settings</span>
-                </div>
-                <div>
-                  <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Admin Panel</div>
-                  <div style="font-size: 10px; color: var(--text-muted);">Users & permissions</div>
-                </div>
-              </button>
-            ` : ''}
+            ${cardsHtml}
           </div>
         </div>
       </div>

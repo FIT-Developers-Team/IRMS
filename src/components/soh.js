@@ -1072,18 +1072,23 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
           <!-- To Location (Storage Location rule / Deduction parameter) -->
           <div class="form-group" id="toLocationGroup">
             <label id="toLocationLabel" style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
-              Storage Location (Exactly 20 chars) <span style="color: var(--danger);">*</span>
+              Storage Location (10–30 chars) <span style="color: var(--danger);">*</span>
             </label>
             <input 
               type="text" 
               id="targetLocationInput" 
               class="text-control" 
               placeholder="e.g. CBT-MZF3-35-03-L1-04" 
-              maxlength="20"
+              list="sohRacksDatalist"
+              minlength="10"
+              maxlength="30"
               style="width: 100%; height: 38px; font-family: monospace; font-weight: 700; font-size: 13px;"
             />
+            <datalist id="sohRacksDatalist">
+              ${(db.getRacks ? db.getRacks() : []).map(r => `<option value="${escapeHtml(r.locationName || r.rackName)}">${escapeHtml(r.locationName || r.rackName)}${r.zone ? ` (${r.zone})` : ''}</option>`).join('')}
+            </datalist>
             <span class="input-helper-text" id="targetLocationHelper" style="font-size: 11px; margin-top: 4px; display: block; color: var(--text-muted);">
-              Should contain exactly 20 characters. Current length: 0
+              Should contain 10 to 30 characters. Current length: 0
             </span>
           </div>
 
@@ -1245,11 +1250,12 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
         targetLocationHelper.style.color = 'var(--text-muted)';
       } else {
         reasonDropdown.updateOptions(transferReasons, 'Bad/Damaged/Expired');
-        toLocLabel.innerHTML = 'Storage Location (Exactly 20 chars) <span style="color: var(--danger);">*</span>';
-        targetLocationInput.setAttribute('maxlength', '20');
+        toLocLabel.innerHTML = 'Storage Location (10–30 chars) <span style="color: var(--danger);">*</span>';
+        targetLocationInput.setAttribute('minlength', '10');
+        targetLocationInput.setAttribute('maxlength', '30');
         targetLocationInput.value = '';
         const len = targetLocationInput.value.length;
-        targetLocationHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
+        targetLocationHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
         targetLocationHelper.style.color = 'var(--text-muted)';
         if (reasonDropdown.getValue() === 'Other (explain)') {
           otherGroup.style.display = 'block';
@@ -1280,8 +1286,8 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
   targetLocationInput.addEventListener('input', () => {
     if (typeDropdown.getValue() === 'Transfer location') {
       const len = targetLocationInput.value.length;
-      targetLocationHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
-      if (len === 20) {
+      targetLocationHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
+      if (len >= 10 && len <= 30) {
         targetLocationHelper.style.color = 'var(--success)';
       } else {
         targetLocationHelper.style.color = '';
@@ -1332,8 +1338,8 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
     }
 
     if (type === 'Transfer location') {
-      if (locVal.length !== 20) {
-        errorEl.textContent = `Storage Location must contain exactly 20 characters (current length: ${locVal.length}).`;
+      if (locVal.length < 10 || locVal.length > 30) {
+        errorEl.textContent = `Storage Location must contain 10 to 30 characters (current length: ${locVal.length}).`;
         errorEl.style.display = 'block';
         return;
       }

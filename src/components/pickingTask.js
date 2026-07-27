@@ -870,16 +870,21 @@ export function renderPickingTask(container, currentUser) {
 
               <!-- Location -->
               <div class="form-field-wrapper span-full">
-                <label class="form-label">Storage Location (Exactly 20 chars)</label>
+                <label class="form-label">Storage Location (10–30 chars)</label>
                 <input 
                   type="text" 
                   id="putawayLocationInput" 
                   class="text-control" 
                   placeholder="e.g. CBT-MZF3-35-03-L1-04" 
-                  maxlength="20"
+                  list="pickingRacksDatalist"
+                  minlength="10"
+                  maxlength="30"
                   required
                 />
-                <span class="input-helper-text" id="putawayLocationHelper">Should contain exactly 20 characters. Current length: 0</span>
+                <datalist id="pickingRacksDatalist">
+                  ${(db.getRacks ? db.getRacks() : []).map(r => `<option value="${escapeHtml(r.locationName || r.rackName)}">${escapeHtml(r.locationName || r.rackName)}${r.zone ? ` (${r.zone})` : ''}</option>`).join('')}
+                </datalist>
+                <span class="input-helper-text" id="putawayLocationHelper">Should contain 10 to 30 characters. Current length: 0</span>
               </div>
             </div>
 
@@ -913,8 +918,8 @@ export function renderPickingTask(container, currentUser) {
 
     putawayLocationInput.addEventListener('input', () => {
       const len = putawayLocationInput.value.length;
-      putawayLocationHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
-      if (len === 20) {
+      putawayLocationHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
+      if (len >= 10 && len <= 30) {
         putawayLocationHelper.style.color = 'var(--success)';
       } else {
         putawayLocationHelper.style.color = '';
@@ -932,8 +937,8 @@ export function renderPickingTask(container, currentUser) {
         return;
       }
 
-      if (location.length !== 20) {
-        showAlertModal(`Location must be exactly 20 characters long (e.g. CBT-MZF3-35-03-L1-04). Current length is ${location.length} characters.`);
+      if (location.length < 10 || location.length > 30) {
+        showAlertModal(`Location must be between 10 and 30 characters long (e.g. CBT-MZF3-35-03-L1-04). Current length is ${location.length} characters.`);
         return;
       }
 

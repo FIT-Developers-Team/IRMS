@@ -1,13 +1,15 @@
 import { db } from '../data/db.js';
 
-const AVAILABLE_MENUS = ['requestPickup', 'pickingTask', 'lostAndFound', 'soh'];
+const AVAILABLE_MENUS = ['requestPickup', 'pickingTask', 'lostAndFound', 'soh', 'stockMovement', 'admin'];
 const MENU_LABELS = {
   requestPickup: 'Request Pickup',
   pickingTask:   'Picking Task',
   lostAndFound:  'Lost & Found',
-  soh:           'Stock On Hand'
+  soh:           'Stock On Hand',
+  stockMovement: 'Stock Movement & Deduction',
+  admin:         'Admin Panel'
 };
-const ROLES = ['Super', 'Supervisor', 'Staff'];
+const ROLES = ['Super', 'Supervisor', 'Staff', 'Manager'];
 
 export function renderAdmin(container, currentUser) {
   let activeSubTab = 'users';
@@ -95,7 +97,7 @@ function renderUsersTab(container) {
         </div>
         <button id="addUserBtn" class="btn-primary" style="gap: 6px;">
           <span class="material-icons-round" style="font-size: 16px;">person_add</span>
-          Add User
+          Register New User
         </button>
       </div>
 
@@ -107,7 +109,7 @@ function renderUsersTab(container) {
               <th style="min-width: 90px;">Staff ID</th>
               <th style="min-width: 160px;">Name</th>
               <th style="min-width: 100px;">Role</th>
-              <th style="min-width: 200px;">Access</th>
+              <th style="min-width: 220px;">Access</th>
               <th style="min-width: 90px;">Password</th>
               <th style="width: 110px; text-align: center;">Actions</th>
             </tr>
@@ -158,8 +160,11 @@ function renderUsersTab(container) {
 }
 
 function renderUserRow(u) {
-  const accessBadges = (u.access || '').split(',').map(a => a.trim()).filter(Boolean)
-    .map(a => `<span class="admin-access-chip">${MENU_LABELS[a] || a}</span>`).join('');
+  const isSuper = (u.role || '').toLowerCase() === 'super';
+  const accessBadges = isSuper
+    ? '<span class="admin-access-chip" style="background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-weight: 700;">★ All Access Unlocked</span>'
+    : (u.access || '').split(',').map(a => a.trim()).filter(Boolean)
+        .map(a => `<span class="admin-access-chip">${MENU_LABELS[a] || a}</span>`).join('');
 
   return `
     <tr>
@@ -167,7 +172,7 @@ function renderUserRow(u) {
       <td><span style="font-weight: 600; color: var(--text-primary);">${escHtml(u.name)}</span></td>
       <td><span class="admin-role-badge admin-role-${(u.role || '').toLowerCase()}">${escHtml(u.role)}</span></td>
       <td><div style="display: flex; flex-wrap: wrap; gap: 4px;">${accessBadges || '<span style="color:var(--text-muted);font-size:11px;">None</span>'}</div></td>
-      <td><span style="font-family: monospace; letter-spacing: 2px; color: var(--text-secondary);">••••</span></td>
+      <td><span style="font-family: monospace; letter-spacing: 2px; color: var(--text-secondary);">${u.password ? escHtml(u.password) : '••••'}</span></td>
       <td style="text-align: center;">
         <div style="display: flex; gap: 6px; justify-content: center;">
           <button class="edit-user-btn icon-action-btn" data-staffid="${escHtml(u.staffId)}" title="Edit">
@@ -183,8 +188,11 @@ function renderUserRow(u) {
 }
 
 function renderUserCard(u) {
-  const accessBadges = (u.access || '').split(',').map(a => a.trim()).filter(Boolean)
-    .map(a => `<span class="admin-access-chip">${MENU_LABELS[a] || a}</span>`).join('');
+  const isSuper = (u.role || '').toLowerCase() === 'super';
+  const accessBadges = isSuper
+    ? '<span class="admin-access-chip" style="background: #fef3c7; color: #92400e; border: 1px solid #fde68a; font-weight: 700;">★ All Access Unlocked</span>'
+    : (u.access || '').split(',').map(a => a.trim()).filter(Boolean)
+        .map(a => `<span class="admin-access-chip">${MENU_LABELS[a] || a}</span>`).join('');
 
   return `
     <div class="mobile-task-card">
@@ -215,8 +223,8 @@ function openUserModal(existingUser) {
   const menuOptions = AVAILABLE_MENUS.map(key => {
     const checked = isEdit && (existingUser.access || '').split(',').map(a => a.trim()).includes(key);
     return `
-      <label class="admin-checkbox-label">
-        <input type="checkbox" class="access-checkbox" value="${key}" ${checked ? 'checked' : ''}>
+      <label class="admin-checkbox-label" style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; padding: 4px 0;">
+        <input type="checkbox" class="access-checkbox" value="${key}" ${checked ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--primary-600); cursor: pointer;">
         <span>${MENU_LABELS[key]}</span>
       </label>
     `;
@@ -225,11 +233,11 @@ function openUserModal(existingUser) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
-    <div class="modal-panel" style="max-width: 520px;">
+    <div class="modal-panel" style="max-width: 520px; border-radius: 20px;">
       <div class="modal-header">
         <h3 style="display: flex; align-items: center; gap: 8px;">
           <span class="material-icons-round" style="color: var(--primary-600);">${isEdit ? 'edit' : 'person_add'}</span>
-          ${isEdit ? `Edit User · ${escHtml(existingUser.staffId)}` : 'Add New User'}
+          ${isEdit ? `Edit User · ${escHtml(existingUser.staffId)}` : 'Register New User'}
         </h3>
         <button class="modal-close-btn" id="closeUserModal">
           <span class="material-icons-round">close</span>
@@ -240,7 +248,7 @@ function openUserModal(existingUser) {
 
         <div class="form-field-group">
           <label class="form-label">Staff ID <span style="color:var(--danger);">*</span></label>
-          <input type="text" id="userStaffId" class="text-control" placeholder="e.g. 1001" value="${isEdit ? escHtml(existingUser.staffId) : ''}" ${isEdit ? 'readonly style="opacity:0.6;cursor:not-allowed;"' : ''}>
+          <input type="text" id="userStaffId" class="text-control" placeholder="e.g. 1005" value="${isEdit ? escHtml(existingUser.staffId) : ''}" ${isEdit ? 'readonly style="opacity:0.6;cursor:not-allowed;"' : ''}>
         </div>
 
         <div class="form-field-group">
@@ -249,22 +257,33 @@ function openUserModal(existingUser) {
         </div>
 
         <div class="form-field-group">
-          <label class="form-label">Role</label>
+          <label class="form-label">Role <span style="color:var(--danger);">*</span></label>
           <select id="userRole" class="text-control">
             ${ROLES.map(r => `<option value="${r}" ${isEdit && existingUser.role === r ? 'selected' : ''}>${r}</option>`).join('')}
           </select>
         </div>
 
         <div class="form-field-group">
-          <label class="form-label">Password</label>
-          <input type="text" id="userPassword" class="text-control" placeholder="Suggested: 4-digit PIN" value="${isEdit ? escHtml(existingUser.password) : ''}">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">Password (4-digit PIN) <span style="color:var(--danger);">*</span></label>
+            <button type="button" id="genPinBtn" style="border: none; background: transparent; color: var(--primary-600); font-size: 11px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 2px;">
+              <span class="material-icons-round" style="font-size: 13px;">autorenew</span> Generate PIN
+            </button>
+          </div>
+          <input type="text" id="userPassword" class="text-control" placeholder="e.g. 1234" maxlength="4" value="${isEdit ? escHtml(existingUser.password) : ''}" style="font-family: monospace; font-size: 14px; font-weight: 700; letter-spacing: 2px;">
         </div>
 
         <div class="form-field-group">
-          <label class="form-label">Access Menus
-            <span style="font-size: 11px; color: var(--text-muted); margin-left: 6px;">(Unlocked automatically if Role = Super)</span>
-          </label>
-          <div id="accessMenuList" style="display: flex; flex-direction: column; gap: 8px; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 10px; padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="form-label" style="margin-bottom: 0;">Access Dropdown (Menu Permissions)
+              <span style="font-size: 11px; color: var(--text-muted); display: block;">Unlocked automatically if Role = Super</span>
+            </label>
+            <div id="accessBatchBtns" style="display: flex; gap: 6px;">
+              <button type="button" id="selectAllAccessBtn" style="border: none; background: #eff6ff; color: #2563eb; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; cursor: pointer;">Select All</button>
+              <button type="button" id="clearAllAccessBtn" style="border: none; background: #f1f5f9; color: #64748b; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; cursor: pointer;">Clear</button>
+            </div>
+          </div>
+          <div id="accessMenuList" style="display: flex; flex-direction: column; gap: 8px; background: var(--surface-body); border: 1.5px solid var(--border-light); border-radius: 12px; padding: 12px;">
             ${menuOptions}
           </div>
         </div>
@@ -276,7 +295,7 @@ function openUserModal(existingUser) {
         <button id="cancelUserBtn" class="btn-secondary">Cancel</button>
         <button id="saveUserBtn" class="btn-primary">
           <span class="material-icons-round" style="font-size: 16px;">${isEdit ? 'save' : 'person_add'}</span>
-          ${isEdit ? 'Save Changes' : 'Add User'}
+          ${isEdit ? 'Save Changes' : 'Register User'}
         </button>
       </div>
     </div>
@@ -286,14 +305,37 @@ function openUserModal(existingUser) {
 
   const roleSelect = modal.querySelector('#userRole');
   const accessMenuList = modal.querySelector('#accessMenuList');
+  const accessBatchBtns = modal.querySelector('#accessBatchBtns');
+  const userPasswordInput = modal.querySelector('#userPassword');
+
+  // Auto PIN Generator
+  modal.querySelector('#genPinBtn').addEventListener('click', () => {
+    const pin = Math.floor(1000 + Math.random() * 9000).toString();
+    userPasswordInput.value = pin;
+  });
+
+  // Select All / Clear All helpers
+  modal.querySelector('#selectAllAccessBtn').addEventListener('click', () => {
+    if (roleSelect.value === 'Super') return;
+    accessMenuList.querySelectorAll('.access-checkbox').forEach(cb => cb.checked = true);
+  });
+
+  modal.querySelector('#clearAllAccessBtn').addEventListener('click', () => {
+    if (roleSelect.value === 'Super') return;
+    accessMenuList.querySelectorAll('.access-checkbox').forEach(cb => cb.checked = false);
+  });
 
   // Auto-lock checkboxes when role = Super
   function syncAccessWithRole() {
     const checkboxes = accessMenuList.querySelectorAll('.access-checkbox');
     if (roleSelect.value === 'Super') {
       checkboxes.forEach(cb => { cb.checked = true; cb.disabled = true; });
+      accessBatchBtns.style.opacity = '0.4';
+      accessBatchBtns.style.pointerEvents = 'none';
     } else {
       checkboxes.forEach(cb => { cb.disabled = false; });
+      accessBatchBtns.style.opacity = '1';
+      accessBatchBtns.style.pointerEvents = 'auto';
     }
   }
 
@@ -321,6 +363,12 @@ function openUserModal(existingUser) {
       return;
     }
 
+    if (!password) {
+      errorEl.textContent = 'Password (4-digit PIN) is required.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
     const saveBtn = modal.querySelector('#saveUserBtn');
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<span class="material-icons-round" style="font-size:16px;animation:spinIcon 1s linear infinite;">sync</span> Saving…';
@@ -331,14 +379,14 @@ function openUserModal(existingUser) {
         showAdminToast(`User "${name}" updated.`, 'success');
       } else {
         await db.addUser({ staffId, name, role, access, password });
-        showAdminToast(`User "${name}" added.`, 'success');
+        showAdminToast(`User "${name}" registered successfully.`, 'success');
       }
       modal.remove();
     } catch (err) {
       errorEl.textContent = err.message;
       errorEl.style.display = 'block';
       saveBtn.disabled = false;
-      saveBtn.innerHTML = `<span class="material-icons-round" style="font-size:16px;">${isEdit ? 'save' : 'person_add'}</span> ${isEdit ? 'Save Changes' : 'Add User'}`;
+      saveBtn.innerHTML = `<span class="material-icons-round" style="font-size:16px;">${isEdit ? 'save' : 'person_add'}</span> ${isEdit ? 'Save Changes' : 'Register User'}`;
     }
   });
 

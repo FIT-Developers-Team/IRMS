@@ -121,5 +121,20 @@ this dataset is used to store user data that is used for IRMS process, it will b
 |Acess|population from all available menu, can multiple, unlock all if role = Super|
 |Password|System generated suggested 4 digit number|
 
+# Racks
+|Column|Behaviour|
+|------|---------|
+|Location Name|System generated|
+|Facillity|System generated|
+|Zone|lookup from Zone|
+|Aisle|System generated|
+|Bay|System generated|
+|Partisi|System generated|
+|Level|System generated|
+|Priority|System generated|
+|Capacity|System generated|
+|Environment|System generated|
+
+
 
 

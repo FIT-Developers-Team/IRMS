@@ -793,13 +793,35 @@ class DatabaseService {
 
     if (result.data && result.data.length > 0) {
       this.racks = result.data.map(row => {
-        const id = this.findRowValue(row, ['id']);
-        const rackName = this.findRowValue(row, ['rack name', 'rack_name', 'rack', 'zone', 'zone name']);
+        const id = this.findRowValue(row, ['id', 'location name', 'location_name', 'rack name', 'rack_name']);
+        const locationName = this.findRowValue(row, ['location name', 'location_name', 'rack name', 'rack_name', 'rack', 'location']);
+        const zone = this.findRowValue(row, ['zone']);
+        const facility = this.findRowValue(row, ['facillity', 'facility']);
+        const aisle = this.findRowValue(row, ['aisle']);
+        const bay = this.findRowValue(row, ['bay']);
+        const partisi = this.findRowValue(row, ['partisi']);
+        const level = this.findRowValue(row, ['level']);
+        const priority = this.findRowValue(row, ['priority']);
+        const capacity = this.findRowValue(row, ['capacity']);
+        const environment = this.findRowValue(row, ['environment']);
+
+        const finalName = String(locationName || id || '').trim();
+
         return {
-          id: String(id).trim(),
-          rackName: String(rackName).trim()
+          id: String(id || finalName).trim(),
+          rackName: finalName,
+          locationName: finalName,
+          facility: String(facility || '').trim(),
+          zone: String(zone || '').trim(),
+          aisle: String(aisle || '').trim(),
+          bay: String(bay || '').trim(),
+          partisi: String(partisi || '').trim(),
+          level: String(level || '').trim(),
+          priority: String(priority || '').trim(),
+          capacity: String(capacity || '').trim(),
+          environment: String(environment || '').trim()
         };
-      }).filter(r => r.rackName);
+      }).filter(r => r.locationName || r.rackName);
     }
   }
 
@@ -917,9 +939,13 @@ class DatabaseService {
   }
 
   searchRacks(query) {
-    if (!query) return this.racks.slice(0, 50);
+    if (!query) return this.racks.slice(0, 100);
     const q = query.toLowerCase();
-    return this.racks.filter(r => r.rackName.toLowerCase().includes(q)).slice(0, 50);
+    return this.racks.filter(r => 
+      (r.locationName || r.rackName || '').toLowerCase().includes(q) ||
+      (r.zone || '').toLowerCase().includes(q) ||
+      (r.facility || '').toLowerCase().includes(q)
+    ).slice(0, 100);
   }
 
   getLostAndFoundForUser(currentUser) {

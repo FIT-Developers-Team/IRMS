@@ -2154,7 +2154,15 @@ body {
     border-bottom: none !important;
     padding-bottom: 0 !important;
     gap: 16px !important;
-    z-index: 10 !important;
+    z-index: 1000 !important;
+    position: relative !important;
+    overflow: visible !important;
+  }
+
+  .stock-movement-panel #smFilterToolbar {
+    position: relative !important;
+    z-index: 2000 !important;
+    overflow: visible !important;
   }
 }
 

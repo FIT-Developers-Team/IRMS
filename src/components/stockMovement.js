@@ -101,8 +101,11 @@ export function renderStockMovement(container, currentUser) {
 
   // Custom Dropdown Helper Function
   function setupDropdown(containerEl, initialVal, options, onChange) {
+    if (!containerEl) return { getValue: () => initialVal, updateOptions: () => {} };
     const triggerBtn = containerEl.querySelector('.custom-dropdown-trigger');
     const menuEl = containerEl.querySelector('.custom-dropdown-menu');
+    if (!triggerBtn || !menuEl) return { getValue: () => initialVal, updateOptions: () => {} };
+
     let currentVal = initialVal;
 
     function renderMenu() {
@@ -111,6 +114,12 @@ export function renderStockMovement(container, currentUser) {
           ${esc(opt.label || opt.value)}
         </div>
       `).join('');
+
+      const found = options.find(o => o.value === currentVal) || options[0];
+      if (found) {
+        const labelSpan = triggerBtn.querySelector('.trigger-label');
+        if (labelSpan) labelSpan.textContent = found.label || found.value;
+      }
     }
 
     renderMenu();
@@ -146,7 +155,9 @@ export function renderStockMovement(container, currentUser) {
       const optEl = e.target.closest('.custom-dropdown-option');
       if (!optEl) return;
       currentVal = optEl.dataset.value;
-      triggerBtn.querySelector('.trigger-label').textContent = optEl.textContent.trim();
+      const found = options.find(o => o.value === currentVal);
+      const labelSpan = triggerBtn.querySelector('.trigger-label');
+      if (labelSpan) labelSpan.textContent = found ? (found.label || found.value) : optEl.textContent.trim();
       containerEl.classList.remove('open', 'open-up');
       renderMenu();
       if (typeof onChange === 'function') onChange(currentVal);
@@ -157,11 +168,6 @@ export function renderStockMovement(container, currentUser) {
       updateOptions: (newOpts, newVal) => {
         options = newOpts;
         if (newVal !== undefined) currentVal = newVal;
-        const found = options.find(o => o.value === currentVal) || options[0];
-        if (found) {
-          currentVal = found.value;
-          triggerBtn.querySelector('.trigger-label').textContent = found.label || found.value;
-        }
         renderMenu();
       }
     };
@@ -255,6 +261,37 @@ export function renderStockMovement(container, currentUser) {
     }
   }
 
+  // Helper: Private user-level data filtering (Super sees all; others see assigned/created tasks only)
+  function getPermittedMovements() {
+    const allMovements = db.getStockMovements();
+    const isSuper = (currentUser.role || '').toLowerCase() === 'super';
+    if (isSuper) return allMovements;
+
+    const myName = (currentUser.name || '').trim().toLowerCase();
+    const myId = (currentUser.staffId || '').trim().toLowerCase();
+
+    return allMovements.filter(m => {
+      const sName = (m.staffName || '').trim().toLowerCase();
+      const aBy = (m.assignedBy || '').trim().toLowerCase();
+      return sName === myName || sName === myId || aBy === myName || aBy === myId;
+    });
+  }
+
+  function getPermittedActivities() {
+    const allActivities = db.getStockActivities();
+    const isSuper = (currentUser.role || '').toLowerCase() === 'super';
+    if (isSuper) return allActivities;
+
+    const myName = (currentUser.name || '').trim().toLowerCase();
+    const myId = (currentUser.staffId || '').trim().toLowerCase();
+
+    return allActivities.filter(a => {
+      const exBy = (a.executedBy || '').trim().toLowerCase();
+      const asBy = (a.assignedBy || '').trim().toLowerCase();
+      return exBy === myName || exBy === myId || asBy === myName || asBy === myId;
+    });
+  }
+
   // ── KPI Cards ─────────────────────────────────────────────────────────────
   function renderKpis() {
     const isHidden = localStorage.getItem('irms_hide_kpis') === 'true';
@@ -266,7 +303,7 @@ export function renderStockMovement(container, currentUser) {
     kpiGrid.classList.remove('kpi-grid-hidden');
     kpiGrid.style.display = '';
 
-    const movements = db.getStockMovements();
+    const movements = getPermittedMovements();
     const total = movements.length;
     const pending = movements.filter(m => m.status === 'Pending').length;
     const done = movements.filter(m => m.status === 'Done').length;
@@ -299,7 +336,7 @@ export function renderStockMovement(container, currentUser) {
 
   // ── Render Movement Tasks Tab ──────────────────────────────────────────────
   function renderTasksTab() {
-    let movements = db.getStockMovements();
+    let movements = getPermittedMovements();
 
     // Filters
     if (typeFilter !== 'all') {
@@ -843,7 +880,7 @@ export function renderStockMovement(container, currentUser) {
 
   // ── Render Stock Activity Log Tab ──────────────────────────────────────────
   function renderActivitiesTab() {
-    const activities = db.getStockActivities();
+    const activities = getPermittedActivities();
 
     if (activities.length === 0) {
       mainContentArea.innerHTML = `
@@ -994,19 +1031,23 @@ export function renderStockMovement(container, currentUser) {
             <!-- Storage Location -->
             <div class="form-group" id="editToLocGroup">
               <label id="editToLocLabel" style="font-size: 12px; font-weight: 700; color: var(--text-secondary);">
-                ${task.type === 'Stock deduction' ? 'To Location (Deduction Parameter / Bin)' : 'Storage Location (Exactly 20 chars)'}
+                ${task.type === 'Stock deduction' ? 'To Location (Deduction Parameter / Bin)' : 'Storage Location (10–30 chars)'}
               </label>
               <input 
                 type="text" 
                 id="editToLocInput" 
                 class="text-control" 
                 value="${esc(task.toLocation)}" 
-                ${task.type === 'Transfer location' ? 'maxlength="20"' : ''}
+                list="smRacksDatalist"
+                ${task.type === 'Transfer location' ? 'minlength="10" maxlength="30"' : ''}
                 placeholder="${task.type === 'Stock deduction' ? 'e.g. Deduction - Recovery LDP' : 'e.g. CBT-MZF3-35-03-L1-04'}" 
                 style="width: 100%; height: 38px; font-family: monospace; font-weight: 700; font-size: 13px;" 
               />
+              <datalist id="smRacksDatalist">
+                ${(db.getRacks ? db.getRacks() : []).map(r => `<option value="${esc(r.locationName || r.rackName)}">${esc(r.locationName || r.rackName)}${r.zone ? ` (${esc(r.zone)})` : ''}</option>`).join('')}
+              </datalist>
               <span class="input-helper-text" id="editToLocHelper" style="font-size: 11px; margin-top: 4px; display: block; color: var(--text-muted);">
-                ${task.type === 'Transfer location' ? `Should contain exactly 20 characters. Current length: ${task.toLocation.length}` : 'Enter target deduction location parameter or bin.'}
+                ${task.type === 'Transfer location' ? `Should contain 10 to 30 characters. Current length: ${task.toLocation.length}` : 'Enter target deduction location parameter or bin.'}
               </span>
             </div>
 
@@ -1057,6 +1098,7 @@ export function renderStockMovement(container, currentUser) {
       (newType) => {
         if (newType === 'Stock deduction') {
           editToLocLabel.textContent = 'To Location (Deduction Parameter / Bin)';
+          editToLocInput.removeAttribute('minlength');
           editToLocInput.removeAttribute('maxlength');
           if (!editToLocInput.value || !editToLocInput.value.startsWith('Deduction')) {
             editToLocInput.value = 'Deduction';
@@ -1064,13 +1106,14 @@ export function renderStockMovement(container, currentUser) {
           editToLocHelper.textContent = 'Enter target deduction location parameter or bin.';
           editToLocHelper.style.color = 'var(--text-muted)';
         } else {
-          editToLocLabel.textContent = 'Storage Location (Exactly 20 chars)';
-          editToLocInput.setAttribute('maxlength', '20');
+          editToLocLabel.textContent = 'Storage Location (10–30 chars)';
+          editToLocInput.setAttribute('minlength', '10');
+          editToLocInput.setAttribute('maxlength', '30');
           if (editToLocInput.value.startsWith('Deduction')) {
             editToLocInput.value = '';
           }
           const len = editToLocInput.value.length;
-          editToLocHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
+          editToLocHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
           editToLocHelper.style.color = 'var(--text-muted)';
         }
       }
@@ -1089,8 +1132,8 @@ export function renderStockMovement(container, currentUser) {
         : 'Transfer location';
       if (type === 'Transfer location') {
         const len = editToLocInput.value.length;
-        editToLocHelper.textContent = `Should contain exactly 20 characters. Current length: ${len}`;
-        if (len === 20) {
+        editToLocHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
+        if (len >= 10 && len <= 30) {
           editToLocHelper.style.color = 'var(--success)';
         } else {
           editToLocHelper.style.color = '';
@@ -1122,8 +1165,8 @@ export function renderStockMovement(container, currentUser) {
         errorEl.style.display = 'block';
         return;
       }
-      if (type === 'Transfer location' && toLocation.length !== 20) {
-        errorEl.textContent = `Storage Location must contain exactly 20 characters (current length: ${toLocation.length}).`;
+      if (type === 'Transfer location' && (toLocation.length < 10 || toLocation.length > 30)) {
+        errorEl.textContent = `Storage Location must contain 10 to 30 characters (current length: ${toLocation.length}).`;
         errorEl.style.display = 'block';
         return;
       }
