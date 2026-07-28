@@ -7,6 +7,7 @@ import { renderAdmin } from './admin.js';
 import { renderStockMovement } from './stockMovement.js';
 import { db } from '../data/db.js';
 import { hasUserAccess, getUserAccessiblePages } from '../utils/security.js';
+import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
 
 export function renderDashboard(container, currentUser, onLogout) {
   let activeTab = 'home';
@@ -318,7 +319,7 @@ export function renderDashboard(container, currentUser, onLogout) {
     setTimeout(() => toast.remove(), 3500);
   }
 
-  function switchTab(tabId) {
+  async function switchTab(tabId) {
     try {
       // Security Guard: Check user permission
       if (!hasUserAccess(currentUser, tabId)) {
@@ -328,7 +329,23 @@ export function renderDashboard(container, currentUser, onLogout) {
 
       activeTab = tabId;
       window.irmsActiveTab = tabId;
-      db.checkAndRefreshIfExpired();
+
+      // Sync section data lazily if expired
+      if (db.isSectionDataExpired(tabId)) {
+        const isFirstSync = !db.lastSectionSyncTime[tabId];
+        if (isFirstSync) {
+          showBlockerLock('Loading live section data...');
+        }
+        try {
+          await db.syncSectionData(tabId);
+        } finally {
+          if (isFirstSync) {
+            hideBlockerLock();
+          }
+        }
+      } else {
+        db.checkAndRefreshIfExpired();
+      }
       
       navTabs.forEach(btn => {
         if (btn.dataset.tab) {

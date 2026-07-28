@@ -88,17 +88,21 @@ class DatabaseService {
 
     if (result.data && result.data.length > 0) {
       this.soList = result.data.map(row => {
+        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
         const pickerName = this.findRowValue(row, ['picker_name', 'picker name', 'picker']) || 'N/A';
         const soNumber = this.findRowValue(row, ['so_number', 'so number', 'so']);
         const skuNumber = this.findRowValue(row, ['sku_number', 'sku code', 'sku number', 'sku']);
         const productName = this.findRowValue(row, ['product_name', 'product name', 'product']);
-        const qty = this.findRowValue(row, ['request_quantity', 'qty', 'quantity']) || '1';
+        const status = this.findRowValue(row, ['status']) || '';
+        const qty = this.findRowValue(row, ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'qty', 'quantity']) || '1';
 
         return {
+          timestamp: String(timestamp).trim(),
           pickerName: String(pickerName).trim(),
           soNumber: String(soNumber).trim(),
           skuNumber: String(skuNumber).trim(),
           productName: String(productName).trim(),
+          status: String(status).trim(),
           requestQty: parseInt(String(qty).trim() || '1', 10)
         };
       }).filter(item => item.soNumber);
@@ -772,10 +776,13 @@ class DatabaseService {
     this.checkAndRefreshIfExpired();
     const map = new Map();
     this.soList.forEach(item => {
-      if (item.soNumber && !map.has(item.soNumber)) {
+      const status = (item.status || '').toLowerCase().trim();
+      const isValidStatus = ['picking', 'packing', 'staging'].includes(status);
+      if (isValidStatus && item.soNumber && !map.has(item.soNumber)) {
         map.set(item.soNumber, {
           soNumber: item.soNumber,
-          pickerName: item.pickerName || ''
+          pickerName: item.pickerName || '',
+          status: item.status || ''
         });
       }
     });
@@ -785,6 +792,14 @@ class DatabaseService {
   getProductsForSo(soNumber) {
     if (!soNumber) return [];
     return this.soList.filter(item => item.soNumber === soNumber);
+  }
+
+  getSoDetails(soNumber, skuNumber) {
+    if (!soNumber || !skuNumber) return null;
+    return this.soList.find(item => 
+      item.soNumber === soNumber && 
+      item.skuNumber === skuNumber
+    ) || null;
   }
 
   searchProducts(query, soNumber = null) {

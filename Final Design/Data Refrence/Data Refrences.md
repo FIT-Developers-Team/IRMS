@@ -46,6 +46,20 @@
 |Id|System generated| 
 |Line Name|System generated| 
 
+# SO_DATA
+this dataset is used to store Sales Order (SO) data, detailing the picker assigned and the items (SKUs) associated with each SO. It is used to populate the SO number dropdown, auto-fill picker name, and filter the searchable SKU dropdown when creating a pickup request.
+
+## Data Structure
+|Column|Behaviour|
+|------|---------|
+|Timestamp|System generated|
+|picker_name|System generated|
+|so_number|System generated|
+|sku_number|System generated|
+|product_name|System generated|
+|status|System generated|
+|SUM(request_quantity)|System generated|
+
 # Stock Acitivty
 
 this section is will be used as stock trailing data, if there any movement (Putaway, stock deduction, stock movement) it will be recorded in this section

@@ -6,9 +6,6 @@ export function renderRequestPickup(container, currentUser) {
   const storageKey = `irms_selected_checker_line_${currentUser.staffId}`;
   let savedCheckerLine = localStorage.getItem(storageKey) || '';
 
-  const soList = db.getUniqueSoNumbers();
-  const checkerLinesList = db.getCheckerLines();
-
   container.innerHTML = `
     <div class="card-panel">
       <div class="card-title-group" style="flex-wrap: wrap; gap: 12px;">
@@ -43,6 +40,8 @@ export function renderRequestPickup(container, currentUser) {
               <th>Checker</th>
               <th>SKU / Product</th>
               <th>Qty</th>
+              <th>SO Status</th>
+              <th>SUM(Qty)</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -74,7 +73,7 @@ export function renderRequestPickup(container, currentUser) {
       `;
       requestTableBody.innerHTML = `
         <tr>
-          <td colspan="9">
+          <td colspan="11">
             ${emptyHtml}
           </td>
         </tr>
@@ -84,50 +83,68 @@ export function renderRequestPickup(container, currentUser) {
     }
 
     // Render Desktop Table
-    requestTableBody.innerHTML = userRequests.map(req => `
-      <tr>
-        <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
-        <td><span style="font-weight: 600; color: var(--primary-800);">${escapeHtml(req.checkerLine || '-')}</span></td>
-        <td style="font-size: 12px; color: var(--text-secondary);">${new Date(req.timestamp).toLocaleString()}</td>
-        <td style="font-size: 12px; font-weight: 600;">${req.soNumber}</td>
-        <td>${req.pickerName || 'N/A'}</td>
-        <td><strong>${req.checkerName}</strong></td>
-        <td>
-          <span style="font-weight: 700; color: var(--primary-600); font-size: 12px; display: block;">SKU: ${req.skuNumber}</span>
-          <span style="font-size: 12px; color: var(--text-secondary);">${req.productName}</span>
-        </td>
-        <td><strong style="font-size: 14px;">${req.qty}</strong></td>
-        <td><span class="status-badge pending">${req.status}</span></td>
-      </tr>
-    `).join('');
+    requestTableBody.innerHTML = userRequests.map(req => {
+      const soDetails = db.getSoDetails(req.soNumber, req.skuNumber);
+      const soStatus = soDetails ? soDetails.status : 'N/A';
+      const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
+
+      return `
+        <tr>
+          <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
+          <td><span style="font-weight: 600; color: var(--primary-800);">${escapeHtml(req.checkerLine || '-')}</span></td>
+          <td style="font-size: 12px; color: var(--text-secondary);">${new Date(req.timestamp).toLocaleString()}</td>
+          <td style="font-size: 12px; font-weight: 600;">${req.soNumber}</td>
+          <td>${req.pickerName || 'N/A'}</td>
+          <td><strong>${req.checkerName}</strong></td>
+          <td>
+            <span style="font-weight: 700; color: var(--primary-600); font-size: 12px; display: block;">SKU: ${req.skuNumber}</span>
+            <span style="font-size: 12px; color: var(--text-secondary);">${req.productName}</span>
+          </td>
+          <td><strong style="font-size: 14px;">${req.qty}</strong></td>
+          <td><span class="status-badge" style="font-size: 11px; padding: 2px 8px; background: #e2e8f0; color: #475569; font-weight: 700; text-transform: uppercase;">${soStatus}</span></td>
+          <td><strong style="font-size: 14px;">${soOrigQty}</strong></td>
+          <td><span class="status-badge pending">${req.status}</span></td>
+        </tr>
+      `;
+    }).join('');
 
     // Render Mobile Cards
-    requestMobileCardList.innerHTML = userRequests.map(req => `
-      <div class="mobile-task-card">
-        <div class="card-header-row">
-          <span class="picking-id-label">#${req.ticketId || req.uniqueid}</span>
-          <span class="status-badge pending">${req.status}</span>
-        </div>
-        
-        <div class="card-body-content">
-          <div class="product-sku">SKU: <strong>${escapeHtml(req.skuNumber)}</strong></div>
-          <div class="product-name">${escapeHtml(req.productName)}</div>
-        </div>
-        
-        <div class="card-footer-row" style="margin-top: 8px;">
-          <div class="footer-meta">
-            <div>Line: <strong>${escapeHtml(req.checkerLine || '-')}</strong> • SO: <strong>${escapeHtml(req.soNumber)}</strong></div>
-            <div>Picker: ${escapeHtml(req.pickerName || 'N/A')} • Checker: <strong>${escapeHtml(req.checkerName)}</strong></div>
-            <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${new Date(req.timestamp).toLocaleString()}</div>
+    requestMobileCardList.innerHTML = userRequests.map(req => {
+      const soDetails = db.getSoDetails(req.soNumber, req.skuNumber);
+      const soStatus = soDetails ? soDetails.status : 'N/A';
+      const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
+
+      return `
+        <div class="mobile-task-card">
+          <div class="card-header-row">
+            <span class="picking-id-label">#${req.ticketId || req.uniqueid}</span>
+            <span class="status-badge pending">${req.status}</span>
           </div>
-          <div class="qty-badge">Qty: <strong>${req.qty}</strong></div>
+          
+          <div class="card-body-content">
+            <div class="product-sku">SKU: <strong>${escapeHtml(req.skuNumber)}</strong></div>
+            <div class="product-name">${escapeHtml(req.productName)}</div>
+          </div>
+          
+          <div class="card-footer-row" style="margin-top: 8px;">
+            <div class="footer-meta">
+              <div>Line: <strong>${escapeHtml(req.checkerLine || '-')}</strong> • SO: <strong>${escapeHtml(req.soNumber)}</strong></div>
+              <div style="margin-top: 2px;">SO Status: <span class="status-badge" style="font-size: 10px; padding: 1px 6px; background: #e2e8f0; color: #475569; font-weight: 700;">${soStatus}</span> • SUM(Qty): <strong>${soOrigQty}</strong></div>
+              <div style="margin-top: 2px;">Picker: ${escapeHtml(req.pickerName || 'N/A')} • Checker: <strong>${escapeHtml(req.checkerName)}</strong></div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${new Date(req.timestamp).toLocaleString()}</div>
+            </div>
+            <div class="qty-badge">Qty: <strong>${req.qty}</strong></div>
+          </div>
         </div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   }
 
   // Open Form Modal Handler
   function openRequestModal() {
+    const soList = db.getUniqueSoNumbers();
+    const checkerLinesList = db.getCheckerLines();
+
     let selectedSoNumber = '';
     let selectedPickerName = '';
     let selectedSku = null;
@@ -464,10 +481,24 @@ export function renderRequestPickup(container, currentUser) {
           skuSearchInput.value = `${skuNumber} - ${productName}`;
           skuMenu.classList.remove('open');
 
+          const soDetails = db.getSoDetails(selectedSoNumber, skuNumber);
+          const soStatus = soDetails ? soDetails.status : 'N/A';
+          const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
+
           selectedSkuDisplay.innerHTML = `
-            <div class="autofill-badge success">
+            <div class="autofill-badge success" style="margin-bottom: 8px;">
               <span class="material-icons-round" style="font-size: 16px;">check_circle</span>
               <span>Selected: <strong>SKU ${skuNumber}</strong> (${productName})</span>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons-round" style="font-size: 16px;">info</span>
+                <span>SO Status: <strong style="text-transform: uppercase;">${soStatus}</strong></span>
+              </div>
+              <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons-round" style="font-size: 16px;">layers</span>
+                <span>SO SUM(Qty): <strong>${soOrigQty}</strong></span>
+              </div>
             </div>
           `;
         });
