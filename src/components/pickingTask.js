@@ -23,6 +23,12 @@ export function renderPickingTask(container, currentUser) {
 
       <div class="filter-toolbar">
         <div class="filter-tabs-group">
+          <button class="filter-tab" data-filter="Waiting">
+            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+              <span class="material-icons-round">hourglass_empty</span>
+            </div>
+            <span>Waiting List</span>
+          </button>
           <button class="filter-tab active" data-filter="all">
             <span class="material-icons-round">list_alt</span>
             <span>All Tasks</span>
@@ -38,10 +44,6 @@ export function renderPickingTask(container, currentUser) {
           <button class="filter-tab" data-filter="Cancelled">
             <span class="material-icons-round">cancel</span>
             <span>Cancelled</span>
-          </button>
-          <button class="filter-tab" data-filter="Waiting">
-            <span class="material-icons-round">hourglass_empty</span>
-            <span>Waiting List</span>
           </button>
         </div>
 
@@ -143,7 +145,28 @@ export function renderPickingTask(container, currentUser) {
   let selectedWaitingTicketIds = new Set();
   let pendingRequests = [];
 
+  function updateWaitingBadge() {
+    const pRc = db.getPendingRequests ? db.getPendingRequests() : [];
+    const pLf = db.getPendingLostAndFound ? db.getPendingLostAndFound() : [];
+    const count = pRc.length + pLf.length;
+    const badgeContainer = container.querySelector('.filter-tab[data-filter="Waiting"] > div');
+    if (badgeContainer) {
+      let badgeEl = badgeContainer.querySelector('.filter-tab-badge');
+      if (count > 0) {
+        if (!badgeEl) {
+          badgeEl = document.createElement('span');
+          badgeEl.className = 'filter-tab-badge';
+          badgeContainer.appendChild(badgeEl);
+        }
+        badgeEl.textContent = count > 99 ? '99+' : count;
+      } else if (badgeEl) {
+        badgeEl.remove();
+      }
+    }
+  }
+
   function renderTasks() {
+    updateWaitingBadge();
     const bulkContainer = container.querySelector('#bulkActionBarContainer');
     if (bulkContainer) bulkContainer.style.display = 'none';
     const mobileActionBar = container.querySelector('#mobileFloatingActionBarContainer');

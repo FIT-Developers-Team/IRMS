@@ -563,6 +563,26 @@ body {
   box-shadow: 0 4px 12px rgba(21, 101, 192, 0.25);
 }
 
+.filter-tab-badge {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+  line-height: 1;
+  border: 1.5px solid #ffffff;
+}
+
 .card-title-group h3 {
   font-size: 18px;
   font-weight: 800;
@@ -573,14 +593,19 @@ body {
 }
 
 .unique-id-chip {
-  background: linear-gradient(135deg, #0f172a, #334155);
-  color: #38bdf8;
-  font-family: monospace;
-  font-size: 13px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1e40af;
+  border: 1.5px solid #bfdbfe;
+  font-family: 'Plus Jakarta Sans', monospace, sans-serif;
+  font-size: 12px;
+  font-weight: 800;
   padding: 4px 12px;
   border-radius: 20px;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.08);
 }
 
 .form-grid {
