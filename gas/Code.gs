@@ -104,7 +104,7 @@ function appendRowByHeader(sheet, payload, defaultHeaders) {
 
   if (isSoh) {
     var sohValues = sheet.getDataRange().getValues();
-    var skuColIdx = -1, locColIdx = -1, prodColIdx = -1, updatedColIdx = -1;
+    var skuColIdx = -1, locColIdx = -1, prodColIdx = -1, updatedColIdx = -1, qtySohColIdx = -1;
 
     if (sohValues.length > 0) {
       var hRow = sohValues[0];
@@ -114,40 +114,57 @@ function appendRowByHeader(sheet, payload, defaultHeaders) {
         if (cH === 'racklocation' || cH === 'location') locColIdx = c;
         if (cH === 'productname' || cH === 'productid') prodColIdx = c;
         if (cH === 'updatedat' || cH === 'timestamp') updatedColIdx = c;
+        if (cH === 'qtysoh' || cH === 'qty') qtySohColIdx = c;
       }
     }
 
-    var lastDataRow = 1; // 1-indexed (row 1 is header)
-    for (var r = sohValues.length - 1; r >= 1; r--) {
-      var skuVal = skuColIdx !== -1 ? String(sohValues[r][skuColIdx] || '').trim() : '';
-      var locVal = locColIdx !== -1 ? String(sohValues[r][locColIdx] || '').trim() : '';
-      var prodVal = prodColIdx !== -1 ? String(sohValues[r][prodColIdx] || '').trim() : '';
-      var updatedVal = updatedColIdx !== -1 ? String(sohValues[r][updatedColIdx] || '').trim() : '';
-      if (skuVal !== '' || locVal !== '' || prodVal !== '' || updatedVal !== '') {
-        lastDataRow = r + 1;
-        break;
+    var targetSku = String(payload.skuNumber || payload.skuCode || '').trim();
+    var targetLoc = String(payload.rackLocation || payload.location || '').trim();
+
+    // 1. Check if matching row already exists in SOH
+    var existingRowIdx = -1;
+    if (targetSku !== '' && targetLoc !== '' && skuColIdx !== -1 && locColIdx !== -1) {
+      for (var r = 1; r < sohValues.length; r++) {
+        var rSku = String(sohValues[r][skuColIdx] || '').trim();
+        var rLoc = String(sohValues[r][locColIdx] || '').trim();
+        if (rSku === targetSku && rLoc === targetLoc) {
+          existingRowIdx = r + 1; // 1-indexed row number
+          break;
+        }
       }
     }
 
-    var newRowIdx = lastDataRow + 1;
-    if (newRowIdx > sheet.getLastRow()) {
-      sheet.insertRowAfter(lastDataRow);
-    } else {
-      var targetSkuVal = (skuColIdx !== -1 && newRowIdx <= sohValues.length) ? String(sohValues[newRowIdx - 1][skuColIdx] || '').trim() : '';
-      var targetLocVal = (locColIdx !== -1 && newRowIdx <= sohValues.length) ? String(sohValues[newRowIdx - 1][locColIdx] || '').trim() : '';
-      if (targetSkuVal !== '' || targetLocVal !== '') {
-        sheet.insertRowAfter(lastDataRow);
+    var targetRowIdx = existingRowIdx;
+
+    // 2. If no existing row, append at bottom of non-empty data rows (lastDataRow + 1)
+    if (targetRowIdx === -1) {
+      var lastDataRow = 1; // row 1 is header
+      for (var r2 = sohValues.length - 1; r2 >= 1; r2--) {
+        var sVal = skuColIdx !== -1 ? String(sohValues[r2][skuColIdx] || '').trim() : '';
+        var lVal = locColIdx !== -1 ? String(sohValues[r2][locColIdx] || '').trim() : '';
+        if (sVal !== '' || lVal !== '') {
+          lastDataRow = r2 + 1;
+          break;
+        }
       }
+      targetRowIdx = lastDataRow + 1;
     }
 
+    // 3. Write data to targetRowIdx without calling insertRowAfter (prevents shifting rows and breaking array formulas)
+    var formulaCols = ["qtyonso", "countso", "qtyonldp", "stockage", "actionsuggestion"];
     for (var i = 0; i < headers.length; i++) {
       var h = headers[i];
       var cleanHeader = String(h).toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (formulaHeaders.indexOf(cleanHeader) !== -1) {
-        continue; // Skip formula columns entirely so ARRAYFORMULA can expand
+      if (formulaCols.indexOf(cleanHeader) !== -1) {
+        continue; // Skip formula columns so ARRAYFORMULA in row 2 can expand automatically
       }
       var val = getValueForHeader(cleanHeader, payload);
-      sheet.getRange(newRowIdx, i + 1).setValue(val);
+      if (existingRowIdx !== -1 && cleanHeader === 'qtysoh') {
+        var currentQty = qtySohColIdx !== -1 ? parseInt(sohValues[existingRowIdx - 1][qtySohColIdx] || 0, 10) : 0;
+        if (isNaN(currentQty)) currentQty = 0;
+        val = currentQty + parseInt(payload.qtySoh || payload.qty || 0, 10);
+      }
+      sheet.getRange(targetRowIdx, i + 1).setValue(val);
     }
   } else {
     var newRow = headers.map(function(h) {
@@ -168,10 +185,10 @@ function getValueForHeader(cleanHeader, payload) {
   if (cleanHeader === 'checkerline' || cleanHeader === 'line') {
     return payload.checkerLine || '';
   }
-  if (cleanHeader === 'timestamp' || cleanHeader === 'date' || cleanHeader === 'time' || cleanHeader === 'updatedat') {
+  if (cleanHeader === 'timestamp' || cleanHeader === 'date' || cleanHeader === 'time' || cleanHeader === 'updatedat' || cleanHeader === 'updated_at') {
     var rawDate = new Date();
-    if (payload.timestamp || payload.updatedAt) {
-      var parsed = new Date(payload.timestamp || payload.updatedAt);
+    if (payload.timestamp || payload.updatedAt || payload.updated_at) {
+      var parsed = new Date(payload.timestamp || payload.updatedAt || payload.updated_at);
       if (!isNaN(parsed.getTime())) {
         rawDate = parsed;
       }

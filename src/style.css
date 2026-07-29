@@ -52,6 +52,35 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Modern Material Symbols & Icons System - Thin Minimalist Stroke */
+.material-icons-round,
+.material-symbols-rounded,
+.material-symbols-outlined {
+  font-family: 'Material Symbols Rounded', 'Material Symbols Outlined', 'Material Icons Round', sans-serif !important;
+  font-weight: 300;
+  font-style: normal;
+  font-size: 20px;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  word-wrap: normal;
+  white-space: nowrap;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'liga';
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+}
+
+.nav-tab-item.active .material-icons-round,
+.nav-tab-item.active .material-symbols-rounded,
+.button-chip.active .material-icons-round,
+.filter-tab.active .material-icons-round {
+  font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24 !important;
+}
+
 body {
   background-color: var(--surface-body);
   color: var(--text-primary);
@@ -362,9 +391,10 @@ body {
 }
 
 .nav-tab-item {
+  position: relative;
   border: none;
   background: transparent;
-  padding: 12px 14px;
+  padding: 12px 14px 12px 16px;
   border-radius: var(--radius-ios-sm);
   font-size: 13px;
   font-weight: 600;
@@ -393,9 +423,23 @@ body {
 }
 
 .nav-tab-item.active {
-  background: var(--primary-600);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(21, 101, 192, 0.25);
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.nav-tab-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 26px;
+  background: #1565c0;
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 0 12px rgba(21, 101, 192, 0.6);
 }
 
 .sidebar-footer {
@@ -593,19 +637,17 @@ body {
 }
 
 .unique-id-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-  color: #1e40af;
-  border: 1.5px solid #bfdbfe;
-  font-family: 'Plus Jakarta Sans', monospace, sans-serif;
-  font-size: 12px;
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace, sans-serif;
+  font-size: 14px;
   font-weight: 800;
-  padding: 4px 12px;
-  border-radius: 20px;
+  color: var(--primary-700);
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
   letter-spacing: 0.5px;
-  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.08);
 }
 
 .form-grid {
@@ -1260,25 +1302,37 @@ body {
     padding-bottom: 80px !important;
   }
 
+  /* Bulk Action Bar for Desktop */
+  .bulk-action-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #eff6ff;
+    border: 1.5px solid #bfdbfe;
+    padding: 12px 16px;
+    border-radius: 14px;
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.08);
+  }
+
   /* Fixed Floating Bulk Action Bar Container (Positioned above frozen bottom navigation) */
   #mobileFloatingActionBarContainer {
     position: fixed !important;
     bottom: calc(68px + env(safe-area-inset-bottom, 0px) + 12px) !important;
     left: 16px !important;
     right: 16px !important;
-    z-index: 2500 !important;
-    pointer-events: none !important;
+    z-index: 4500 !important;
+    pointer-events: auto !important;
   }
 
   .mobile-floating-action-bar {
     width: 100% !important;
-    height: 48px !important;
-    background: linear-gradient(135deg, var(--primary-600), var(--primary-800)) !important;
+    height: 50px !important;
+    background: linear-gradient(135deg, #1565c0, #0d47a1) !important;
     color: #ffffff !important;
     border: none !important;
-    border-radius: 14px !important;
+    border-radius: 16px !important;
     font-size: 14px !important;
-    font-weight: 700 !important;
+    font-weight: 800 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -1287,6 +1341,14 @@ body {
     cursor: pointer !important;
     pointer-events: auto !important;
     transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+  }
+
+  .mobile-floating-action-bar span {
+    color: #ffffff !important;
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    font-weight: 800 !important;
   }
 
   .mobile-floating-action-bar:active {
@@ -1308,15 +1370,40 @@ body {
   }
 
   .nav-tab-item {
+    position: relative;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 3px !important;
     padding: 6px 2px !important;
-    border-radius: 12px;
+    border-radius: 14px;
     font-size: 11px !important;
     height: 100%;
     width: 20% !important;
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    transition: all 0.2s ease !important;
+  }
+
+  .nav-tab-item.active {
+    background: #eff6ff !important;
+    color: var(--primary-700) !important;
+    font-weight: 800 !important;
+    box-shadow: none !important;
+  }
+
+  .nav-tab-item.active::before {
+    content: '';
+    position: absolute;
+    bottom: 2px !important;
+    top: auto !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 24px !important;
+    height: 4px !important;
+    background: #1565c0 !important;
+    border-radius: 4px !important;
+    box-shadow: 0 2px 8px rgba(21, 101, 192, 0.6) !important;
   }
 
   .nav-tab-item span.material-icons-round {
@@ -1456,6 +1543,10 @@ body {
   .modal-overlay,
   .form-modal-overlay {
     z-index: 5000 !important;
+  }
+
+  .hybrid-chip-modal-overlay {
+    z-index: 6000 !important;
   }
 
   .form-modal-card,
@@ -2285,8 +2376,12 @@ body {
     position: relative !important;
     overflow: visible !important;
   }
+}
 
+/* Desktop Viewport Hiding for Mobile Floating Elements */
+@media (min-width: 769px) {
   #mobileFloatingActionBarContainer,
+  .mobile-floating-action-bar,
   #mobileStartPickBtn {
     display: none !important;
   }
@@ -2294,6 +2389,27 @@ body {
 
 /* Standard Mobile Viewports (@media max-width: 768px) */
 @media (max-width: 768px) {
+  #bulkActionBarContainer {
+    display: none !important;
+  }
+
+  /* Floating Mobile More Navigation Modal */
+  #mobileMoreNavModal {
+    padding: 12px !important;
+    box-sizing: border-box !important;
+    align-items: flex-end !important;
+    justify-content: center !important;
+  }
+
+  #mobileMoreNavModal .modal-card,
+  #mobileMoreNavModal .form-modal-card {
+    width: calc(100% - 24px) !important;
+    max-width: 440px !important;
+    margin: 0 auto calc(80px + env(safe-area-inset-bottom, 0px)) auto !important;
+    border-radius: 24px !important;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28) !important;
+    padding: 20px 18px 24px !important;
+  }
   /* Mobile Filter Toolbar & Sub-tabs Optimization */
   .filter-toolbar {
     flex-direction: column !important;

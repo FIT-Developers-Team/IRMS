@@ -24,9 +24,6 @@ export function renderAdmin(container, currentUser) {
             <span class="material-icons-round" style="color: var(--primary-600);">admin_panel_settings</span>
             Admin Panel
           </h3>
-          <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 2px;">
-            Manage users and warehouse zones — accessible to Super role only
-          </span>
         </div>
         <div class="admin-badge">
           <span class="material-icons-round" style="font-size: 14px;">shield</span>

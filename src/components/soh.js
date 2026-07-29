@@ -26,9 +26,6 @@ export function renderSoh(container, currentUser) {
             <span class="material-icons-round" style="color: var(--primary-600); flex-shrink: 0; font-size: 20px;">inventory_2</span>
             <span>Stock On Hand (SOH)</span>
           </h3>
-          <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: 2px;">
-            Real-time stock levels & allocation
-          </span>
         </div>
         <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
           <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); white-space: nowrap;" id="sohCountBadge">0 SKUs</span>
@@ -1193,11 +1190,12 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
 
   // Reason Options Mapping
   const transferReasons = [
-    { value: 'Bad/Damaged/Expired', label: 'Bad/Damaged/Expired' },
+    { value: 'Rack changes', label: 'Rack changes' },
     { value: 'Buffer SO', label: 'Buffer SO' },
     { value: 'Other (explain)', label: 'Other (explain)' }
   ];
   const deductionReasons = [
+    { value: 'Bad/Damaged/Expired', label: 'Bad/Damaged/Expired' },
     { value: 'Recovery LDP', label: 'Recovery LDP' },
     { value: 'Recovery SO', label: 'Recovery SO' },
     { value: 'WH Adjust IN', label: 'WH Adjust IN' },
@@ -1217,7 +1215,7 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
   // Wire Reason Dropdown
   const reasonDropdown = setupCustomDropdown(
     modalOverlay.querySelector('#dropdown-assign-reason'),
-    'Bad/Damaged/Expired',
+    'Rack changes',
     transferReasons,
     (newReason) => {
       if (typeDropdown.getValue() === 'Transfer location' && newReason === 'Other (explain)') {
@@ -1242,16 +1240,17 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
     (newType) => {
       toLocGroup.style.display = 'block';
       if (newType === 'Stock deduction') {
-        reasonDropdown.updateOptions(deductionReasons, 'Recovery LDP');
+        reasonDropdown.updateOptions(deductionReasons, 'Bad/Damaged/Expired');
         otherGroup.style.display = 'none';
-        toLocLabel.innerHTML = 'To Location (Deduction Parameter / Bin) <span style="color: var(--danger);">*</span>';
-        targetLocationInput.removeAttribute('maxlength');
+        toLocLabel.innerHTML = 'To Location (Stock Deduction)';
+        targetLocationInput.disabled = true;
         targetLocationInput.value = `Deduction - ${reasonDropdown.getValue()}`;
-        targetLocationHelper.textContent = 'Enter target deduction location parameter or bin.';
-        targetLocationHelper.style.color = 'var(--text-muted)';
+        targetLocationHelper.textContent = 'Destination outside system — assigned user will specify To Location upon task execution.';
+        targetLocationHelper.style.color = 'var(--primary-600)';
       } else {
-        reasonDropdown.updateOptions(transferReasons, 'Bad/Damaged/Expired');
+        reasonDropdown.updateOptions(transferReasons, 'Rack changes');
         toLocLabel.innerHTML = 'Storage Location (10–30 chars) <span style="color: var(--danger);">*</span>';
+        targetLocationInput.disabled = false;
         targetLocationInput.setAttribute('minlength', '10');
         targetLocationInput.setAttribute('maxlength', '30');
         targetLocationInput.value = '';

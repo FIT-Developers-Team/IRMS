@@ -38,5 +38,11 @@ add drop down reason for stock deduction for findings discrepancy
 # Feature changes and upgrade
 
 stock transfer reason damage is should be deduction stock
-on stock deduction , to location 
-when ldp recovery the sloc target will be decited on assigned picker
+on stock deduction
+
+on Assign Stock Movement / Deduction
+reason Bad/Damaged/Expired move to stock deduction Movement Type 
+
+
+
+when movement type is stock deduction, the to location input should be disabled when assignin, on assigned user, the user is required to input the location (not validation, free text becasue the rack is outside this system), but keep the matching validation if the movement type is transfer location rack to rack

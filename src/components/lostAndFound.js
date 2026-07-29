@@ -14,9 +14,6 @@ export function renderLostAndFound(container, currentUser) {
             <span class="material-icons-round" style="color: var(--primary-600);">travel_explore</span>
             My Lost & Found Entries
           </h3>
-          <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 2px;">
-            Private log for <strong>${escapeHtml(currentUser.name)}</strong> (Staff ID: ${currentUser.staffId})
-          </span>
         </div>
 
         <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
@@ -333,7 +330,7 @@ export function renderLostAndFound(container, currentUser) {
     function openZoneChipModal() {
       const chipModal = document.createElement('div');
       chipModal.className = 'modal-overlay hybrid-chip-modal-overlay';
-      chipModal.style.zIndex = '3500';
+      chipModal.style.cssText = 'z-index: 6000 !important;';
 
       chipModal.innerHTML = `
         <div class="modal-card hybrid-chip-modal-card">

@@ -18,9 +18,6 @@ export function renderStockMovement(container, currentUser) {
               <span class="material-icons-round" style="color: var(--primary-600); flex-shrink: 0; font-size: 20px;">swap_horiz</span>
               <span>Stock Movement & Deduction</span>
             </h3>
-            <span style="font-size: 11px; color: var(--text-secondary); display: block; margin-top: 2px;">
-              Rack transfers & stock deductions
-            </span>
           </div>
 
           <button id="toggleKpiBtn" class="btn-secondary" title="Toggle KPI cards visibility" style="height: 28px; padding: 0 10px; font-size: 11px; font-weight: 700; gap: 4px; border-radius: 20px; flex-shrink: 0; white-space: nowrap;">
@@ -743,6 +740,7 @@ export function renderStockMovement(container, currentUser) {
     modalOverlay.className = 'modal-overlay';
     modalOverlay.style.zIndex = '3700';
 
+    const isDeduction = task.type === 'Stock deduction' || (task.toLocation && task.toLocation.startsWith('Deduction'));
     const expectedLocation = task.toLocation;
 
     modalOverlay.innerHTML = `
@@ -767,7 +765,9 @@ export function renderStockMovement(container, currentUser) {
               <span class="material-icons-round" style="font-size: 16px;">security</span>
               Staff Operation Verification Required
             </strong>
-            To confirm this task is executed properly, please scan or enter the physical <strong>SKU Code</strong> and target <strong>Location</strong>.
+            ${isDeduction
+              ? 'To complete this stock deduction, verify the physical <strong>SKU Code</strong> and enter the <strong>Destination Location / Bin</strong>.'
+              : 'To confirm this task is executed properly, please scan or enter the physical <strong>SKU Code</strong> and target <strong>Location</strong>.'}
           </div>
 
           <form id="verifyCompletionForm" style="display: flex; flex-direction: column; gap: 14px;">
@@ -788,22 +788,24 @@ export function renderStockMovement(container, currentUser) {
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Expected SKU: <strong style="font-family: monospace; color: var(--primary-800);">${esc(task.skuCode)}</strong></div>
             </div>
 
-            <!-- 2. Location Verification -->
+            <!-- 2. Location Input / Verification -->
             <div class="form-group">
               <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
-                2. Verify Location <span style="color: var(--danger);">*</span>
+                ${isDeduction ? '2. Enter Destination Location / Bin' : '2. Verify Location'} <span style="color: var(--danger);">*</span>
               </label>
               <input 
                 type="text" 
                 id="verifyLocationInput" 
                 class="text-control" 
-                placeholder="Scan or enter Location..." 
+                placeholder="${isDeduction ? 'Enter physical location or bin (outside system)...' : 'Scan or enter Location...'}" 
                 style="width: 100%; height: 40px; font-family: monospace; font-size: 13px; font-weight: 700; text-transform: uppercase;"
                 required 
                 autocomplete="off"
               />
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
-                Expected Location: <strong style="font-family: monospace; color: var(--primary-800);">${esc(expectedLocation)}</strong>
+                ${isDeduction
+                  ? 'Free-text location entry (destination is outside system e.g. disposal bin, damaged rack).'
+                  : `Expected Location: <strong style="font-family: monospace; color: var(--primary-800);">${esc(expectedLocation)}</strong>`}
               </div>
             </div>
 
@@ -854,18 +856,27 @@ export function renderStockMovement(container, currentUser) {
         return;
       }
 
-      if (enteredLoc !== expLoc) {
-        errorEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span class="material-icons-round" style="font-size:18px;">error</span><span>Location Verification Failed! Entered "${enteredLoc}", but task expects "${expLoc}".</span></div>`;
-        errorEl.style.display = 'block';
-        verifyLocationInput.focus();
-        return;
+      if (isDeduction) {
+        if (!enteredLoc) {
+          errorEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span class="material-icons-round" style="font-size:18px;">error</span><span>Please enter destination location / bin.</span></div>`;
+          errorEl.style.display = 'block';
+          verifyLocationInput.focus();
+          return;
+        }
+      } else {
+        if (enteredLoc !== expLoc) {
+          errorEl.innerHTML = `<div style="display:flex;align-items:center;gap:6px;"><span class="material-icons-round" style="font-size:18px;">error</span><span>Location Verification Failed! Entered "${enteredLoc}", but task expects "${expLoc}".</span></div>`;
+          errorEl.style.display = 'block';
+          verifyLocationInput.focus();
+          return;
+        }
       }
 
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<span class="material-icons-round" style="font-size:16px; animation:spinIcon 1s linear infinite;">sync</span> Completing...';
 
       try {
-        await db.completeStockMovement(task.movementId, currentUser);
+        await db.completeStockMovement(task.movementId, currentUser, isDeduction ? enteredLoc : null);
         closeModal();
         showToast(`Stock movement ${task.movementId} verified & completed successfully!`);
         renderView();

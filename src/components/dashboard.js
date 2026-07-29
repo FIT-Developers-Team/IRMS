@@ -296,6 +296,85 @@ export function renderDashboard(container, currentUser, onLogout) {
   if (logoutBtn) logoutBtn.addEventListener('click', onLogout);
   if (mobileLogoutBtn) mobileLogoutBtn.addEventListener('click', onLogout);
 
+  // ── Refresh Options Modal (Regular Refresh vs Flush Cache & Full Resync) ──
+  function openRefreshOptionsModal() {
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'modal-overlay';
+    modalOverlay.style.cssText = 'z-index: 9999 !important;';
+
+    modalOverlay.innerHTML = `
+      <div class="modal-card form-modal-card" style="max-width: 420px; width: 90%; border-radius: 24px; text-align: center; padding: 24px; box-sizing: border-box;">
+        <div style="width: 56px; height: 56px; border-radius: 50%; background: #eff6ff; color: var(--primary-600); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+          <span class="material-icons-round" style="font-size: 28px;">sync</span>
+        </div>
+        
+        <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 800; color: var(--text-primary);">Data Refresh Options</h3>
+        <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.4;">
+          Choose how you would like to synchronize application data:
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;">
+          <button id="modalRegularRefreshBtn" class="btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #1565c0, #0d47a1) !important; color: #ffffff !important; border: none; cursor: pointer;">
+            <span class="material-icons-round" style="font-size: 20px !important; color: #ffffff !important; display: inline-block !important; visibility: visible !important;">autorenew</span>
+            <span style="color: #ffffff !important; font-weight: 700 !important; font-size: 13px !important; display: inline-block !important; visibility: visible !important;">Regular Refresh (Fetch Updates)</span>
+          </button>
+
+          <button id="modalFlushCacheBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; color: #dc2626 !important; border: 1.5px solid #fecaca; background: #fff5f5 !important; cursor: pointer;">
+            <span class="material-icons-round" style="font-size: 20px !important; color: #dc2626 !important; display: inline-block !important; visibility: visible !important;">delete_sweep</span>
+            <span style="color: #dc2626 !important; font-weight: 700 !important; font-size: 13px !important; display: inline-block !important; visibility: visible !important;">Flush Cache & Full Resync</span>
+          </button>
+
+          <button id="modalCancelRefreshBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; height: 40px; margin-top: 4px; font-weight: 600; font-size: 13px; border-radius: 10px; color: #475569 !important;">
+            Cancel
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modalOverlay);
+    const closeModal = () => modalOverlay.remove();
+
+    modalOverlay.querySelector('#modalCancelRefreshBtn').addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+
+    modalOverlay.querySelector('#modalRegularRefreshBtn').addEventListener('click', async () => {
+      closeModal();
+      showBlockerLock('Fetching latest updates...');
+      try {
+        await db.syncGoogleSheets(null);
+        showToast('Application data refreshed successfully!');
+      } catch (err) {
+        showToast('Refresh error: ' + (err.message || err));
+      } finally {
+        setTimeout(() => hideBlockerLock(), 300);
+      }
+    });
+
+    modalOverlay.querySelector('#modalFlushCacheBtn').addEventListener('click', async () => {
+      closeModal();
+      showBlockerLock('Flushing local cache & resyncing all data...');
+      try {
+        await db.clearCacheAndResync();
+        showToast('Local cache flushed & full resync completed!');
+        switchTab(activeTab);
+      } catch (err) {
+        showToast('Flush cache error: ' + (err.message || err));
+      } finally {
+        setTimeout(() => hideBlockerLock(), 300);
+      }
+    });
+  }
+
+  // Wire Refresh Modal to Header Sync buttons and Floating Refresh buttons
+  container.querySelectorAll('.headerSyncBtn, .floating-refresh-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openRefreshOptionsModal();
+    });
+  });
+
   // ── Security Filtered Route Guard & Navigation ─────────────────────────────
   const secondaryTabs = ['lostAndFound', 'stockMovement', 'admin'];
 
@@ -403,7 +482,7 @@ export function renderDashboard(container, currentUser, onLogout) {
     const modalOverlay = document.createElement('div');
     modalOverlay.id = 'mobileMoreNavModal';
     modalOverlay.className = 'modal-overlay';
-    modalOverlay.style.cssText = 'z-index: 5000; align-items: flex-end; padding: 0; animation: fadeIn 0.2s ease;';
+    modalOverlay.style.cssText = 'z-index: 5000; align-items: flex-end; justify-content: center; padding: 12px; animation: fadeIn 0.2s ease;';
 
     const cardsHtml = extendedTabs.map(t => {
       const isActive = activeTab === t.key;
@@ -426,7 +505,7 @@ export function renderDashboard(container, currentUser, onLogout) {
     }).join('');
 
     modalOverlay.innerHTML = `
-      <div class="modal-card form-modal-card" style="width: 100%; max-width: 500px; border-radius: 24px 24px 0 0; padding: 20px 18px 28px; box-sizing: border-box; background: #ffffff; animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+      <div class="modal-card form-modal-card" style="width: calc(100% - 24px); max-width: 440px; margin: 0 auto calc(80px + env(safe-area-inset-bottom, 0px)) auto; border-radius: 24px; padding: 20px 18px 24px; box-sizing: border-box; background: #ffffff; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.25); animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
         <!-- Top Drag Handle Indicator -->
         <div style="width: 40px; height: 4px; background: #cbd5e1; border-radius: 4px; margin: 0 auto 16px auto;"></div>
 

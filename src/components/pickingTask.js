@@ -15,9 +15,6 @@ export function renderPickingTask(container, currentUser) {
             <span class="material-icons-round" style="color: var(--primary-600);">fact_check</span>
             Picking Task Dashboard
           </h3>
-          <span style="font-size: 12px; color: var(--text-secondary); display: block; margin-top: 2px;">
-            Private picking log for <strong>${escapeHtml(currentUser.name)}</strong> (Staff ID: ${currentUser.staffId})
-          </span>
         </div>
       </div>
 
@@ -664,6 +661,12 @@ export function renderPickingTask(container, currentUser) {
     const containerEl = container.querySelector('#mobileFloatingActionBarContainer');
     if (!containerEl) return;
 
+    if (window.innerWidth > 768) {
+      containerEl.style.display = 'none';
+      containerEl.innerHTML = '';
+      return;
+    }
+
     const count = selectedWaitingTicketIds.size;
     if (activeFilter !== 'Waiting' || count === 0) {
       containerEl.style.display = 'none';
@@ -673,15 +676,19 @@ export function renderPickingTask(container, currentUser) {
 
     containerEl.style.display = 'block';
     containerEl.innerHTML = `
-      <button class="mobile-floating-action-bar" id="mobileStartPickBtn">
-        <span class="material-icons-round">play_arrow</span>
-        <span>Start Picking (${count})</span>
+      <button class="mobile-floating-action-bar" id="mobileStartPickBtn" style="color: #ffffff !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 8px !important;">
+        <span class="material-icons-round" style="font-size: 20px !important; color: #ffffff !important; display: inline-block !important; visibility: visible !important;">play_arrow</span>
+        <span style="color: #ffffff !important; font-weight: 800 !important; font-size: 14px !important; display: inline-block !important; visibility: visible !important;">Start Picking (${count})</span>
       </button>
     `;
 
-    containerEl.querySelector('#mobileStartPickBtn').addEventListener('click', () => {
-      openMobileConfirmModal();
-    });
+    const btn = containerEl.querySelector('#mobileStartPickBtn');
+    if (btn) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openMobileConfirmModal();
+      });
+    }
   }
 
   function openMobileConfirmModal() {

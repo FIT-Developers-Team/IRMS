@@ -1,5 +1,6 @@
 import Papa from 'papaparse';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets.js';
+import { cacheManager } from './cacheManager.js';
 
 export const DATA_EXPIRY_DURATION_MS = 1 * 60 * 1000; // 1 minute TTL
 
@@ -27,15 +28,51 @@ class DatabaseService {
     this.isLoaded = false;
     this.listeners = [];
     
-    // On fresh start: only fetch userDb to support login credential validation.
-    // Reference data (skusDb, zones, checkerLines) is synced after a successful login.
-    // Section data (soData, pickingTask, lostAndFound, soh, etc.) is synced lazily on navigation.
-    this.initPromise = this.syncGoogleSheets(['userDb']);
+    // Instant 0ms IndexedDB Hydration
+    this.initCache();
 
-    // Background interval: Check every 60 seconds if data has reached 15-minute expiry and force refresh from backend
+    // On fresh start / browser refresh (F5) / login: fetch Master Reference Data once.
+    // Master data (skusDb, zones, racks, checkerLines) is cached in IndexedDB and NOT re-fetched on page navigation.
+    this.initPromise = this.syncGoogleSheets(['userDb', 'skusDb', 'zones', 'racks', 'checkerLines']);
+
+    // Background interval: Check every 60 seconds if data has reached expiry duration and force refresh
     this.cacheCheckInterval = setInterval(() => {
       this.checkAndRefreshIfExpired();
     }, 60 * 1000);
+  }
+
+  async initCache() {
+    try {
+      await cacheManager.init();
+      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines] = await Promise.all([
+        cacheManager.getStore('requests'),
+        cacheManager.getStore('pickingTasks'),
+        cacheManager.getStore('lostAndFound'),
+        cacheManager.getStore('soh'),
+        cacheManager.getStore('stockMovements'),
+        cacheManager.getStore('userDb'),
+        cacheManager.getStore('skusDb'),
+        cacheManager.getStore('racks'),
+        cacheManager.getStore('zones'),
+        cacheManager.getStore('checkerLines')
+      ]);
+
+      if (cReqs && cReqs.length) this.requests = cReqs;
+      if (cTasks && cTasks.length) this.pickingTasks = cTasks;
+      if (cLf && cLf.length) this.lostAndFound = cLf;
+      if (cSoh && cSoh.length) this.soh = cSoh;
+      if (cSm && cSm.length) this.stockMovements = cSm;
+      if (cUsers && cUsers.length) this.users = cUsers;
+      if (cSkus && cSkus.length) this.skus = cSkus;
+      if (cRacks && cRacks.length) this.racks = cRacks;
+      if (cZones && cZones.length) this.zones = cZones;
+      if (cLines && cLines.length) this.checkerLines = cLines;
+
+      this.isLoaded = true;
+      this.notifyListeners();
+    } catch (err) {
+      console.warn('IndexedDB hydration fallback:', err);
+    }
   }
 
   subscribe(listener) {
@@ -191,19 +228,8 @@ class DatabaseService {
       };
     }).filter(task => task.pickingId || task.ticketId);
 
-    // Merge remote tasks with local tasks not yet present in Google Sheets
-    const remotePickingIds = new Set(remoteTasks.map(t => String(t.pickingId).trim()).filter(Boolean));
-    const remoteTicketIds = new Set(remoteTasks.map(t => String(t.ticketId).trim()).filter(Boolean));
-    
-    const localOnly = (this.pickingTasks || []).filter(task => {
-      const pId = String(task.pickingId || '').trim();
-      const tId = String(task.ticketId || '').trim();
-      if (pId && remotePickingIds.has(pId)) return false;
-      if (tId && remoteTicketIds.has(tId)) return false;
-      return true;
-    });
-
-    this.pickingTasks = [...localOnly, ...remoteTasks];
+    // Google Sheet is source of truth for Picking Tasks
+    this.pickingTasks = remoteTasks;
     this.pickingTasks.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     this.persistPickingTasks();
   }
@@ -268,7 +294,7 @@ class DatabaseService {
           normalizedTabSet.add('requestChecker');
           normalizedTabSet.add('soData');
           normalizedTabSet.add('checkerLines');
-          normalizedTabSet.add('skusDb');
+          // skusDb excluded from section sync — fetched on initial load/login/refresh
         } else if (t === 'pickingTask') {
           normalizedTabSet.add('pickingTask');
           normalizedTabSet.add('racks');
@@ -277,8 +303,8 @@ class DatabaseService {
           normalizedTabSet.add('lostAndFound');
         } else if (t === 'soh') {
           normalizedTabSet.add('soh');
-          normalizedTabSet.add('skusDb');
           normalizedTabSet.add('racks');
+          // skusDb excluded from section sync — fetched on initial load/login/refresh
         } else if (t === 'stockMovement') {
           normalizedTabSet.add('stockMovement');
           normalizedTabSet.add('stockActivity');
@@ -383,6 +409,32 @@ class DatabaseService {
     }
   }
 
+  async clearCacheAndResync() {
+    await cacheManager.clearAll();
+    localStorage.removeItem('irms_pickup_requests');
+    localStorage.removeItem('irms_picking_tasks');
+    localStorage.removeItem('irms_lost_and_found');
+    localStorage.removeItem('irms_putaway_records');
+    localStorage.removeItem('irms_stock_movements');
+    localStorage.removeItem('irms_stock_activities');
+
+    this.requests = [];
+    this.pickingTasks = [];
+    this.lostAndFound = [];
+    this.putawayRecords = [];
+    this.stockMovements = [];
+    this.stockActivities = [];
+    this.soh = [];
+    this.racks = [];
+    this.zones = [];
+    this.checkerLines = [];
+    this.skus = [];
+    this.lastSyncTime = null;
+    this.lastSectionSyncTime = {};
+
+    return await this.syncGoogleSheets(null);
+  }
+
   isDataExpired() {
     if (!this.lastSyncTime) return true;
     const lastSyncMs = new Date(this.lastSyncTime).getTime();
@@ -392,8 +444,8 @@ class DatabaseService {
 
   async checkAndRefreshIfExpired() {
     if (this.isDataExpired() && !this.isSyncing) {
-      console.log('[Data Cache Expired] 1 minute reached. Performing forced data update from Google Sheets backend...');
-      await this.syncGoogleSheets();
+      const activeTab = window.irmsActiveTab || 'home';
+      await this.syncSectionData(activeTab);
       return true;
     }
     return false;
@@ -413,20 +465,21 @@ class DatabaseService {
 
   /**
    * Syncs only the sheet tabs required for a specific dashboard section.
-   * Called lazily on navigation (respects expiry) and by the sync button (force).
-   * Records a per-section timestamp on success so subsequent navigations skip the fetch.
+   * Called lazily on navigation (respects expiry). Master reference data (SKUs_DB, Zone, Racks, Checker_Lines)
+   * is fetched ONLY on fresh start / browser refresh / login and excluded from navigation syncs.
    */
   async syncSectionData(tabId) {
     const tabMap = {
-      home:          [],                                              // No section data needed
+      home:          [],
       requestPickup: ['requestChecker', 'soData'],
       pickingTask:   ['pickingTask', 'requestChecker', 'putaway', 'soh'],
-      lostAndFound:  ['lostAndFound', 'zones'],
-      soh:           ['soh', 'skusDb'],
-      stockMovement: ['soh', 'zones', 'userDb'],
+      lostAndFound:  ['lostAndFound'],
+      soh:           ['soh'],
+      stockMovement: ['stockMovement', 'stockActivity', 'soh'],
+      admin:         ['userDb']
     };
     const tabsToSync = tabMap[tabId];
-    if (!tabsToSync || tabsToSync.length === 0) return true; // Nothing to sync for Home
+    if (!tabsToSync || tabsToSync.length === 0) return true;
     const ok = await this.syncGoogleSheets(tabsToSync);
     if (ok) {
       this.lastSectionSyncTime[tabId] = new Date().toISOString();
@@ -843,6 +896,7 @@ class DatabaseService {
   persistRequests() {
     try {
       localStorage.setItem('irms_pickup_requests', JSON.stringify(this.requests));
+      cacheManager.setStore('requests', this.requests);
     } catch (e) {
       console.error('Failed to persist requests', e);
     }
@@ -935,6 +989,7 @@ class DatabaseService {
   persistPickingTasks() {
     try {
       localStorage.setItem('irms_picking_tasks', JSON.stringify(this.pickingTasks));
+      cacheManager.setStore('pickingTasks', this.pickingTasks);
     } catch (e) {
       console.error('Failed to persist picking tasks', e);
     }
@@ -1187,6 +1242,7 @@ class DatabaseService {
   persistLostAndFound() {
     try {
       localStorage.setItem('irms_lost_and_found', JSON.stringify(this.lostAndFound));
+      cacheManager.setStore('lostAndFound', this.lostAndFound);
     } catch (e) {
       console.error('Failed to persist lostAndFound', e);
     }
@@ -1808,13 +1864,17 @@ class DatabaseService {
     return updated;
   }
 
-  async completeStockMovement(movementId, operatorUser) {
+  async completeStockMovement(movementId, operatorUser, updatedToLocation) {
     const idx = this.stockMovements.findIndex(m => String(m.movementId).trim() === String(movementId).trim());
     if (idx === -1) throw new Error(`Stock movement "${movementId}" not found`);
 
     const movement = this.stockMovements[idx];
     if (movement.status === 'Done') {
       throw new Error(`Stock movement "${movementId}" is already completed`);
+    }
+
+    if (updatedToLocation && String(updatedToLocation).trim()) {
+      movement.toLocation = String(updatedToLocation).trim();
     }
 
     // 1. Mark status as Done
