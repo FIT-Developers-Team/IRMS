@@ -1232,7 +1232,7 @@ body {
   .page-content-container,
   #tabContentArea,
   #appContent {
-    padding-bottom: 140px !important;
+    padding-bottom: 80px !important;
   }
 
   /* Fixed Floating Bulk Action Bar Container (Positioned above frozen bottom navigation) */
@@ -1428,13 +1428,19 @@ body {
   }
 
   /* Form Modal Bottom Sheet on Mobile */
-  .form-modal-card {
+  .modal-overlay,
+  .form-modal-overlay {
+    z-index: 5000 !important;
+  }
+
+  .form-modal-card,
+  .modal-card {
     width: 100% !important;
     max-width: 100% !important;
     border-radius: 20px 20px 0 0 !important;
     margin-top: auto !important;
-    margin-bottom: 0 !important;
-    max-height: 90vh !important;
+    margin-bottom: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+    max-height: calc(88vh - 68px) !important;
   }
 
   .form-modal-header {
@@ -1446,8 +1452,9 @@ body {
   }
 
   .form-modal-body {
-    padding: 16px;
-    max-height: calc(90vh - 60px);
+    padding: 16px 16px calc(24px + env(safe-area-inset-bottom, 0px)) 16px !important;
+    max-height: calc(88vh - 130px) !important;
+    overflow-y: auto !important;
   }
 
   /* Button Chip Grid Mobile Tuning */
@@ -1467,14 +1474,13 @@ body {
     font-size: 16px;
   }
 
-
-
   /* Form Modal Footer Actions on Mobile */
   .form-modal-footer-actions {
     flex-direction: column-reverse !important;
     gap: 10px !important;
     width: 100% !important;
-    margin-top: 20px !important;
+    margin-top: 16px !important;
+    padding-bottom: 12px !important;
   }
 
   .form-modal-footer-actions button {
