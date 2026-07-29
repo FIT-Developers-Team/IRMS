@@ -6,7 +6,7 @@ import { renderHome } from './home.js';
 import { renderAdmin } from './admin.js';
 import { renderStockMovement } from './stockMovement.js';
 import { db } from '../data/db.js';
-import { hasUserAccess, getUserAccessiblePages } from '../utils/security.js';
+import { hasUserAccess, getUserAccessiblePages, ALL_PAGES } from '../utils/security.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
 
 export function renderDashboard(container, currentUser, onLogout) {
@@ -212,37 +212,25 @@ export function renderDashboard(container, currentUser, onLogout) {
     const myName = (currentUser.name || '').trim().toLowerCase();
     const myId = (currentUser.staffId || '').trim().toLowerCase();
 
-    // 1. Pickup Requests Active Count (Private per user unless Super)
-    const rawRequests = db.requests || [];
-    const activePickupCount = rawRequests.filter(r => {
-      const st = String(r.status || '').toLowerCase();
-      if (st === 'completed' || st === 'done' || st === 'cancelled' || st === 'canceled') return false;
-      if (isSuper) return true;
-      const reqBy = String(r.requestedBy || r.staffName || '').trim().toLowerCase();
-      return reqBy === myName || reqBy === myId || reqBy.includes(myName);
+    // 1. Pickup Requests Active Count (Private per user unless elevated role)
+    const userPickupRequests = db.getPickupRequestsForUser ? db.getPickupRequestsForUser(currentUser) : (db.requests || []);
+    const activePickupCount = userPickupRequests.filter(r => {
+      const st = String(r.status || '').toLowerCase().trim();
+      return st === 'pending';
     }).length;
 
-    // 2. Picking Tasks Active Count (Private per user unless Super)
-    const rawPickingTasks = (isSuper && db.getPickingTasks)
-      ? db.getPickingTasks()
-      : (db.getPickingTasksForUser ? db.getPickingTasksForUser(currentUser) : []);
-    
+    // 2. Picking Tasks Active Count (Private per user unless elevated role)
+    const rawPickingTasks = db.getPickingTasksForUser ? db.getPickingTasksForUser(currentUser) : (db.pickingTasks || []);
     const activePickingCount = rawPickingTasks.filter(pt => {
-      const st = String(pt.status || '').toLowerCase();
-      return st !== 'completed' && st !== 'done' && st !== 'cancelled' && st !== 'canceled';
+      const st = String(pt.status || '').toLowerCase().trim();
+      return st === 'picking' || st === 'in progress';
     }).length;
 
-    // 3. Stock Movements Active Count (Private per user unless Super)
-    const movements = db.getStockMovements ? db.getStockMovements() : (db.stockMovements || []);
-    const activeMovementCount = movements.filter(m => {
-      const st = String(m.status || '').toLowerCase();
-      if (st === 'completed' || st === 'done' || st === 'cancelled' || st === 'canceled') {
-        return false;
-      }
-      if (isSuper) return true;
-      const sName = (m.staffName || '').trim().toLowerCase();
-      const aBy = (m.assignedBy || '').trim().toLowerCase();
-      return sName === myName || sName === myId || aBy === myName || aBy === myId;
+    // 3. Stock Movements Active Count (Private per user unless elevated role)
+    const userMovements = db.getStockMovementsForUser ? db.getStockMovementsForUser(currentUser) : (db.stockMovements || []);
+    const activeMovementCount = userMovements.filter(m => {
+      const st = String(m.status || '').toLowerCase().trim();
+      return st === 'pending';
     }).length;
 
     // Total count for Mobile More Button Badge
@@ -320,6 +308,8 @@ export function renderDashboard(container, currentUser, onLogout) {
   }
 
   async function switchTab(tabId) {
+    const tabObj = ALL_PAGES.find(p => p.key === tabId) || { label: tabId };
+    showBlockerLock(`Launching ${tabObj.label}...`);
     try {
       // Security Guard: Check user permission
       if (!hasUserAccess(currentUser, tabId)) {
@@ -332,17 +322,7 @@ export function renderDashboard(container, currentUser, onLogout) {
 
       // Sync section data lazily if expired
       if (db.isSectionDataExpired(tabId)) {
-        const isFirstSync = !db.lastSectionSyncTime[tabId];
-        if (isFirstSync) {
-          showBlockerLock('Loading live section data...');
-        }
-        try {
-          await db.syncSectionData(tabId);
-        } finally {
-          if (isFirstSync) {
-            hideBlockerLock();
-          }
-        }
+        await db.syncSectionData(tabId);
       } else {
         db.checkAndRefreshIfExpired();
       }
@@ -376,6 +356,8 @@ export function renderDashboard(container, currentUser, onLogout) {
 
     } catch (err) {
       console.error(`[SwitchTab Error for "${tabId}"]`, err);
+    } finally {
+      setTimeout(() => hideBlockerLock(), 250);
     }
   }
 

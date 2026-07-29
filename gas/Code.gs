@@ -103,9 +103,43 @@ function appendRowByHeader(sheet, payload, defaultHeaders) {
   var formulaHeaders = ["qtyonso", "countso", "qtyonldp", "stockage"];
 
   if (isSoh) {
-    var lastRow = sheet.getLastRow();
-    sheet.insertRowAfter(lastRow);
-    var newRowIdx = lastRow + 1;
+    var sohValues = sheet.getDataRange().getValues();
+    var skuColIdx = -1, locColIdx = -1, prodColIdx = -1, updatedColIdx = -1;
+
+    if (sohValues.length > 0) {
+      var hRow = sohValues[0];
+      for (var c = 0; c < hRow.length; c++) {
+        var cH = String(hRow[c]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cH === 'skunumber' || cH === 'skucode' || cH === 'sku') skuColIdx = c;
+        if (cH === 'racklocation' || cH === 'location') locColIdx = c;
+        if (cH === 'productname' || cH === 'productid') prodColIdx = c;
+        if (cH === 'updatedat' || cH === 'timestamp') updatedColIdx = c;
+      }
+    }
+
+    var lastDataRow = 1; // 1-indexed (row 1 is header)
+    for (var r = sohValues.length - 1; r >= 1; r--) {
+      var skuVal = skuColIdx !== -1 ? String(sohValues[r][skuColIdx] || '').trim() : '';
+      var locVal = locColIdx !== -1 ? String(sohValues[r][locColIdx] || '').trim() : '';
+      var prodVal = prodColIdx !== -1 ? String(sohValues[r][prodColIdx] || '').trim() : '';
+      var updatedVal = updatedColIdx !== -1 ? String(sohValues[r][updatedColIdx] || '').trim() : '';
+      if (skuVal !== '' || locVal !== '' || prodVal !== '' || updatedVal !== '') {
+        lastDataRow = r + 1;
+        break;
+      }
+    }
+
+    var newRowIdx = lastDataRow + 1;
+    if (newRowIdx > sheet.getLastRow()) {
+      sheet.insertRowAfter(lastDataRow);
+    } else {
+      var targetSkuVal = (skuColIdx !== -1 && newRowIdx <= sohValues.length) ? String(sohValues[newRowIdx - 1][skuColIdx] || '').trim() : '';
+      var targetLocVal = (locColIdx !== -1 && newRowIdx <= sohValues.length) ? String(sohValues[newRowIdx - 1][locColIdx] || '').trim() : '';
+      if (targetSkuVal !== '' || targetLocVal !== '') {
+        sheet.insertRowAfter(lastDataRow);
+      }
+    }
+
     for (var i = 0; i < headers.length; i++) {
       var h = headers[i];
       var cleanHeader = String(h).toLowerCase().replace(/[^a-z0-9]/g, '');

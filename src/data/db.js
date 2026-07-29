@@ -191,8 +191,19 @@ class DatabaseService {
       };
     }).filter(task => task.pickingId || task.ticketId);
 
-    // Google Sheet is source of truth for Picking_Task
-    this.pickingTasks = remoteTasks;
+    // Merge remote tasks with local tasks not yet present in Google Sheets
+    const remotePickingIds = new Set(remoteTasks.map(t => String(t.pickingId).trim()).filter(Boolean));
+    const remoteTicketIds = new Set(remoteTasks.map(t => String(t.ticketId).trim()).filter(Boolean));
+    
+    const localOnly = (this.pickingTasks || []).filter(task => {
+      const pId = String(task.pickingId || '').trim();
+      const tId = String(task.ticketId || '').trim();
+      if (pId && remotePickingIds.has(pId)) return false;
+      if (tId && remoteTicketIds.has(tId)) return false;
+      return true;
+    });
+
+    this.pickingTasks = [...localOnly, ...remoteTasks];
     this.pickingTasks.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     this.persistPickingTasks();
   }
@@ -880,16 +891,27 @@ class DatabaseService {
     return newReq;
   }
 
-  // Filter requests privately by Checker Name for logged user
+  isElevatedRole(user) {
+    if (!user || !user.role) return false;
+    const role = String(user.role).trim().toLowerCase();
+    return ['super', 'admin', 'manager', 'supervisor', 'spv'].includes(role);
+  }
+
+  // Filter requests privately by Checker Name for logged user (or all if elevated role)
   getPickupRequestsForUser(currentUser) {
-    if (!currentUser || !currentUser.name) return [];
+    if (!currentUser) return [];
+    if (this.isElevatedRole(currentUser)) {
+      return this.requests;
+    }
+    if (!currentUser.name) return [];
     const nameLower = currentUser.name.trim().toLowerCase();
-    const staffIdStr = String(currentUser.staffId).trim().toLowerCase();
+    const staffIdStr = String(currentUser.staffId || '').trim().toLowerCase();
 
     return this.requests.filter(req => {
       const chkName = (req.checkerName || '').trim().toLowerCase();
-      if (!chkName) return false;
-      return chkName === nameLower || chkName === staffIdStr || chkName.includes(nameLower) || nameLower.includes(chkName);
+      const pkrName = (req.pickerName || '').trim().toLowerCase();
+      if (!chkName && !pkrName) return false;
+      return chkName === nameLower || chkName === staffIdStr || chkName.includes(nameLower) || nameLower.includes(chkName) || pkrName === nameLower || pkrName === staffIdStr || pkrName.includes(nameLower);
     });
   }
 
@@ -1004,9 +1026,13 @@ class DatabaseService {
   }
 
   getPickingTasksForUser(currentUser) {
-    if (!currentUser || !currentUser.name) return [];
+    if (!currentUser) return [];
+    if (this.isElevatedRole(currentUser)) {
+      return this.pickingTasks;
+    }
+    if (!currentUser.name) return [];
     const nameLower = currentUser.name.trim().toLowerCase();
-    const staffIdStr = String(currentUser.staffId).trim().toLowerCase();
+    const staffIdStr = String(currentUser.staffId || '').trim().toLowerCase();
 
     return this.pickingTasks.filter(task => {
       const picker = (task.pickedBy || '').trim().toLowerCase();
@@ -1181,14 +1207,34 @@ class DatabaseService {
   }
 
   getLostAndFoundForUser(currentUser) {
-    if (!currentUser || !currentUser.name) return [];
+    if (!currentUser) return [];
+    if (this.isElevatedRole(currentUser)) {
+      return this.lostAndFound;
+    }
+    if (!currentUser.name) return [];
     const nameLower = currentUser.name.trim().toLowerCase();
-    const staffIdStr = String(currentUser.staffId).trim().toLowerCase();
+    const staffIdStr = String(currentUser.staffId || '').trim().toLowerCase();
 
     return this.lostAndFound.filter(entry => {
       const staff = (entry.btiStaff || '').trim().toLowerCase();
       if (!staff) return false;
       return staff === nameLower || staff === staffIdStr || staff.includes(nameLower) || nameLower.includes(staff);
+    });
+  }
+
+  getStockMovementsForUser(currentUser) {
+    if (!currentUser) return [];
+    if (this.isElevatedRole(currentUser)) {
+      return this.stockMovements;
+    }
+    if (!currentUser.name) return [];
+    const nameLower = currentUser.name.trim().toLowerCase();
+    const staffIdStr = String(currentUser.staffId || '').trim().toLowerCase();
+
+    return this.stockMovements.filter(m => {
+      const staff = (m.staffName || '').trim().toLowerCase();
+      const assigned = (m.assignedBy || '').trim().toLowerCase();
+      return staff === nameLower || staff === staffIdStr || staff.includes(nameLower) || nameLower.includes(staff) || assigned === nameLower || assigned === staffIdStr;
     });
   }
 

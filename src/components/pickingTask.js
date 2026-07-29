@@ -23,11 +23,26 @@ export function renderPickingTask(container, currentUser) {
 
       <div class="filter-toolbar">
         <div class="filter-tabs-group">
-          <button class="filter-tab active" data-filter="all">All Tasks</button>
-          <button class="filter-tab" data-filter="Picking">In Progress</button>
-          <button class="filter-tab" data-filter="Completed">Completed</button>
-          <button class="filter-tab" data-filter="Cancelled">Cancelled</button>
-          <button class="filter-tab" data-filter="Waiting">Waiting List</button>
+          <button class="filter-tab active" data-filter="all">
+            <span class="material-icons-round">list_alt</span>
+            <span>All Tasks</span>
+          </button>
+          <button class="filter-tab" data-filter="Picking">
+            <span class="material-icons-round">pending_actions</span>
+            <span>In Progress</span>
+          </button>
+          <button class="filter-tab" data-filter="Completed">
+            <span class="material-icons-round">check_circle</span>
+            <span>Completed</span>
+          </button>
+          <button class="filter-tab" data-filter="Cancelled">
+            <span class="material-icons-round">cancel</span>
+            <span>Cancelled</span>
+          </button>
+          <button class="filter-tab" data-filter="Waiting">
+            <span class="material-icons-round">hourglass_empty</span>
+            <span>Waiting List</span>
+          </button>
         </div>
 
         <div class="search-box-wrapper" style="width: 100%; max-width: 300px; position: relative;">
@@ -36,7 +51,7 @@ export function renderPickingTask(container, currentUser) {
             id="taskSearchInput" 
             class="text-control" 
             placeholder="Search Ticket ID, SKU, Picker..." 
-            style="padding-left: 36px;"
+            style="padding-left: 36px; height: 40px; font-size: 13px;"
           />
           <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px;">search</span>
         </div>
@@ -156,7 +171,7 @@ export function renderPickingTask(container, currentUser) {
     let tasks = db.getPickingTasksForUser(currentUser);
 
     if (activeFilter !== 'all') {
-      tasks = tasks.filter(t => t.status === activeFilter);
+      tasks = tasks.filter(t => (t.status || '').toLowerCase() === activeFilter.toLowerCase());
     }
 
     if (searchQuery) {
@@ -388,8 +403,8 @@ export function renderPickingTask(container, currentUser) {
       const sourceClass = item.sourceProcess === 'Request_Checker' ? 'request' : 'lost-found';
       
       return `
-        <tr class="waiting-item-row" data-id="${item.id}" style="cursor: pointer;">
-          <td style="text-align: center;" onclick="event.stopPropagation();">
+        <tr class="waiting-item-row ${isSelected ? 'selected-row' : ''}" data-id="${item.id}" style="cursor: pointer;">
+          <td style="text-align: center;">
             <label class="custom-checkbox-label" style="display: inline-flex; align-items: center; justify-content: center; margin: 0; cursor: pointer;">
               <input type="checkbox" class="waiting-item-checkbox" data-id="${item.id}" ${isSelected ? 'checked' : ''} />
             </label>
@@ -413,8 +428,19 @@ export function renderPickingTask(container, currentUser) {
       `;
     }).join('');
 
-    // Populate mobile card list
-    pickingMobileCardList.innerHTML = waitingItems.map(item => {
+    // Populate mobile card list with mobile Select All header
+    const isAllMobileSelected = waitingItems.length > 0 && waitingItems.every(item => selectedWaitingTicketIds.has(item.id));
+    const mobileSelectAllHtml = `
+      <div class="mobile-select-all-header" style="display: flex; align-items: center; justify-content: space-between; background: var(--surface); padding: 10px 14px; border-radius: 10px; margin-bottom: 10px; border: 1px solid var(--border-light);">
+        <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--text-primary); cursor: pointer; margin: 0;">
+          <input type="checkbox" id="mobileSelectAllCheckbox" ${isAllMobileSelected ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--primary-600); cursor: pointer;" />
+          <span>Select All (${waitingItems.length} items)</span>
+        </label>
+        <span style="font-size: 12px; font-weight: 700; color: var(--primary-700);">${selectedWaitingTicketIds.size} selected</span>
+      </div>
+    `;
+
+    pickingMobileCardList.innerHTML = mobileSelectAllHtml + waitingItems.map(item => {
       const isSelected = selectedWaitingTicketIds.has(item.id);
       const sourceLabel = item.sourceProcess === 'Request_Checker' ? 'Request' : 'Lost & Found';
       const sourceClass = item.sourceProcess === 'Request_Checker' ? 'request' : 'lost-found';
@@ -445,6 +471,19 @@ export function renderPickingTask(container, currentUser) {
       `;
     }).join('');
 
+    // Mobile Select All checkbox listener
+    const mobileSelectAllCheckbox = container.querySelector('#mobileSelectAllCheckbox');
+    if (mobileSelectAllCheckbox) {
+      mobileSelectAllCheckbox.addEventListener('change', () => {
+        if (mobileSelectAllCheckbox.checked) {
+          waitingItems.forEach(item => selectedWaitingTicketIds.add(item.id));
+        } else {
+          waitingItems.forEach(item => selectedWaitingTicketIds.delete(item.id));
+        }
+        renderTasks();
+      });
+    }
+
     // Select all checkbox event (desktop)
     const bulkSelectAllCheckbox = container.querySelector('#bulkSelectAllCheckbox');
     if (bulkSelectAllCheckbox) {
@@ -459,16 +498,35 @@ export function renderPickingTask(container, currentUser) {
       });
     }
 
+    // Individual checkbox event listeners (desktop table)
+    pickingTableBody.querySelectorAll('.waiting-item-checkbox').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const id = checkbox.dataset.id;
+        if (checkbox.checked) {
+          selectedWaitingTicketIds.add(id);
+        } else {
+          selectedWaitingTicketIds.delete(id);
+        }
+        const rowEl = checkbox.closest('tr');
+        if (rowEl) rowEl.classList.toggle('selected-row', checkbox.checked);
+
+        if (bulkSelectAllCheckbox) {
+          bulkSelectAllCheckbox.checked = waitingItems.every(item => selectedWaitingTicketIds.has(item.id));
+        }
+        updateBulkActionBar(waitingItems);
+        updateMobileFloatingActionBar();
+      });
+    });
+
     // Row selection event (desktop click)
     pickingTableBody.querySelectorAll('.waiting-item-row').forEach(rowEl => {
       const id = rowEl.dataset.id;
       const checkbox = rowEl.querySelector('.waiting-item-checkbox');
 
       rowEl.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
-        if (e.target !== checkbox) {
-          checkbox.checked = !checkbox.checked;
-        }
+        if (e.target.closest('button') || e.target === checkbox) return;
+        checkbox.checked = !checkbox.checked;
         if (checkbox.checked) {
           selectedWaitingTicketIds.add(id);
         } else {
@@ -568,48 +626,14 @@ export function renderPickingTask(container, currentUser) {
         </div>
         <button id="bulkAssignBtn" class="btn-primary" style="height: 38px; padding: 0 16px; font-size: 13px; border-radius: 8px;">
           <span class="material-icons-round" style="font-size: 16px;">play_arrow</span>
-          <span>Assign & Start Picking (${count})</span>
+          <span>Start Picking (${count})</span>
         </button>
       </div>
     `;
 
-    // Bulk assign click listener
-    barContainer.querySelector('#bulkAssignBtn').addEventListener('click', async () => {
-      const pendingRc = db.getPendingRequests();
-      const pendingLf = db.getPendingLostAndFound();
-      
-      const selectedReqsRc = pendingRc.filter(r => selectedWaitingTicketIds.has(String(r.ticketId || r.uniqueid)));
-      const selectedReqsLf = pendingLf.filter(r => selectedWaitingTicketIds.has(String(r.ticketId || r.uniqueid)));
-
-      if (selectedReqsRc.length === 0 && selectedReqsLf.length === 0) return;
-
-      showBlockerLock(`Creating Picking Tasks for ${count} items...`);
-      try {
-        let totalCreated = 0;
-        if (selectedReqsRc.length > 0) {
-          const createdRc = await db.createPickingTasks(selectedReqsRc, currentUser.name, 'Request_Checker');
-          totalCreated += createdRc.length;
-        }
-        if (selectedReqsLf.length > 0) {
-          const createdLf = await db.createPickingTasks(selectedReqsLf, currentUser.name, 'Lost_And_Found');
-          totalCreated += createdLf.length;
-        }
-
-        showToast(`Successfully assigned ${totalCreated} picking task(s) to you!`);
-        selectedWaitingTicketIds.clear();
-        
-        activeFilter = 'Picking';
-        const tab = Array.from(filterTabs).find(t => t.dataset.filter === 'Picking');
-        if (tab) {
-          filterTabs.forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
-        }
-        renderTasks();
-      } catch (err) {
-        console.error('Failed bulk assignment:', err);
-      } finally {
-        hideBlockerLock();
-      }
+    // Bulk action click listener triggers slide to start confirmation modal
+    barContainer.querySelector('#bulkAssignBtn').addEventListener('click', () => {
+      openMobileConfirmModal();
     });
   }
 
@@ -868,23 +892,24 @@ export function renderPickingTask(container, currentUser) {
                 />
               </div>
 
-              <!-- Location -->
+              <!-- Location (Custom Dropdown) -->
               <div class="form-field-wrapper span-full">
-                <label class="form-label">Storage Location (10–30 chars)</label>
-                <input 
-                  type="text" 
-                  id="putawayLocationInput" 
-                  class="text-control" 
-                  placeholder="e.g. CBT-MZF3-35-03-L1-04" 
-                  list="pickingRacksDatalist"
-                  minlength="10"
-                  maxlength="30"
-                  required
-                />
-                <datalist id="pickingRacksDatalist">
-                  ${(db.getRacks ? db.getRacks() : []).map(r => `<option value="${escapeHtml(r.locationName || r.rackName)}">${escapeHtml(r.locationName || r.rackName)}${r.zone ? ` (${r.zone})` : ''}</option>`).join('')}
-                </datalist>
-                <span class="input-helper-text" id="putawayLocationHelper">Should contain 10 to 30 characters. Current length: 0</span>
+                <label class="form-label">Storage Location <span style="color: var(--danger);">*</span></label>
+                <div class="custom-dropdown-container" id="putawayRackDropdown" style="position: relative; width: 100%;">
+                  <div class="custom-dropdown-trigger text-control" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; height: 42px;">
+                    <span class="trigger-label" style="color: var(--text-secondary); font-size: 13px;">Select or search rack location...</span>
+                    <span class="material-icons-round" style="font-size: 20px; color: var(--text-muted);">unfold_more</span>
+                  </div>
+                  <div class="custom-dropdown-menu" style="display: none; position: absolute; bottom: calc(100% + 4px); top: auto; left: 0; right: 0; background: #fff; border: 1.5px solid var(--border-light); border-radius: 12px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15); z-index: 5000; padding: 8px;">
+                    <div style="margin-bottom: 8px; position: relative;">
+                      <input type="text" id="rackSearchFilterInput" class="text-control" placeholder="Search rack location or zone..." style="width: 100%; height: 36px; font-size: 12px; padding-left: 30px;" />
+                      <span class="material-icons-round" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
+                    </div>
+                    <div id="rackOptionsList" style="display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto;"></div>
+                  </div>
+                </div>
+                <input type="hidden" id="putawayLocationInput" required />
+                <span class="input-helper-text" id="putawayLocationHelper">Select target rack location for putaway</span>
               </div>
             </div>
 
@@ -909,21 +934,78 @@ export function renderPickingTask(container, currentUser) {
     const putawayLocationInput = modalOverlay.querySelector('#putawayLocationInput');
     const putawayLocationHelper = modalOverlay.querySelector('#putawayLocationHelper');
 
+    // Custom Dropdown Logic for Rack Locations
+    const rackDropdownContainer = modalOverlay.querySelector('#putawayRackDropdown');
+    const rackTriggerBtn = rackDropdownContainer.querySelector('.custom-dropdown-trigger');
+    const rackTriggerLabel = rackTriggerBtn.querySelector('.trigger-label');
+    const rackMenuEl = rackDropdownContainer.querySelector('.custom-dropdown-menu');
+    const rackSearchInput = rackDropdownContainer.querySelector('#rackSearchFilterInput');
+    const rackOptionsList = rackDropdownContainer.querySelector('#rackOptionsList');
+
+    const allRacks = (db.getRacks ? db.getRacks() : []).map(r => ({
+      name: String(r.locationName || r.rackName || '').trim(),
+      zone: String(r.zone || '').trim()
+    })).filter(r => r.name);
+
+    let selectedRackVal = '';
+
+    function renderRackOptions(filter = '') {
+      const q = filter.toLowerCase().trim();
+      const filtered = allRacks.filter(r => r.name.toLowerCase().includes(q) || r.zone.toLowerCase().includes(q));
+
+      if (filtered.length === 0) {
+        rackOptionsList.innerHTML = `<div style="padding: 10px; font-size: 12px; color: var(--text-muted); text-align: center;">No matching racks found</div>`;
+        return;
+      }
+
+      rackOptionsList.innerHTML = filtered.map(r => `
+        <div class="custom-dropdown-option ${r.name === selectedRackVal ? 'active' : ''}" data-value="${escapeHtml(r.name)}" style="padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; color: var(--text-primary);">${escapeHtml(r.name)}</span>
+          ${r.zone ? `<span style="font-size: 10px; font-weight: 600; color: var(--primary-700); background: var(--primary-50); padding: 2px 6px; border-radius: 4px;">${escapeHtml(r.zone)}</span>` : ''}
+        </div>
+      `).join('');
+
+      rackOptionsList.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectedRackVal = opt.dataset.value;
+          putawayLocationInput.value = selectedRackVal;
+          rackTriggerLabel.textContent = selectedRackVal;
+          rackTriggerLabel.style.color = 'var(--text-primary)';
+          rackTriggerLabel.style.fontWeight = '700';
+          putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
+          putawayLocationHelper.style.color = 'var(--success)';
+          rackMenuEl.style.display = 'none';
+        });
+      });
+    }
+
+    renderRackOptions();
+
+    rackTriggerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isVisible = rackMenuEl.style.display === 'block';
+      rackMenuEl.style.display = isVisible ? 'none' : 'block';
+      if (!isVisible) {
+        rackSearchInput.focus();
+      }
+    });
+
+    rackSearchInput.addEventListener('input', (e) => {
+      renderRackOptions(e.target.value);
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!rackDropdownContainer.contains(e.target)) {
+        rackMenuEl.style.display = 'none';
+      }
+    });
+
     const closeModal = () => modalOverlay.remove();
     closeBtn.addEventListener('click', closeModal);
     cancelBtn.addEventListener('click', closeModal);
     modalOverlay.addEventListener('click', (e) => {
       if (e.target === modalOverlay) closeModal();
-    });
-
-    putawayLocationInput.addEventListener('input', () => {
-      const len = putawayLocationInput.value.length;
-      putawayLocationHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
-      if (len >= 10 && len <= 30) {
-        putawayLocationHelper.style.color = 'var(--success)';
-      } else {
-        putawayLocationHelper.style.color = '';
-      }
     });
 
     putawayForm.addEventListener('submit', async (e) => {

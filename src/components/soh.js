@@ -1200,7 +1200,8 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
   const deductionReasons = [
     { value: 'Recovery LDP', label: 'Recovery LDP' },
     { value: 'Recovery SO', label: 'Recovery SO' },
-    { value: 'WH Adjust IN', label: 'WH Adjust IN' }
+    { value: 'WH Adjust IN', label: 'WH Adjust IN' },
+    { value: 'Findings discrepancy', label: 'Findings discrepancy' }
   ];
 
   // Element handles

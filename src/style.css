@@ -513,6 +513,56 @@ body {
   border-bottom: 1px solid var(--border-light);
 }
 
+/* Filter Toolbar & Sub-tabs System */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-tabs-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-body);
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--border-light);
+}
+
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.filter-tab .material-icons-round {
+  font-size: 16px;
+}
+
+.filter-tab:hover {
+  background: rgba(21, 101, 192, 0.08);
+  color: var(--primary-700);
+}
+
+.filter-tab.active {
+  background: var(--primary-600);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(21, 101, 192, 0.25);
+}
+
 .card-title-group h3 {
   font-size: 18px;
   font-weight: 800;
@@ -1153,10 +1203,10 @@ body {
   }
 
   .sidebar-nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
     width: 100% !important;
     height: 68px !important;
     padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)) !important;
@@ -1166,10 +1216,20 @@ body {
     border-top: 1px solid var(--border-light);
     border-right: none;
     border-bottom: none;
-    z-index: 1000;
+    z-index: 3000 !important;
     flex-direction: row;
     align-items: center;
     box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.08);
+    touch-action: none;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+
+  .app-main-content,
+  .main-content,
+  .card-panel,
+  #appContent {
+    padding-bottom: 80px !important;
   }
 
   .sidebar-header,
@@ -2159,15 +2219,50 @@ body {
     overflow: visible !important;
   }
 
-  .stock-movement-panel #smFilterToolbar {
-    position: relative !important;
-    z-index: 2000 !important;
-    overflow: visible !important;
+  #mobileFloatingActionBarContainer,
+  #mobileStartPickBtn {
+    display: none !important;
   }
 }
 
 /* Standard Mobile Viewports (@media max-width: 768px) */
 @media (max-width: 768px) {
+  /* Mobile Filter Toolbar & Sub-tabs Optimization */
+  .filter-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .filter-tabs-group {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    gap: 6px !important;
+    padding: 6px !important;
+    background: var(--surface-body) !important;
+    border-radius: 14px !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .filter-tabs-group::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filter-tab {
+    flex-shrink: 0 !important;
+    padding: 8px 14px !important;
+    font-size: 12px !important;
+  }
+
+  .filter-toolbar .search-box-wrapper {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
   /* Stock Movement mobile layout optimization */
   .stock-movement-panel {
     display: flex !important;
