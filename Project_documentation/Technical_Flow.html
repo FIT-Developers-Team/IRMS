@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRMS Technical Flow — User Guide</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fc;
+      --surface: #ffffff;
+      --primary: #1565c0;
+      --primary-light: #eef6ff;
+      --primary-dark: #0d47a1;
+      --accent: #0288d1;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.75;
+      padding: 32px 16px;
+    }
+    .container { max-width: 980px; margin: 0 auto; }
+
+    /* Header */
+    header {
+      background: #1565c0;
+      border-radius: 24px;
+      padding: 44px 52px;
+      margin-bottom: 40px;
+      color: #fff;
+    }
+    header .tag {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    header h1 { font-size: 30px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.5px; }
+    header p { font-size: 15px; opacity: 0.78; max-width: 600px; line-height: 1.6; }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      margin-bottom: 40px;
+    }
+    .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
+    .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px; }
+    .toc-grid a { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 14px; padding: 4px 0; border-bottom: 1px dashed var(--border); display: block; }
+    .toc-grid a:hover { color: var(--primary-dark); border-bottom-color: var(--primary); }
+
+    /* Sections */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .section-num {
+      background: var(--primary);
+      color: #fff;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 17px; font-weight: 700; color: var(--primary); }
+    .section-body { padding: 28px 32px; }
+
+    /* Typography */
+    h3 { font-size: 14px; font-weight: 700; color: var(--primary-dark); margin: 24px 0 8px; display: flex; align-items: center; gap: 8px; }
+    h3::before { content: ''; display: block; width: 3px; height: 16px; background: var(--primary); border-radius: 2px; }
+    p { margin: 8px 0; font-size: 14px; color: var(--text); }
+    ul, ol { padding-left: 20px; font-size: 14px; color: var(--text); }
+    li { margin: 6px 0; line-height: 1.6; }
+    strong { color: var(--primary-dark); }
+    code {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--primary);
+    }
+
+    /* Info callouts */
+    .callout {
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 13px;
+      line-height: 1.6;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .callout-icon { font-size: 16px; margin-top: 1px; flex-shrink: 0; }
+    .callout.blue { background: #eff8ff; border-left: 4px solid var(--primary); color: #1e3a5f; }
+    .callout.green { background: #f0fdf4; border-left: 4px solid var(--green); color: #14532d; }
+    .callout.amber { background: #fffbeb; border-left: 4px solid var(--amber); color: #78350f; }
+
+    /* Step list */
+    .step-list { list-style: none; padding: 0; margin: 10px 0; }
+    .step-list li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 10px 0;
+      font-size: 14px;
+    }
+    .step-num {
+      background: var(--primary);
+      color: #fff;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .step-content { flex: 1; }
+    .step-label { font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .step-desc { color: var(--text-muted); font-size: 13px; }
+
+    /* Data flow table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+    }
+    td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+    tr:nth-child(even) td { background: #fafbff; }
+
+    /* Badges */
+    .badge { display: inline-block; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .badge-blue { background: var(--primary-light); color: var(--primary); }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .badge-gray { background: #f1f5f9; color: #475569; }
+
+    /* View Chart Button */
+    .chart-trigger-wrap {
+      margin: 20px 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .chart-label-text {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .btn-view-chart {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.12s;
+    }
+    .btn-view-chart:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    .btn-view-chart:active { transform: translateY(0); }
+    .mermaid-source { display: none; }
+
+    /* ========== CHART MODAL ========== */
+    #chartModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: rgba(10, 20, 50, 0.72);
+      backdrop-filter: blur(6px);
+      align-items: center;
+      justify-content: center;
+    }
+    #chartModal.open { display: flex; }
+    .modal-box {
+      position: relative;
+      background: var(--surface);
+      border-radius: 20px;
+      width: calc(100vw - 48px);
+      height: calc(100vh - 80px);
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--primary-light);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: var(--primary); }
+    .modal-controls { display: flex; align-items: center; gap: 8px; }
+    .ctrl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ctrl-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .ctrl-btn.close-btn { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .ctrl-btn.close-btn:hover { background: #fee2e2; }
+    .zoom-level { font-size: 12px; font-weight: 700; color: var(--text-muted); min-width: 44px; text-align: center; }
+    .modal-hint { font-size: 11px; color: var(--text-muted); padding: 6px 20px; background: #fafbff; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modal-canvas { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+    .modal-canvas.dragging { cursor: grabbing; }
+    .chart-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; display: flex; align-items: center; justify-content: center; padding: 40px; }
+    .chart-inner svg { max-width: none !important; height: auto; }
+
+    /* Role card grid */
+    .role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+    .role-card { background: var(--primary-light); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .role-card .role-name { font-size: 13px; font-weight: 800; color: var(--primary); margin-bottom: 6px; }
+    .role-card ul { padding-left: 16px; font-size: 12px; color: var(--text-muted); }
+    .role-card li { margin: 3px 0; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    @media (max-width: 600px) {
+      .toc-grid { grid-template-columns: 1fr; }
+      .role-grid { grid-template-columns: 1fr; }
+      header { padding: 28px 24px; }
+      .section-body { padding: 20px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="tag">User Guide — Technical Flow</div>
+    <h1>IRMS — How the System Works</h1>
+    <p>A plain-language explanation of every feature in the Inventory Recovery Management System — what you do, what happens behind the scenes, and how your data is saved and kept accurate.</p>
+  </header>
+
+  <div class="toc">
+    <div class="toc-label">Table of Contents</div>
+    <div class="toc-grid">
+      <a href="#s1">1. Logging In &amp; Access Control</a>
+      <a href="#s2">2. Creating a Pickup Request</a>
+      <a href="#s3">3. Picking Items from Checker Lines</a>
+      <a href="#s4">4. Putting Items Away into Racks</a>
+      <a href="#s5">5. Viewing Current Stock (SOH)</a>
+      <a href="#s6">6. Removing Damaged or Lost Stock</a>
+      <a href="#s7">7. Moving Stock Between Locations</a>
+      <a href="#s8">8. Recording Found Items (Lost &amp; Found)</a>
+      <a href="#s9">9. Managing Users, Zones &amp; Racks (Admin)</a>
+      <a href="#s10">10. How Your Data Is Saved &amp; Kept Fresh</a>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 1 ============================== -->
+  <div class="section" id="s1">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>Logging In &amp; Access Control</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>The login process confirms who you are and decides which parts of the system you can access. Every user belongs to a <strong>role</strong>, and each role has its own set of permissions.</p>
+
+      <div class="role-grid">
+        <div class="role-card">
+          <div class="role-name">Super (Admin)</div>
+          <ul>
+            <li>Full access to everything</li>
+            <li>Can manage users, zones, racks</li>
+            <li>Can see all staff's records</li>
+          </ul>
+        </div>
+        <div class="role-card">
+          <div class="role-name">Staff / Checker</div>
+          <ul>
+            <li>Create pickup requests</li>
+            <li>Record lost &amp; found items</li>
+            <li>View own records only</li>
+          </ul>
+        </div>
+        <div class="role-card">
+          <div class="role-name">Picker</div>
+          <ul>
+            <li>Accept and start picking tasks</li>
+            <li>Complete putaway into racks</li>
+            <li>Complete stock movements</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>What Happens Step by Step</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">You open the application</div>
+            <div class="step-desc">The app immediately checks if you were already logged in before. If yes, it loads your last saved data from the device and takes you straight to the dashboard — instantly, with no loading wait. This works even if the internet is temporarily unavailable.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">You enter your name and password</div>
+            <div class="step-desc">Your credentials are compared against the user list stored in the system (which comes from the Google Sheets staff database). The check is done entirely on the device — no slow server round-trip needed for login itself.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Login succeeds — your session is saved</div>
+            <div class="step-desc">A secure session record is saved on your device with a 4-hour expiry timer. The app then downloads the latest product catalogue, zone list, rack list, checker lines, and user list from Google Sheets and stores them on your device for fast access throughout your shift.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">Session automatically expires after 4 hours</div>
+            <div class="step-desc">Every 15 seconds the app quietly checks your session timer in the background. When it expires, a lock screen appears prompting you to log in again. Your unsaved work is not lost — you simply re-authenticate to continue.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout blue">
+        <div class="callout-icon">i</div>
+        <div><strong>What is saved:</strong> Your login session (name, role, expiry time) is saved on your browser's local storage. It does not travel to any server during logout — it is simply deleted from the device.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Login Flow Diagram</span>
+        <button class="btn-view-chart" onclick="openChart('tf1', 'Login & Access Control Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf1">
+flowchart TD
+    A["You Open the App"] --> B{"Were you already\nlogged in before?"}
+    B -- Yes --> C["Load saved data from device\ninstantly — no wait"]
+    C --> D["Show your Dashboard"]
+    B -- No --> E["Show Login Screen"]
+    E --> F["You type your name\nand password"]
+    F --> G{"Does it match\na known staff account?"}
+    G -- No --> H["Show error message\nTry again"]
+    H --> E
+    G -- Yes --> I["Save your session\nfor 4 hours"]
+    I --> J["Download latest product list,\nracks, zones from Google Sheets"]
+    J --> D
+    D --> K{"Has your\n4-hour session expired?"}
+    K -- Yes --> L["Show lock screen\nRe-enter password"]
+    L --> F
+    K -- No --> M["Continue working normally"]
+      </pre>
+
+      <hr>
+      <h3>What Data Is Saved &amp; Where</h3>
+      <table>
+        <tr><th>What</th><th>Where It Is Saved</th><th>When It Is Saved</th></tr>
+        <tr><td>Your session (name, role, expiry)</td><td>Browser local storage on your device</td><td>Immediately on successful login</td></tr>
+        <tr><td>Product catalogue (SKUs)</td><td>Device database (IndexedDB)</td><td>On every fresh login or page refresh</td></tr>
+        <tr><td>Zones, racks, checker lines</td><td>Device database (IndexedDB)</td><td>On every fresh login or page refresh</td></tr>
+        <tr><td>Staff list</td><td>Device database (IndexedDB) + Google Sheets</td><td>On login; managed by Admin in Google Sheets</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 2 ============================== -->
+  <div class="section" id="s2">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Creating a Pickup Request</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>A <strong>Pickup Request</strong> is a formal request to retrieve a specific product from a checker line. When a checker or staff member needs an item picked up and moved into stock, they create a request here. The system assigns a unique tracking ID and routes the request to the picking queue.</p>
+
+      <div class="callout amber">
+        <div class="callout-icon">!</div>
+        <div><strong>Who can do this:</strong> Staff and Checker roles. Pickers and Admins can also see these requests but they are typically created by the person at the checker line.</div>
+      </div>
+
+      <h3>What Happens Step by Step</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">You click "New Pickup Request"</div>
+            <div class="step-desc">The form opens. The system immediately generates a unique ticket number for this request — for example <code>RC-482917</code>. This number is calculated locally on your device, so it appears instantly without any waiting.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">You select the SKU code (product code)</div>
+            <div class="step-desc">When you pick a product code from the searchable list, the system automatically fills in the product name, category, and whether it is Food or Non-Food — based on the product catalogue that was downloaded when you logged in. Nothing is fetched from the internet at this moment.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">You select the Checker Line and enter the quantity</div>
+            <div class="step-desc">The checker line list comes from your locally stored reference data. You also enter how many units are needed and any relevant notes about this request.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">You submit the request</div>
+            <div class="step-desc">The system immediately adds this request to your device's local list so you can see it right away. At the same time, the request is sent to Google Sheets in the background. The status is set to <strong>Pending</strong> — meaning it is waiting to be picked. If you are a non-admin, you only see requests created under your name.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout green">
+        <div class="callout-icon">+</div>
+        <div><strong>Behind the scenes:</strong> After the form is submitted, 2.5 seconds later the system re-downloads the latest request list from Google Sheets to make sure your local data reflects any changes made by other team members.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Pickup Request Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf2', 'Pickup Request Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf2">
+flowchart TD
+    A["You click New Pickup Request"] --> B["System generates\nunique ticket ID RC-XXXXXX\non your device instantly"]
+    B --> C["You select a Product (SKU)"]
+    C --> D["Product name and category\nfill in automatically\nfrom your downloaded catalogue"]
+    D --> E["You pick the Checker Line\nand enter quantity"]
+    E --> F{"All fields\nfilled in correctly?"}
+    F -- No --> G["Show error — please\ncomplete required fields"]
+    G --> E
+    F -- Yes --> H["Request saved locally\nimmediately — you see it\nright away"]
+    H --> I["Request sent to\nGoogle Sheets in background"]
+    I --> J["Status = Pending\nWaiting to be picked"]
+    J --> K["2.5 seconds later:\nLatest request list\nre-downloaded from Sheets"]
+    K --> L["Your request list\nstays up to date"]
+      </pre>
+
+      <hr>
+      <h3>What Data Is Saved &amp; Where</h3>
+      <table>
+        <tr><th>What</th><th>Saved On Device</th><th>Saved in Google Sheets</th></tr>
+        <tr><td>Ticket ID (e.g. <code>RC-482917</code>)</td><td>Yes — immediately</td><td>Yes — via background sync</td></tr>
+        <tr><td>Product (SKU code, name, category)</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Checker Line, Quantity, Notes</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Status (Pending)</td><td>Yes</td><td>Yes</td></tr>
+        <tr><td>Your name as creator, timestamp</td><td>Yes</td><td>Yes</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 3 ============================== -->
+  <div class="section" id="s3">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>Picking Items from Checker Lines</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>The <strong>Picking Task</strong> section shows all open pickup requests and lost &amp; found items that are waiting to be physically collected from checker lines. A picker selects which items they are going to pick up, confirms with a swipe gesture, and the tasks are officially assigned to them.</p>
+
+      <h3>What Happens Step by Step</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">You open the Picking Task section</div>
+            <div class="step-desc">The app immediately fetches the latest pending requests from Google Sheets. The Waiting List shows all items with status <strong>Pending</strong> from both the Pickup Request list and the Lost &amp; Found list. A badge on the tab tells you how many are waiting.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">You select which items you will pick</div>
+            <div class="step-desc">On desktop, tick the checkboxes. On mobile, tap each task card to highlight it. A floating bar at the bottom shows how many items you have selected, for example "Start Picking (4)".</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">You confirm by swiping right</div>
+            <div class="step-desc">When you tap "Start Picking", a confirmation panel appears showing the list of items you selected. You drag a slider all the way to the right (at least 90% of the way) to confirm. This extra step prevents accidental starts. Once confirmed, all selected items are instantly assigned to you.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">Tasks move to "Picking — In Progress"</div>
+            <div class="step-desc">Each task gets a unique Picking ID (e.g. <code>PK-391042</code>), your name is recorded as the picker, and the status changes from <strong>Pending</strong> to <strong>Picking</strong>. The original requests (Pickup Request or Lost &amp; Found) are also updated to reflect this status. Everything is saved both locally and in Google Sheets.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout blue">
+        <div class="callout-icon">i</div>
+        <div><strong>Visibility rules:</strong> Super and Manager roles can see all picking tasks from all staff. Regular pickers only see tasks assigned to themselves.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Picking Task Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf3', 'Picking Task Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf3">
+flowchart TD
+    A["Open Picking Task section"] --> B["App downloads latest\npending tasks from Google Sheets"]
+    B --> C["Waiting List shows all\nPending requests and Lost & Found items"]
+    C --> D["You select tasks\nyou will go pick up"]
+    D --> E["Tap Start Picking"]
+    E --> F["Review list of\nselected items in panel"]
+    F --> G{"Swipe slider\nat least 90% right?"}
+    G -- No --> F
+    G -- Yes --> H["System creates Picking ID\nPK-XXXXXX for each task"]
+    H --> I["Your name recorded\nas the picker"]
+    I --> J["Status changes:\nPending to Picking"]
+    J --> K["Tasks saved locally\nand sent to Google Sheets"]
+    K --> L["Tasks appear in\nPicking In Progress tab"]
+    L --> M["Original requests updated\nto Picking status too"]
+      </pre>
+
+      <hr>
+      <h3>What Data Is Saved &amp; Where</h3>
+      <table>
+        <tr><th>What</th><th>Where</th><th>When</th></tr>
+        <tr><td>Picking ID (e.g. <code>PK-391042</code>)</td><td>Device + Google Sheets</td><td>Immediately on swipe confirm</td></tr>
+        <tr><td>Picker name (your name)</td><td>Device + Google Sheets</td><td>Immediately</td></tr>
+        <tr><td>Status updated to "Picking"</td><td>Device + Google Sheets (Picking_Task, Request_Checker, Lost_And_Found sheets)</td><td>Immediately + background sync</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 4 ============================== -->
+  <div class="section" id="s4">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>Putting Items Away into Racks (Putaway)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>After physically picking up items from the checker line, the picker places them into a warehouse rack location. This is called <strong>Putaway</strong>. When you record a putaway, the system automatically updates the live stock count (SOH — Stock on Hand) for that product at that rack location.</p>
+
+      <h3>What Happens Step by Step</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">You click "Complete / Putaway" on a task</div>
+            <div class="step-desc">In the Picking In Progress tab, find your task and click the complete button. A form opens pre-filled with the product details.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">You select the destination rack</div>
+            <div class="step-desc">A searchable location picker appears showing all racks in the warehouse, filtered by zone. You select the exact rack where you are placing the items — for example <code>A-01-02</code>.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">You confirm the quantity and submit</div>
+            <div class="step-desc">The quantity defaults to the full task amount. You can adjust it if you are doing a partial putaway. When you submit, several things happen at once automatically — see below.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">The system updates all related records</div>
+            <div class="step-desc">The putaway record is saved. A stock activity log entry is created (showing stock moved from the checker line to the rack). The current stock count for that product at that rack location is updated. If the full quantity has been put away, the task is marked <strong>Completed</strong>.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout green">
+        <div class="callout-icon">+</div>
+        <div><strong>How the stock count is updated:</strong> The system checks whether this product already exists at this rack location in the stock list. If yes, it adds your quantity to the existing count. If no, it creates a new stock record for this product-location combination. This update goes directly to Google Sheets, adjusting the SOH number in real time.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Putaway Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf4', 'Putaway Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf4">
+flowchart TD
+    A["Click Complete / Putaway\non your in-progress task"] --> B["Form opens with\nproduct details pre-filled"]
+    B --> C["You pick the rack location\nwhere you are placing the items"]
+    C --> D["Confirm quantity\nand submit"]
+    D --> E["Putaway record saved\nwith unique ID PT-XXXXXX"]
+    E --> F["Stock Activity log created:\nFrom: Checker Line\nTo: Rack Location"]
+    F --> G{"Does this product\nalready exist at this\nrack location in stock?"}
+    G -- Yes --> H["Add your quantity\nto existing stock count"]
+    G -- No --> I["Create new stock entry\nfor this product-location"]
+    H --> J["Stock on Hand updated\nin Google Sheets"]
+    I --> J
+    J --> K{"Was all the\nquantity put away?"}
+    K -- Yes --> L["Task status = Completed\nAll related records updated"]
+    K -- No --> M["Task remains In Progress\nfor remaining quantity"]
+      </pre>
+
+      <hr>
+      <h3>What Data Is Saved &amp; Where</h3>
+      <table>
+        <tr><th>What Gets Saved</th><th>Sheet in Google Sheets</th><th>What Changes</th></tr>
+        <tr><td>Putaway record</td><td>Putaway</td><td>New row added with location, quantity, operator, time</td></tr>
+        <tr><td>Stock activity log</td><td>Stock_Activity</td><td>New entry: movement from checker line to rack</td></tr>
+        <tr><td>Stock on hand count</td><td>SOH</td><td>Quantity increased at the rack location</td></tr>
+        <tr><td>Task status</td><td>Picking_Task</td><td>Updated to "Completed" when fully put away</td></tr>
+        <tr><td>Original request status</td><td>Request_Checker or Lost_And_Found</td><td>Updated to "Completed"</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 5 ============================== -->
+  <div class="section" id="s5">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>Viewing Current Stock — Stock on Hand (SOH)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>The <strong>Stock on Hand (SOH)</strong> screen shows you the live inventory count for every product at every rack location across the warehouse. Numbers here are automatically updated whenever a putaway is completed or a stock movement/deduction is processed.</p>
+
+      <h3>What You Can See</h3>
+      <ul>
+        <li><strong>Total SKUs in stock</strong> — how many unique products are currently stored</li>
+        <li><strong>Total quantity across all racks</strong> — the warehouse-wide item count</li>
+        <li><strong>High-age stock</strong> — products that have been sitting for a long time without movement</li>
+        <li><strong>Deduction required</strong> — items flagged as damaged, expired, or missing</li>
+      </ul>
+      <p>You can filter the list by product code, product name, category, rack location, or how long the stock has been stored.</p>
+
+      <div class="callout blue">
+        <div class="callout-icon">i</div>
+        <div><strong>Where the numbers come from:</strong> Every time a putaway is completed, the SOH count at that rack increases. Every time a stock movement or deduction is completed, the SOH count decreases. The SOH screen always reflects the current state of the Google Sheets database, fetched fresh when you navigate to this section.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">SOH Data Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf5', 'Stock On Hand Data Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf5">
+flowchart TD
+    A["You open the SOH section"] --> B["App fetches latest\nstock data from Google Sheets"]
+    B --> C["Display stock summary:\nTotal SKUs, Total Qty, High Age, Deductions"]
+    C --> D["You filter by product,\nlocation, category, or age"]
+
+    E["Putaway Completed"] -->|adds stock| F["SOH count increases\nat that rack location"]
+    G["Stock Movement Done"] -->|moves stock| H["SOH decreases at source\nSOH increases at destination"]
+    I["Stock Deduction Done"] -->|removes stock| J["SOH decreases at source rack"]
+
+    F --> C
+    H --> C
+    J --> C
+      </pre>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 6 ============================== -->
+  <div class="section" id="s6">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Removing Damaged or Lost Stock — Stock Deduction</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>When stock needs to be removed from the warehouse — because it is damaged, expired, missing, or there is a count discrepancy — you create a <strong>Stock Deduction</strong>. This creates a task in the system that must be reviewed and completed before the stock count is actually reduced.</p>
+
+      <h3>What Happens Step by Step</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">You find the product in the SOH list</div>
+            <div class="step-desc">Navigate to the Stock on Hand section, find the specific product-rack row, and click "Deduct Stock".</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">You fill in the deduction form</div>
+            <div class="step-desc">The product details and current rack location are already filled in. You choose a reason for the deduction: Bad/Damaged/Expired, Lost/Missing, Discrepancy Correction, or Sample/Testing. The "destination" is automatically set to <strong>Deduction</strong> and cannot be changed — this signals that the stock is leaving the warehouse entirely.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">A task is created in the movement queue</div>
+            <div class="step-desc">The system does not immediately reduce the stock count. Instead, it creates a <strong>Stock Movement task</strong> with type "Stock Deduction" and status "Assigned". This task must then be verified and completed (see Section 7) before the stock number actually changes.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout amber">
+        <div class="callout-icon">!</div>
+        <div><strong>Why the two-step process?</strong> This prevents accidental or fraudulent stock removals. A second staff member must physically verify the SKU code before the count is reduced in the system.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Stock Deduction Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf6', 'Stock Deduction Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf6">
+flowchart TD
+    A["Find product in SOH list\nClick Deduct Stock"] --> B["Form opens with\nproduct and rack pre-filled"]
+    B --> C["Select reason:\nDamaged / Lost / Discrepancy / Sample"]
+    C --> D["Enter quantity to remove"]
+    D --> E["Destination locked to Deduction\ncannot be changed"]
+    E --> F["Submit deduction request"]
+    F --> G["Stock Movement task created\nType = Stock Deduction\nStatus = Assigned"]
+    G --> H["Task appears in\nStock Movement queue"]
+    H --> I["Awaiting verification\nby staff before stock\ncount actually changes"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 7 ============================== -->
+  <div class="section" id="s7">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Moving Stock Between Locations</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>The <strong>Stock Movement</strong> section handles two types of tasks: physically <strong>transferring stock between rack locations</strong> (e.g., moving items from rack A-01 to rack B-03), and <strong>completing stock deductions</strong> that were created in the SOH section. Both require a double-verification step to prevent mistakes.</p>
+
+      <h3>The Double-Verification Process</h3>
+      <p>When you click "Complete Task" on a movement, the system walks you through two verification steps before anything is changed:</p>
+
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Step 1 — Verify the SKU Code</div>
+            <div class="step-desc">You scan or manually type the product code (SKU) of the item you are holding. The system checks it against the expected SKU for this task. If they do not match, the process is blocked and an error is shown. You must scan the correct item to continue.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Step 2 — Verify the Location</div>
+            <div class="step-desc">For a <strong>transfer</strong>, you confirm the destination rack where you are placing the items. For a <strong>deduction</strong>, the location is automatically "Deduction" and does not need to be entered manually.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Click "Verify &amp; Complete"</div>
+            <div class="step-desc">Once both steps pass, the system executes all changes simultaneously: the movement is marked Done, the stock count at the source location decreases, and (for transfers only) the stock count at the destination location increases. Two activity log entries are created.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout green">
+        <div class="callout-icon">+</div>
+        <div><strong>For transfers:</strong> Two log entries are created — one showing stock going <em>out</em> (minus) from the source rack, and one showing stock coming <em>in</em> (plus) to the destination rack. This gives a complete audit trail for every movement.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Stock Movement Verification Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf7', 'Stock Movement Verification Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf7">
+flowchart TD
+    A["Open Stock Movement section"] --> B["See list of assigned tasks:\nTransfers and Deductions"]
+    B --> C["Click Complete Task"]
+    C --> D["Step 1:\nType or scan the product SKU code"]
+    D --> E{"Does it match\nthe task product?"}
+    E -- No --> F["Error: Wrong product\nCannot continue"]
+    F --> D
+    E -- Yes --> G["Step 2:\nConfirm destination location"]
+    G --> H["Click Verify & Complete"]
+    H --> I["Task status = Done"]
+    I --> J["Stock at source location\ndecreased by quantity"]
+    J --> K{"Is this a transfer\nor a deduction?"}
+    K -- Transfer --> L["Stock at destination\nincreased by quantity"]
+    L --> M["Two log entries created:\nOut from source, In to destination"]
+    K -- Deduction --> N["Stock removed permanently\nOne log entry created: Out"]
+    M --> O["SOH updated in Google Sheets\nActivity log entry saved"]
+    N --> O
+      </pre>
+
+      <hr>
+      <h3>What Data Is Saved &amp; Where</h3>
+      <table>
+        <tr><th>What Gets Updated</th><th>Sheet</th><th>Detail</th></tr>
+        <tr><td>Movement task status</td><td>Stock_Movement</td><td>Changed to "Done"</td></tr>
+        <tr><td>Activity log — outbound</td><td>Stock_Activity</td><td>Quantity removed from source rack</td></tr>
+        <tr><td>Activity log — inbound (transfer only)</td><td>Stock_Activity</td><td>Quantity added to destination rack</td></tr>
+        <tr><td>Stock count at source</td><td>SOH</td><td>Decreased by moved quantity</td></tr>
+        <tr><td>Stock count at destination (transfer only)</td><td>SOH</td><td>Increased by moved quantity</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 8 ============================== -->
+  <div class="section" id="s8">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>Recording Found Items — Lost &amp; Found</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>When a staff member finds a product that does not have a home — it is sitting somewhere in the warehouse without being properly recorded in stock — they log it in the <strong>Lost &amp; Found</strong> section. This registers the item and automatically puts it into the picking waiting list so it can be properly put away into a rack and added to the official stock count.</p>
+
+      <h3>What Happens Step by Step</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">You click "New Lost &amp; Found Entry"</div>
+            <div class="step-desc">A form opens with a pre-generated ticket ID — for example <code>LF-728341</code>. This ID is created instantly on your device.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">You fill in the item details</div>
+            <div class="step-desc">Enter the product code (SKU), product name, and quantity found. Then select the zone and specific location where you found the item using the location picker. Add any notes about why it was found there.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">You submit the entry</div>
+            <div class="step-desc">The entry is saved locally and sent to Google Sheets. Status is set to <strong>Pending</strong>. The item immediately appears in the <strong>Picking Task Waiting List</strong> — so any picker can pick it up and put it away into a proper rack location, at which point it will count as official inventory in the SOH.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Lost &amp; Found Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf8', 'Lost & Found Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf8">
+flowchart TD
+    A["You find an item\nwith no proper location"] --> B["Click New Lost & Found Entry"]
+    B --> C["System generates LF-XXXXXX\nticket ID instantly"]
+    C --> D["You enter product,\nquantity, and where you found it"]
+    D --> E["Submit the entry"]
+    E --> F["Saved on your device\nand sent to Google Sheets"]
+    F --> G["Status = Pending"]
+    G --> H["Item automatically appears\nin Picking Task Waiting List"]
+    H --> I["A picker selects it\nand picks it up"]
+    I --> J["Picker completes putaway\ninto a proper rack location"]
+    J --> K["Item added to\nofficial stock count (SOH)"]
+    K --> L["Lost & Found entry\nmarked as Completed"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 9 ============================== -->
+  <div class="section" id="s9">
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <h2>Managing Users, Zones &amp; Racks (Admin Only)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>What This Does</h3>
+      <p>The <strong>Admin Panel</strong> is accessible only to users with the <strong>Super</strong> role. It is used to set up and maintain all the reference data the rest of the system depends on — who can log in, which warehouse zones exist, which rack locations exist, and which checker lines are active.</p>
+
+      <div class="callout amber">
+        <div class="callout-icon">!</div>
+        <div><strong>Important:</strong> Changes made in the Admin Panel affect everyone using the system. Adding or removing a rack location, for example, immediately updates the list of available locations in the Putaway and Stock Movement pickers for all staff.</div>
+      </div>
+
+      <h3>What You Can Manage</h3>
+      <table>
+        <tr><th>Section</th><th>What You Can Do</th><th>What Gets Updated</th></tr>
+        <tr>
+          <td><strong>User Management</strong></td>
+          <td>Add new staff accounts, change roles and passwords, remove accounts</td>
+          <td>Google Sheets User_DB sheet; local device cache updated immediately</td>
+        </tr>
+        <tr>
+          <td><strong>Zone Management</strong></td>
+          <td>Add, rename, or delete warehouse zones</td>
+          <td>Google Sheets Zone sheet; affects zone picker in forms</td>
+        </tr>
+        <tr>
+          <td><strong>Rack Management</strong></td>
+          <td>Add new rack locations with zone, aisle, bay, and capacity details; rename or delete racks</td>
+          <td>Google Sheets Racks sheet; affects location pickers in Putaway and Stock Movement</td>
+        </tr>
+        <tr>
+          <td><strong>Checker Line Management</strong></td>
+          <td>Add, rename, or delete checker line identifiers</td>
+          <td>Google Sheets Checker_Lines sheet; affects checker line picker in Pickup Requests</td>
+        </tr>
+      </table>
+
+      <h3>How Changes Are Saved</h3>
+      <p>Every add, edit, or delete in the Admin Panel follows the same reliable two-step process:</p>
+      <ol>
+        <li>The change is applied <strong>instantly on your device</strong> — you see it immediately in the list.</li>
+        <li>The change is sent to <strong>Google Sheets in the background</strong>. After 2.5 seconds, the system re-downloads that list from Google Sheets to confirm the change was saved successfully.</li>
+      </ol>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Admin Data Management Flow</span>
+        <button class="btn-view-chart" onclick="openChart('tf9', 'Admin Data Management Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf9">
+flowchart TD
+    Admin["Admin opens Admin Panel\n(Super role only)"] --> Choose{"What to manage?"}
+    Choose --> U["Users"]
+    Choose --> Z["Zones"]
+    Choose --> R["Racks"]
+    Choose --> C["Checker Lines"]
+
+    U --> UA["Add / Edit / Delete\nstaff accounts"]
+    Z --> ZA["Add / Edit / Delete\nwarehouse zones"]
+    R --> RA["Add / Edit / Delete\nrack locations"]
+    C --> CA["Add / Edit / Delete\nchecker line IDs"]
+
+    UA --> Save["Change applied\ninstantly on device"]
+    ZA --> Save
+    RA --> Save
+    CA --> Save
+
+    Save --> Push["Change sent to\nGoogle Sheets in background"]
+    Push --> Confirm["2.5 seconds later:\nList re-downloaded from\nGoogle Sheets to confirm"]
+    Confirm --> Done["Reference data updated\nacross entire system for all staff"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 10 ============================== -->
+  <div class="section" id="s10">
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <h2>How Your Data Is Saved &amp; Kept Fresh</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>The Big Picture</h3>
+      <p>IRMS is designed to feel fast and work reliably even with a slow or unstable internet connection. It achieves this by keeping a <strong>complete copy of all your data on the device</strong> and syncing with Google Sheets in the background. You never wait for the internet to use the app.</p>
+
+      <h3>Two Layers of Storage</h3>
+      <table>
+        <tr><th>Storage Layer</th><th>What It Stores</th><th>How Fast</th></tr>
+        <tr>
+          <td><strong>Device Database (IndexedDB)</strong></td>
+          <td>All operational data: requests, tasks, stock, movements, lost &amp; found. Also the reference data: products, racks, zones, users.</td>
+          <td>Instant — 0ms loading. Available even without internet.</td>
+        </tr>
+        <tr>
+          <td><strong>Google Sheets (Cloud)</strong></td>
+          <td>The permanent, authoritative record of all data. What Google Sheets holds is always the "truth".</td>
+          <td>Fetched in background. Requires internet but does not block your work.</td>
+        </tr>
+      </table>
+
+      <h3>When Data Is Fetched from Google Sheets</h3>
+      <table>
+        <tr><th>Data Type</th><th>When It Is Downloaded</th><th>Why Not More Often</th></tr>
+        <tr>
+          <td>Product catalogue, Racks, Zones, Users</td>
+          <td>Once per login session or when you press F5 (refresh)</td>
+          <td>These change rarely. Downloading them every navigation wastes time and bandwidth.</td>
+        </tr>
+        <tr>
+          <td>Pickup Requests</td>
+          <td>Every time you navigate to the Pickup Request section</td>
+          <td>Changes frequently — new requests are created throughout the shift</td>
+        </tr>
+        <tr>
+          <td>Picking Tasks, SOH, Stock Movement</td>
+          <td>Every time you navigate to those sections</td>
+          <td>Changes frequently as work progresses</td>
+        </tr>
+        <tr>
+          <td>Lost &amp; Found</td>
+          <td>Every time you navigate to the Lost &amp; Found section</td>
+          <td>Changes throughout the shift</td>
+        </tr>
+      </table>
+
+      <h3>Background Auto-Refresh</h3>
+      <p>Every 60 seconds, the app quietly checks whether the data for the section you are currently viewing has become stale (older than 1 minute). If it has, the app automatically re-downloads fresh data in the background without interrupting your work.</p>
+
+      <h3>Manual Refresh Options</h3>
+      <p>You can also manually refresh at any time using the sync button in the header. You have two options:</p>
+      <ul>
+        <li><strong>Regular Refresh</strong> — Downloads fresh data only for the section you are currently on. Fast and efficient.</li>
+        <li><strong>Flush Cache &amp; Full Resync</strong> — Completely clears all locally stored data and re-downloads everything from Google Sheets from scratch. Use this if something seems out of sync.</li>
+      </ul>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Data Sync Architecture</span>
+        <button class="btn-view-chart" onclick="openChart('tf10', 'Data Sync Architecture')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="tf10">
+sequenceDiagram
+    actor You
+    participant App as App on Your Device
+    participant LocalDB as Device Database
+    participant Sheets as Google Sheets
+
+    You->>App: Open application
+    App->>LocalDB: Load all stored data (instant)
+    LocalDB-->>App: All data loaded (0ms)
+    App-->>You: Dashboard shown immediately
+
+    Note over App,Sheets: Login - download reference data once
+    App->>Sheets: Download products, racks, zones, users
+    Sheets-->>App: Latest reference data
+    App->>LocalDB: Save reference data to device
+
+    Note over You,App: During your shift - navigate to a section
+    You->>App: Open Stock Movement section
+    App->>Sheets: Download latest Stock Movement data
+    Sheets-->>App: Current movement records
+    App->>LocalDB: Update local copy
+    App-->>You: Show fresh movement list
+
+    Note over App,Sheets: When you create or update anything
+    You->>App: Submit a form (create, update, complete)
+    App->>LocalDB: Save change instantly (you see it immediately)
+    App->>Sheets: Send change to Google Sheets in background
+    App->>Sheets: 2.5s later - confirm by re-downloading updated data
+      </pre>
+
+      <hr>
+      <h3>What Happens If You Lose Internet?</h3>
+      <div class="callout green">
+        <div class="callout-icon">+</div>
+        <div>If your internet connection drops, the app continues working using your locally stored data. You can still view all your records. However, new entries you create will not reach Google Sheets until the connection is restored. Once internet returns, any pending sync requests are completed automatically.</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ CHART MODAL ============ -->
+<div id="chartModal">
+  <div class="modal-box">
+    <div class="modal-toolbar">
+      <span class="modal-title" id="modalTitle">Chart</span>
+      <div class="modal-controls">
+        <button class="ctrl-btn" onclick="zoomIn()">+ Zoom In</button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button class="ctrl-btn" onclick="zoomOut()">- Zoom Out</button>
+        <button class="ctrl-btn" onclick="resetView()">Reset</button>
+        <button class="ctrl-btn close-btn" onclick="closeChart()">Close</button>
+      </div>
+    </div>
+    <div class="modal-hint">Scroll to zoom &middot; Click and drag to pan &middot; Double-click to reset</div>
+    <div class="modal-canvas" id="modalCanvas">
+      <div class="chart-inner" id="chartInner"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#eef6ff',
+      primaryTextColor: '#1e293b',
+      primaryBorderColor: '#1565c0',
+      lineColor: '#1565c0',
+      secondaryColor: '#f0fdf4',
+      tertiaryColor: '#fefce8',
+      fontFamily: 'Segoe UI, system-ui, sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', padding: 24 },
+    sequence: { actorMargin: 60, messageMargin: 30 },
+  });
+
+  const rendered = {};
+  async function renderAll() {
+    const sources = document.querySelectorAll('.mermaid-source');
+    for (const el of sources) {
+      const id = el.id;
+      const code = el.textContent.trim();
+      try {
+        const { svg } = await mermaid.render('svg_' + id, code);
+        rendered[id] = svg;
+      } catch(e) {
+        rendered[id] = `<pre style="color:red;padding:16px;">Render error: ${e.message}</pre>`;
+      }
+    }
+  }
+  renderAll();
+
+  let scale = 1, offsetX = 0, offsetY = 0;
+  let isDragging = false, dragStartX, dragStartY, dragStartOffX, dragStartOffY;
+
+  const modal = document.getElementById('chartModal');
+  const canvas = document.getElementById('modalCanvas');
+  const inner = document.getElementById('chartInner');
+  const zoomLevelEl = document.getElementById('zoomLevel');
+  const modalTitle = document.getElementById('modalTitle');
+
+  function applyTransform() {
+    inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function openChart(chartId, title) {
+    if (!rendered[chartId]) { alert('Chart is still rendering, please try again in a moment.'); return; }
+    inner.innerHTML = rendered[chartId];
+    modalTitle.textContent = title;
+    scale = 1; offsetX = 0; offsetY = 0;
+    applyTransform();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(fitChart, 80);
+  }
+
+  function fitChart() {
+    const svg = inner.querySelector('svg');
+    if (!svg) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const svgW = svg.getBoundingClientRect().width || 600;
+    const svgH = svg.getBoundingClientRect().height || 400;
+    const scaleX = (canvasRect.width - 80) / svgW;
+    const scaleY = (canvasRect.height - 80) / svgH;
+    scale = Math.min(scaleX, scaleY, 1.4);
+    offsetX = (canvasRect.width - svgW * scale) / 2;
+    offsetY = (canvasRect.height - svgH * scale) / 2;
+    applyTransform();
+  }
+
+  function closeChart() { modal.classList.remove('open'); document.body.style.overflow = ''; }
+  function zoomIn() { scale = Math.min(scale * 1.2, 6); applyTransform(); }
+  function zoomOut() { scale = Math.max(scale / 1.2, 0.1); applyTransform(); }
+  function resetView() { scale = 1; offsetX = 0; offsetY = 0; applyTransform(); setTimeout(fitChart, 40); }
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+    const delta = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const newScale = Math.max(0.1, Math.min(6, scale * delta));
+    offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+    offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+    dragStartOffX = offsetX; dragStartOffY = offsetY;
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    offsetX = dragStartOffX + (e.clientX - dragStartX);
+    offsetY = dragStartOffY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; canvas.classList.remove('dragging'); });
+  canvas.addEventListener('dblclick', resetView);
+  modal.addEventListener('click', e => { if (e.target === modal) closeChart(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChart(); });
+</script>
+</body>
+</html>

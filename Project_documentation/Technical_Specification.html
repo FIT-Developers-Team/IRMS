@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRMS Technical Specification</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fc;
+      --surface: #ffffff;
+      --primary: #1565c0;
+      --primary-light: #eef6ff;
+      --primary-dark: #0d47a1;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 32px 16px;
+    }
+    .container { max-width: 980px; margin: 0 auto; }
+
+    header {
+      background: #1565c0;
+      border-radius: 24px;
+      padding: 44px 52px;
+      margin-bottom: 40px;
+      color: #fff;
+    }
+    header .tag {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    header h1 { font-size: 30px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.5px; }
+    header p { font-size: 15px; opacity: 0.78; max-width: 620px; line-height: 1.6; }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      margin-bottom: 40px;
+    }
+    .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
+    .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 32px; }
+    .toc-grid a { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed var(--border); display: block; }
+    .toc-grid a:hover { color: var(--primary-dark); }
+
+    /* Sections */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .section-num {
+      background: var(--primary);
+      color: #fff;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 17px; font-weight: 700; color: var(--primary); }
+    .section-body { padding: 28px 32px; }
+
+    h3 { font-size: 14px; font-weight: 700; color: var(--primary-dark); margin: 24px 0 8px; display: flex; align-items: center; gap: 8px; }
+    h3::before { content: ''; display: block; width: 3px; height: 16px; background: var(--primary); border-radius: 2px; }
+    h4 { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    p { margin: 8px 0; font-size: 14px; }
+    ul, ol { padding-left: 20px; font-size: 14px; }
+    li { margin: 5px 0; }
+
+    code {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--primary);
+    }
+    pre.code-block {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 18px 22px;
+      font-family: 'Consolas', monospace;
+      font-size: 12.5px;
+      line-height: 1.8;
+      overflow-x: auto;
+      margin: 14px 0;
+    }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 14px 0; }
+    th { background: var(--primary-light); color: var(--primary); font-weight: 700; text-align: left; padding: 10px 14px; border: 1px solid var(--border); }
+    td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+    tr:nth-child(even) td { background: #fafbff; }
+    td code { font-size: 11.5px; }
+
+    /* Badges */
+    .badge { display: inline-block; border-radius: 20px; padding: 2px 9px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .badge-blue { background: var(--primary-light); color: var(--primary); }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+    .badge-gray { background: #f1f5f9; color: #475569; }
+    .badge-purple { background: #f3e8ff; color: #6b21a8; }
+
+    /* Callout */
+    .callout { border-radius: 10px; padding: 12px 16px; margin: 12px 0; font-size: 13px; line-height: 1.6; display: flex; gap: 10px; }
+    .callout.blue { background: #eff8ff; border-left: 4px solid var(--primary); color: #1e3a5f; }
+    .callout.amber { background: #fffbeb; border-left: 4px solid var(--amber); color: #78350f; }
+    .callout-icon { font-weight: 800; flex-shrink: 0; margin-top: 1px; }
+
+    /* Chart button */
+    .chart-trigger-wrap { margin: 20px 0 4px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .chart-label-text { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
+    .btn-view-chart {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--primary); color: #fff; border: none; border-radius: 10px;
+      padding: 9px 18px; font-size: 13px; font-weight: 700; cursor: pointer;
+      transition: background 0.18s, transform 0.12s;
+    }
+    .btn-view-chart:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    .mermaid-source { display: none; }
+
+    /* ========= MODAL ========= */
+    #chartModal { display: none; position: fixed; inset: 0; z-index: 9000; background: rgba(10,20,50,0.72); backdrop-filter: blur(6px); align-items: center; justify-content: center; }
+    #chartModal.open { display: flex; }
+    .modal-box { position: relative; background: var(--surface); border-radius: 20px; width: calc(100vw - 48px); height: calc(100vh - 80px); max-width: 1200px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.35); }
+    .modal-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--primary-light); flex-shrink: 0; }
+    .modal-title { font-size: 14px; font-weight: 700; color: var(--primary); }
+    .modal-controls { display: flex; align-items: center; gap: 8px; }
+    .ctrl-btn { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.15s; }
+    .ctrl-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .ctrl-btn.close-btn { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .ctrl-btn.close-btn:hover { background: #fee2e2; }
+    .zoom-level { font-size: 12px; font-weight: 700; color: var(--text-muted); min-width: 44px; text-align: center; }
+    .modal-hint { font-size: 11px; color: var(--text-muted); padding: 6px 20px; background: #fafbff; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modal-canvas { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+    .modal-canvas.dragging { cursor: grabbing; }
+    .chart-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; display: flex; align-items: center; justify-content: center; padding: 40px; }
+    .chart-inner svg { max-width: none !important; height: auto; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 22px 0; }
+
+    @media (max-width: 600px) {
+      .toc-grid { grid-template-columns: 1fr; }
+      header { padding: 28px 24px; }
+      .section-body { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="tag">Documentation — Technical Specification</div>
+    <h1>IRMS Technical Specification</h1>
+    <p>Complete technical reference for the Inventory Recovery Management System — covering data models, Google Sheets schema, API functions, state lifecycles, business logic, caching architecture, validation rules, and role permissions.</p>
+  </header>
+
+  <div class="toc">
+    <div class="toc-label">Table of Contents</div>
+    <div class="toc-grid">
+      <a href="#s1">1. Technology Stack</a>
+      <a href="#s2">2. Google Sheets Database Schema</a>
+      <a href="#s3">3. Entity Relationship Diagram</a>
+      <a href="#s4">4. Data Models (All Fields)</a>
+      <a href="#s5">5. IndexedDB Cache Architecture</a>
+      <a href="#s6">6. API — Google Apps Script Endpoints</a>
+      <a href="#s7">7. Business Logic &amp; Key Formulas</a>
+      <a href="#s8">8. Status Lifecycle Diagrams</a>
+      <a href="#s9">9. Sync &amp; Data Expiry Rules</a>
+      <a href="#s10">10. Validation Rules</a>
+      <a href="#s11">11. Role &amp; Permission Matrix</a>
+      <a href="#s12">12. ID Generation Scheme</a>
+    </div>
+  </div>
+
+  <!-- ======= S1: Tech Stack ======= -->
+  <div class="section" id="s1">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>Technology Stack</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr><th>Layer</th><th>Technology</th><th>Version / Detail</th><th>Purpose</th></tr>
+        <tr><td>Frontend Framework</td><td>Vanilla JavaScript (ES Modules)</td><td>ES2022+</td><td>UI rendering, routing, state management</td></tr>
+        <tr><td>Build Tool</td><td>Vite</td><td>Latest</td><td>Module bundling, dev server, HMR</td></tr>
+        <tr><td>CSS</td><td>Vanilla CSS with CSS custom properties</td><td>—</td><td>Theming, layout, responsive design</td></tr>
+        <tr><td>Icon Library</td><td>Google Material Symbols Rounded</td><td>Outlined + Rounded</td><td>UI iconography (weight 300 base / 500 active)</td></tr>
+        <tr><td>Local Database</td><td>IndexedDB via custom <code>CacheManager</code></td><td>DB v1 — <code>IRMS_IndexedDB_Cache</code></td><td>Offline-first 0ms data hydration</td></tr>
+        <tr><td>Session Storage</td><td>Browser <code>localStorage</code></td><td>—</td><td>Session token, operational data fallback</td></tr>
+        <tr><td>Cloud Database</td><td>Google Sheets</td><td>Spreadsheet ID: <code>1WPpJ...gsM</code></td><td>Persistent source-of-truth for all records</td></tr>
+        <tr><td>Backend / API</td><td>Google Apps Script (GAS) Web App</td><td>Deployed as Web App (no-cors POST)</td><td>Write operations to Google Sheets</td></tr>
+        <tr><td>CSV Parser</td><td>PapaParse</td><td>npm package</td><td>Parses CSV from Google Sheets gviz/tq endpoint</td></tr>
+        <tr><td>Read Protocol</td><td>Google Sheets gviz/tq CSV export</td><td><code>?tqx=out:csv&sheet=NAME</code></td><td>Read-only fetch of sheet data as CSV</td></tr>
+        <tr><td>Write Protocol</td><td>HTTP POST to GAS Web App URL</td><td><code>mode: 'no-cors'</code>, JSON body as text/plain</td><td>All create / update / delete operations</td></tr>
+      </table>
+
+      <div class="callout blue">
+        <div class="callout-icon">i</div>
+        <div><strong>Architecture pattern:</strong> The frontend reads directly from Google Sheets via CSV (bypassing GAS for reads) and writes through GAS. This two-path design keeps reads fast and independent of GAS execution quotas.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= S2: Schema ======= -->
+  <div class="section" id="s2">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Google Sheets Database Schema</h2>
+    </div>
+    <div class="section-body">
+      <p>All data is stored in a single Google Spreadsheet with 13 named sheet tabs.</p>
+
+      <h3>Sheet Tab Reference</h3>
+      <table>
+        <tr><th>Tab Key</th><th>Sheet Name</th><th>Type</th><th>Primary Key Column</th><th>Description</th></tr>
+        <tr><td><code>userDb</code></td><td><code>User_DB</code></td><td><span class="badge badge-amber">Master</span></td><td>Staff ID</td><td>All system users, roles, passwords</td></tr>
+        <tr><td><code>skusDb</code></td><td><code>SKUs_DB</code></td><td><span class="badge badge-amber">Master</span></td><td>SKU Number</td><td>Product catalogue with categories</td></tr>
+        <tr><td><code>zones</code></td><td><code>Zone</code></td><td><span class="badge badge-amber">Master</span></td><td>ID</td><td>Warehouse zone definitions</td></tr>
+        <tr><td><code>racks</code></td><td><code>Racks</code></td><td><span class="badge badge-amber">Master</span></td><td>Location Name</td><td>Rack location definitions with zone assignment</td></tr>
+        <tr><td><code>checkerLines</code></td><td><code>Checker_Lines</code></td><td><span class="badge badge-amber">Master</span></td><td>ID</td><td>Checker line identifiers</td></tr>
+        <tr><td><code>requestChecker</code></td><td><code>Request_Checker</code></td><td><span class="badge badge-green">Operational</span></td><td>Ticket ID</td><td>All pickup requests (RC-XXXXXX)</td></tr>
+        <tr><td><code>pickingTask</code></td><td><code>Picking_Task</code></td><td><span class="badge badge-green">Operational</span></td><td>Picking ID</td><td>Active and completed picking tasks (PK-XXXXXX)</td></tr>
+        <tr><td><code>putaway</code></td><td><code>Putaway</code></td><td><span class="badge badge-green">Operational</span></td><td>Putaway ID</td><td>Putaway execution records (PT-XXXXXX)</td></tr>
+        <tr><td><code>soh</code></td><td><code>SOH</code></td><td><span class="badge badge-green">Operational</span></td><td>SKU + Rack Location (composite)</td><td>Stock on Hand — current inventory per rack</td></tr>
+        <tr><td><code>stockMovement</code></td><td><code>Stock_Movement</code></td><td><span class="badge badge-green">Operational</span></td><td>Movement ID</td><td>Transfer and deduction task queue (SM-XXXXXX)</td></tr>
+        <tr><td><code>stockActivity</code></td><td><code>Stock_Activity</code></td><td><span class="badge badge-green">Operational</span></td><td>Activity ID</td><td>Immutable audit log of every stock change (SA-XXXXXX)</td></tr>
+        <tr><td><code>lostAndFound</code></td><td><code>Lost_And_Found</code></td><td><span class="badge badge-green">Operational</span></td><td>Ticket ID</td><td>Found item records (LF-XXXXXX)</td></tr>
+        <tr><td><code>soData</code></td><td><code>SO_DATA</code></td><td><span class="badge badge-blue">Reference</span></td><td>SO Number + SKU</td><td>Sales Order data for cross-reference</td></tr>
+      </table>
+
+      <h3>SOH Sheet — Special Row Structure</h3>
+      <div class="callout amber">
+        <div class="callout-icon">!</div>
+        <div><strong>Critical constraint:</strong> Row 2 of the SOH sheet contains <code>ARRAYFORMULA</code> expressions that auto-calculate <code>Qty On SO</code>, <code>Count SO</code>, <code>Qty On LDP</code>, <code>Stock Age</code>, and <code>Action Suggestion</code> for every data row below it. New SOH records are always appended at <code>lastDataRow + 1</code> and <strong>never</strong> inserted using <code>insertRowAfter()</code> to preserve these formulas.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= S3: ERD ======= -->
+  <div class="section" id="s3">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>Entity Relationship Diagram</h2>
+    </div>
+    <div class="section-body">
+      <p>The diagram below shows all entities, their key fields, and how they relate to each other across the Google Sheets database.</p>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Full ERD — All Entities</span>
+        <button class="btn-view-chart" onclick="openChart('erd1', 'Entity Relationship Diagram')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View ERD
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="erd1">
+erDiagram
+    USER_DB {
+        string staffId PK
+        string name
+        string role
+        string access
+        string password
+    }
+    SKUs_DB {
+        string skuCode PK
+        string productName
+        string productId
+        string l0CategoryName
+        string l1CategoryName
+        string l2CategoryName
+        string foodOrNonFood
+    }
+    ZONE {
+        string id PK
+        string zoneName
+    }
+    RACKS {
+        string locationName PK
+        string zone FK
+        string facility
+        string aisle
+        string bay
+        string partisi
+        string level
+        string priority
+        string capacity
+        string environment
+    }
+    CHECKER_LINES {
+        string id PK
+        string lineName
+    }
+    REQUEST_CHECKER {
+        string ticketId PK
+        string skuCode FK
+        string checkerLine FK
+        string checkerName FK
+        string pickerName
+        string soNumber
+        string productName
+        int qty
+        string status
+        datetime timestamp
+    }
+    PICKING_TASK {
+        string pickingId PK
+        string ticketId FK
+        string skuCode FK
+        string pickedBy FK
+        string productName
+        int qty
+        string status
+        string sourceProcess
+        datetime timestamp
+    }
+    PUTAWAY {
+        string putawayId PK
+        string pickingId FK
+        string ticketId FK
+        string skuCode FK
+        string location FK
+        string staffName FK
+        string productName
+        int qtyPut
+        string status
+        datetime timestamp
+    }
+    SOH {
+        string skuCode FK
+        string rackLocation FK
+        int qtySoh
+        float qtyOnSo
+        int countSo
+        float qtyOnLdp
+        int stockAge
+        string actionSuggestion
+        datetime updatedAt
+    }
+    STOCK_MOVEMENT {
+        string movementId PK
+        string skuCode FK
+        string fromLocation FK
+        string toLocation
+        string assignedBy FK
+        string staffName FK
+        string type
+        string reason
+        int qty
+        int sourceQty
+        string status
+        datetime timestamp
+        datetime completedAt
+        string completedBy
+    }
+    STOCK_ACTIVITY {
+        string activityId PK
+        string ticketId FK
+        string skuCode FK
+        string fromLocation FK
+        string toLocation
+        string operator
+        string assignedBy FK
+        string executedBy FK
+        int qty
+        string type
+        string reason
+        datetime timestamp
+    }
+    LOST_AND_FOUND {
+        string ticketId PK
+        string skuCode FK
+        string btiStaff FK
+        string foundAt FK
+        string productName
+        int qty
+        string reason
+        string status
+        datetime timestamp
+    }
+
+    RACKS }o--|| ZONE : "belongs to"
+    REQUEST_CHECKER }o--|| SKUs_DB : "references"
+    REQUEST_CHECKER }o--|| CHECKER_LINES : "from line"
+    REQUEST_CHECKER }o--|| USER_DB : "created by"
+    PICKING_TASK }o--|| REQUEST_CHECKER : "fulfills"
+    PICKING_TASK }o--|| SKUs_DB : "for product"
+    PICKING_TASK }o--|| USER_DB : "picked by"
+    PUTAWAY }o--|| PICKING_TASK : "completes"
+    PUTAWAY }o--|| RACKS : "to location"
+    PUTAWAY }o--|| SKUs_DB : "product"
+    SOH }o--|| SKUs_DB : "product"
+    SOH }o--|| RACKS : "at location"
+    STOCK_MOVEMENT }o--|| SKUs_DB : "product"
+    STOCK_MOVEMENT }o--|| RACKS : "from location"
+    STOCK_MOVEMENT }o--|| USER_DB : "assigned by"
+    STOCK_ACTIVITY }o--|| SKUs_DB : "product"
+    STOCK_ACTIVITY }o--|| STOCK_MOVEMENT : "logged for"
+    LOST_AND_FOUND }o--|| SKUs_DB : "product"
+    LOST_AND_FOUND }o--|| USER_DB : "reported by"
+      </pre>
+    </div>
+  </div>
+
+  <!-- ======= S4: Data Models ======= -->
+  <div class="section" id="s4">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>Data Models — All Fields</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>User_DB</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>staffId</code></td><td>String</td><td>Yes</td><td>Primary key. Must be unique across all users.</td></tr>
+        <tr><td><code>name</code></td><td>String</td><td>Yes</td><td>Display name used for session identity and filtering records.</td></tr>
+        <tr><td><code>role</code></td><td>String</td><td>Yes</td><td>Values: <code>Super</code>, <code>Staff</code>, <code>Checker</code>, <code>Picker</code>, <code>Admin</code>, <code>Manager</code>, <code>Supervisor</code>, <code>SPV</code></td></tr>
+        <tr><td><code>access</code></td><td>String</td><td>No</td><td>Additional access control tag (free text).</td></tr>
+        <tr><td><code>password</code></td><td>String</td><td>Yes</td><td>Stored as plain text in Google Sheets. Compared client-side via string equality.</td></tr>
+      </table>
+
+      <h3>SKUs_DB</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>skuCode</code></td><td>String</td><td>Yes</td><td>Primary key (maps to <code>sku_number</code> column in sheet).</td></tr>
+        <tr><td><code>productName</code></td><td>String</td><td>Yes</td><td>Human-readable product name.</td></tr>
+        <tr><td><code>productId</code></td><td>String</td><td>No</td><td>Internal product ID for cross-referencing with ERP/WMS.</td></tr>
+        <tr><td><code>l0CategoryName</code></td><td>String</td><td>No</td><td>Top-level category.</td></tr>
+        <tr><td><code>l1CategoryName</code></td><td>String</td><td>No</td><td>Second-level category.</td></tr>
+        <tr><td><code>l2CategoryName</code></td><td>String</td><td>No</td><td>Third-level category.</td></tr>
+        <tr><td><code>foodOrNonFood</code></td><td>String</td><td>No</td><td>Classification: <code>Food</code> or <code>Non-Food</code>.</td></tr>
+      </table>
+
+      <h3>Request_Checker</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>ticketId</code></td><td>String</td><td>Yes</td><td>Format: <code>RC-XXXXXX</code> (6 random digits). Primary key.</td></tr>
+        <tr><td><code>skuNumber</code></td><td>String</td><td>Yes</td><td>References <code>SKUs_DB.skuCode</code>.</td></tr>
+        <tr><td><code>checkerLine</code></td><td>String</td><td>Yes</td><td>References <code>Checker_Lines.lineName</code>.</td></tr>
+        <tr><td><code>checkerName</code></td><td>String</td><td>Yes</td><td>Name of staff creating the request.</td></tr>
+        <tr><td><code>qty</code></td><td>Integer</td><td>Yes</td><td>Must be &gt; 0.</td></tr>
+        <tr><td><code>status</code></td><td>String</td><td>Yes</td><td>Lifecycle: <code>Pending</code> &rarr; <code>Picking</code> &rarr; <code>Completed</code></td></tr>
+        <tr><td><code>timestamp</code></td><td>ISO DateTime</td><td>Yes</td><td>Created at. Format: <code>yyyy-MM-dd HH:mm:ss</code></td></tr>
+        <tr><td><code>soNumber</code></td><td>String</td><td>No</td><td>Sales order reference, if applicable.</td></tr>
+        <tr><td><code>productName</code></td><td>String</td><td>Auto</td><td>Denormalized copy from <code>SKUs_DB</code> at creation time.</td></tr>
+      </table>
+
+      <h3>Picking_Task</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>pickingId</code></td><td>String</td><td>Yes</td><td>Format: <code>PK-XXXXXX</code>. Primary key.</td></tr>
+        <tr><td><code>ticketId</code></td><td>String</td><td>Yes</td><td>Parent ticket (RC-XXXXXX or LF-XXXXXX).</td></tr>
+        <tr><td><code>pickedBy</code></td><td>String</td><td>Yes</td><td>Name of picker who started the task.</td></tr>
+        <tr><td><code>skuCode</code></td><td>String</td><td>Yes</td><td>Product being picked.</td></tr>
+        <tr><td><code>qty</code></td><td>Integer</td><td>Yes</td><td>Total quantity to pick.</td></tr>
+        <tr><td><code>status</code></td><td>String</td><td>Yes</td><td>Lifecycle: <code>Picking</code> &rarr; <code>Completed</code></td></tr>
+        <tr><td><code>sourceProcess</code></td><td>String</td><td>Yes</td><td>Values: <code>Request_Checker</code> or <code>Lost_And_Found</code></td></tr>
+        <tr><td><code>timestamp</code></td><td>ISO DateTime</td><td>Yes</td><td>When picking was started.</td></tr>
+      </table>
+
+      <h3>Putaway</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr>
+        <tr><td><code>putawayId</code></td><td>String</td><td>Yes</td><td>Format: <code>PT-XXXXXX</code>. Primary key.</td></tr>
+        <tr><td><code>pickingId</code></td><td>String</td><td>Yes</td><td>FK to <code>Picking_Task.pickingId</code>.</td></tr>
+        <tr><td><code>ticketId</code></td><td>String</td><td>Yes</td><td>Parent ticket (RC or LF).</td></tr>
+        <tr><td><code>skuCode</code></td><td>String</td><td>Yes</td><td>Product being put away.</td></tr>
+        <tr><td><code>location</code></td><td>String</td><td>Yes</td><td>Destination rack (FK to <code>Racks.locationName</code>).</td></tr>
+        <tr><td><code>qtyPut</code></td><td>Integer</td><td>Yes</td><td>Units put away in this operation. Must be &ge; 1.</td></tr>
+        <tr><td><code>staffName</code></td><td>String</td><td>Yes</td><td>Operator performing putaway.</td></tr>
+        <tr><td><code>isCompleted</code></td><td>Boolean</td><td>Auto</td><td><code>true</code> when sum of all putaway quantities &ge; task <code>qty</code>.</td></tr>
+        <tr><td><code>syncState</code></td><td>String</td><td>Auto</td><td>Local-only flag: <code>pending</code> | <code>synced</code> | <code>failed</code></td></tr>
+      </table>
+
+      <h3>SOH</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Source</th><th>Notes</th></tr>
+        <tr><td><code>skuCode</code></td><td>String</td><td>Manual / Putaway</td><td>Composite PK part 1.</td></tr>
+        <tr><td><code>rackLocation</code></td><td>String</td><td>Manual / Putaway</td><td>Composite PK part 2. FK to <code>Racks.locationName</code>.</td></tr>
+        <tr><td><code>qtySoh</code></td><td>Integer</td><td>Calculated</td><td>Current stock count. Incremented by putaway, decremented by movement/deduction.</td></tr>
+        <tr><td><code>qtyOnSo</code></td><td>Float</td><td>ARRAYFORMULA (row 2)</td><td>Quantity reserved on Sales Orders. Auto-calculated from SO_DATA.</td></tr>
+        <tr><td><code>countSo</code></td><td>Integer</td><td>ARRAYFORMULA (row 2)</td><td>Number of open SOs referencing this SKU.</td></tr>
+        <tr><td><code>qtyOnLdp</code></td><td>Float</td><td>ARRAYFORMULA (row 2)</td><td>Quantity on LDP (Long-Distance Picking) orders.</td></tr>
+        <tr><td><code>stockAge</code></td><td>Integer</td><td>ARRAYFORMULA (row 2)</td><td>Days since <code>updatedAt</code>.</td></tr>
+        <tr><td><code>actionSuggestion</code></td><td>String</td><td>ARRAYFORMULA (row 2)</td><td>Automated suggestion based on age/qty thresholds.</td></tr>
+        <tr><td><code>updatedAt</code></td><td>ISO DateTime</td><td>System</td><td>Timestamp of last quantity change.</td></tr>
+      </table>
+
+      <h3>Stock_Movement</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>movementId</code></td><td>String</td><td>Format: <code>SM-XXXXXX</code>. Primary key.</td></tr>
+        <tr><td><code>type</code></td><td>String</td><td>Values: <code>Transfer location</code> | <code>Stock deduction</code></td></tr>
+        <tr><td><code>status</code></td><td>String</td><td>Lifecycle: <code>Pending</code> &rarr; <code>Assigned</code> &rarr; <code>Done</code></td></tr>
+        <tr><td><code>fromLocation</code></td><td>String</td><td>Source rack. FK to <code>Racks.locationName</code>.</td></tr>
+        <tr><td><code>toLocation</code></td><td>String</td><td>Destination rack — or hardcoded <code>Deduction</code> for stock deductions.</td></tr>
+        <tr><td><code>qty</code></td><td>Integer</td><td>Quantity to move or deduct.</td></tr>
+        <tr><td><code>sourceQty</code></td><td>Integer</td><td>SOH qty at source location at time of creation.</td></tr>
+        <tr><td><code>reason</code></td><td>String</td><td>For deductions: <code>Bad/Damaged/Expired</code>, <code>Lost/Missing</code>, <code>Discrepancy Correction</code>, <code>Sample/Testing</code>.</td></tr>
+        <tr><td><code>assignedBy</code></td><td>String</td><td>User who created the movement task.</td></tr>
+        <tr><td><code>staffName</code></td><td>String</td><td>User assigned to execute the movement.</td></tr>
+        <tr><td><code>completedBy</code></td><td>String</td><td>User who completed the dual-verification step.</td></tr>
+        <tr><td><code>completedAt</code></td><td>ISO DateTime</td><td>When the movement was marked Done.</td></tr>
+      </table>
+
+      <h3>Stock_Activity (Audit Log)</h3>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Notes</th></tr>
+        <tr><td><code>activityId</code></td><td>String</td><td>Format: <code>SA-XXXXXX</code>. Immutable.</td></tr>
+        <tr><td><code>ticketId</code></td><td>String</td><td>Parent movement or putaway ID.</td></tr>
+        <tr><td><code>operator</code></td><td>String</td><td><code>+</code> = stock in, <code>-</code> = stock out, <code>[+]</code> = putaway in.</td></tr>
+        <tr><td><code>fromLocation</code></td><td>String</td><td>Source rack or Checker Line.</td></tr>
+        <tr><td><code>toLocation</code></td><td>String</td><td>Destination rack or <code>Deduction</code>.</td></tr>
+        <tr><td><code>qty</code></td><td>Integer</td><td>Absolute quantity moved.</td></tr>
+        <tr><td><code>executedBy</code></td><td>String</td><td>Staff who physically performed the action.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======= S5: Cache Architecture ======= -->
+  <div class="section" id="s5">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>IndexedDB Cache Architecture</h2>
+    </div>
+    <div class="section-body">
+      <p>The cache is managed by the <code>CacheManager</code> class (<code>src/data/cacheManager.js</code>) and uses a single IndexedDB database named <code>IRMS_IndexedDB_Cache</code> at version 1.</p>
+
+      <h3>Object Stores</h3>
+      <table>
+        <tr><th>Store Name</th><th>Key Path</th><th>Mirrors Sheet</th></tr>
+        <tr><td><code>requests</code></td><td><code>ticketId</code></td><td>Request_Checker</td></tr>
+        <tr><td><code>pickingTasks</code></td><td><code>pickingId</code></td><td>Picking_Task</td></tr>
+        <tr><td><code>lostAndFound</code></td><td><code>ticketId</code></td><td>Lost_And_Found</td></tr>
+        <tr><td><code>soh</code></td><td><code>id</code></td><td>SOH</td></tr>
+        <tr><td><code>stockMovements</code></td><td><code>movementId</code></td><td>Stock_Movement</td></tr>
+        <tr><td><code>skusDb</code></td><td><code>sku_number</code></td><td>SKUs_DB</td></tr>
+        <tr><td><code>racks</code></td><td><code>locationName</code></td><td>Racks</td></tr>
+        <tr><td><code>zones</code></td><td><code>zone</code></td><td>Zone</td></tr>
+        <tr><td><code>checkerLines</code></td><td><code>lineName</code></td><td>Checker_Lines</td></tr>
+        <tr><td><code>putaway</code></td><td><code>ticketId</code></td><td>Putaway</td></tr>
+        <tr><td><code>soData</code></td><td><code>id</code></td><td>SO_DATA</td></tr>
+        <tr><td><code>stockActivity</code></td><td><code>activityId</code></td><td>Stock_Activity</td></tr>
+        <tr><td><code>syncMetadata</code></td><td><code>storeName</code></td><td>Internal sync timestamps</td></tr>
+      </table>
+
+      <h3>CacheManager Methods</h3>
+      <table>
+        <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+        <tr><td><code>init()</code></td><td><code>async () => bool</code></td><td>Opens IndexedDB, creates stores on first run. Idempotent — safe to call multiple times.</td></tr>
+        <tr><td><code>getStore(name)</code></td><td><code>async (string) => Array</code></td><td>Returns all records from a store. Returns <code>[]</code> on error.</td></tr>
+        <tr><td><code>setStore(name, records)</code></td><td><code>async (string, Array) => bool</code></td><td>Clears the store and writes all records. Full replace.</td></tr>
+        <tr><td><code>upsertRecords(name, records)</code></td><td><code>async (string, Array) => bool</code></td><td>Puts (insert or update) individual records without clearing.</td></tr>
+        <tr><td><code>clearAll()</code></td><td><code>async () => bool</code></td><td>Clears every store. Used by Flush Cache &amp; Full Resync.</td></tr>
+        <tr><td><code>getLastSyncTime(name)</code></td><td><code>async (string) => ISO string | null</code></td><td>Reads last sync timestamp from syncMetadata store.</td></tr>
+        <tr><td><code>setLastSyncTime(name, ts)</code></td><td><code>async (string, string) => bool</code></td><td>Writes sync timestamp to syncMetadata store.</td></tr>
+      </table>
+
+      <h3>Fallback Chain</h3>
+      <pre class="code-block">
+// Startup hydration order:
+1. initCache()    → reads all IndexedDB stores (0ms, no network)
+2. initPromise    → calls syncGoogleSheets(['userDb','skusDb','zones','racks','checkerLines'])
+3. Section nav    → calls syncSectionData(tabId) on demand (respects TTL)</pre>
+    </div>
+  </div>
+
+  <!-- ======= S6: API ======= -->
+  <div class="section" id="s6">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>API — Google Apps Script Endpoints</h2>
+    </div>
+    <div class="section-body">
+      <p>All write operations POST JSON to the GAS Web App URL. The body is sent as <code>text/plain</code> with <code>mode: 'no-cors'</code>. The <code>action</code> field in the JSON body routes to the correct GAS handler function.</p>
+
+      <pre class="code-block">
+// Request format (all operations):
+fetch(webAppUrl, {
+  method: 'POST',
+  mode: 'no-cors',
+  headers: { 'Content-Type': 'text/plain' },
+  body: JSON.stringify({ action: 'ACTION_NAME', ...payload })
+});</pre>
+
+      <h3>Action Reference Table</h3>
+      <table>
+        <tr><th>Action Name</th><th>GAS Handler</th><th>Sheet(s) Written</th><th>Payload Fields</th></tr>
+        <tr><td><code>createRequestChecker</code></td><td><code>handleCreateRequest</code></td><td>Request_Checker</td><td><code>ticketId, skuNumber, checkerLine, checkerName, qty, status, timestamp</code></td></tr>
+        <tr><td><code>createPickingTasks</code></td><td><code>handleCreatePickingTasks</code></td><td>Picking_Task, Request_Checker, Lost_And_Found</td><td><code>tasks: Array, sourceProcess</code></td></tr>
+        <tr><td><code>updatePickingTaskStatus</code></td><td><code>handleUpdatePickingStatus</code></td><td>Picking_Task</td><td><code>pickingId, status</code></td></tr>
+        <tr><td><code>createPutaway</code></td><td><code>handleCreatePutaway</code></td><td>Putaway, Stock_Activity, SOH</td><td><code>putawayId, pickingId, skuCode, location, qtyPut, staffName, isCompleted</code></td></tr>
+        <tr><td><code>createLostAndFound</code></td><td><code>handleCreateLostAndFound</code></td><td>Lost_And_Found</td><td><code>ticketId, skuCode, productName, qty, foundAt, reason, btiStaff</code></td></tr>
+        <tr><td><code>createStockMovement</code></td><td><code>handleCreateStockMovement</code></td><td>Stock_Movement</td><td><code>movementId, skuCode, fromLocation, toLocation, qty, type, reason, assignedBy</code></td></tr>
+        <tr><td><code>updateStockMovement</code></td><td><code>handleUpdateStockMovement</code></td><td>Stock_Movement</td><td><code>movementId, ...updates</code></td></tr>
+        <tr><td><code>completeStockMovement</code></td><td><code>handleCompleteStockMovement</code></td><td>Stock_Movement, Stock_Activity, SOH</td><td><code>movementId, completedBy</code></td></tr>
+        <tr><td><code>cancelStockMovement</code></td><td><code>handleCancelStockMovement</code></td><td>Stock_Movement</td><td><code>movementId</code></td></tr>
+        <tr><td><code>addUser</code></td><td><code>handleAddUser</code></td><td>User_DB</td><td><code>staffId, name, role, access, password</code></td></tr>
+        <tr><td><code>updateUser</code></td><td><code>handleUpdateUser</code></td><td>User_DB</td><td><code>staffId, ...updates</code></td></tr>
+        <tr><td><code>deleteUser</code></td><td><code>handleDeleteUser</code></td><td>User_DB</td><td><code>staffId</code></td></tr>
+        <tr><td><code>addZone</code></td><td><code>handleAddZone</code></td><td>Zone</td><td><code>id, zoneName</code></td></tr>
+        <tr><td><code>updateZone</code></td><td><code>handleUpdateZone</code></td><td>Zone</td><td><code>id, zoneName</code></td></tr>
+        <tr><td><code>deleteZone</code></td><td><code>handleDeleteZone</code></td><td>Zone</td><td><code>id</code></td></tr>
+        <tr><td><code>addRack</code></td><td><code>handleAddRack</code></td><td>Racks</td><td><code>locationName, zone, facility, aisle, bay, partisi, level, priority, capacity, environment</code></td></tr>
+        <tr><td><code>updateRack</code></td><td><code>handleUpdateRack</code></td><td>Racks</td><td><code>locationName, ...updates</code></td></tr>
+        <tr><td><code>deleteRack</code></td><td><code>handleDeleteRack</code></td><td>Racks</td><td><code>locationName</code></td></tr>
+        <tr><td><code>addCheckerLine</code></td><td><code>handleAddCheckerLine</code></td><td>Checker_Lines</td><td><code>id, lineName</code></td></tr>
+        <tr><td><code>updateCheckerLine</code></td><td><code>handleUpdateCheckerLine</code></td><td>Checker_Lines</td><td><code>id, lineName</code></td></tr>
+        <tr><td><code>deleteCheckerLine</code></td><td><code>handleDeleteCheckerLine</code></td><td>Checker_Lines</td><td><code>id</code></td></tr>
+      </table>
+
+      <h3>Background Sync Delay</h3>
+      <p>After every GAS write, a <code>setTimeout(..., 2500)</code> re-fetches the relevant sheet to confirm the write and refresh the local cache. This 2.5-second delay accounts for GAS execution latency before the data appears in the CSV export endpoint.</p>
+    </div>
+  </div>
+
+  <!-- ======= S7: Business Logic ======= -->
+  <div class="section" id="s7">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Business Logic &amp; Key Formulas</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>ID Generation</h3>
+      <pre class="code-block">
+// All IDs use the same generator:
+generate6DigitId() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// Applied per entity:
+ticketId  = 'RC-' + generate6DigitId()   // Pickup Request
+ticketId  = 'LF-' + generate6DigitId()   // Lost & Found
+pickingId = 'PK-' + generate6DigitId()   // Picking Task
+putawayId = 'PT-' + generate6DigitId()   // Putaway
+movementId = 'SM' + generate6DigitId()   // Stock Movement
+activityId = 'SA' + generate6DigitId()   // Stock Activity</pre>
+
+      <h3>Session Expiry Formula</h3>
+      <pre class="code-block">
+// Session duration: 4 hours (configurable)
+const DURATION_MS = 4 * 60 * 60 * 1000;
+
+sessionData = {
+  user: user,
+  loggedInAt: Date.now(),
+  expiresAt:  Date.now() + DURATION_MS
+};
+
+// Expiry check (runs every 15 seconds):
+isExpired = Date.now() > sessionData.expiresAt</pre>
+
+      <h3>Putaway Completion Formula</h3>
+      <pre class="code-block">
+// A picking task is complete when total put away >= task quantity:
+sumPutSoFar  = SUM(putawayRecords WHERE pickingId == task.pickingId).qtyPut
+isCompleted  = (sumPutSoFar + qtyPutThisTime) >= task.qty
+
+// Remaining quantity shown in UI:
+remainingQty = Math.max(0, task.qty - sumPutSoFar)</pre>
+
+      <h3>SOH Update Logic — Putaway</h3>
+      <pre class="code-block">
+// On createPutaway (GAS side):
+existingRow = SOH.find(skuCode == sku AND rackLocation == location)
+
+IF existingRow:
+  existingRow.qtySoh += qtyPut
+  existingRow.updatedAt = NOW()
+ELSE:
+  SOH.appendRow([sku, location, qtyPut, NOW()])
+  // NOTE: Always append at lastDataRow+1, NEVER use insertRowAfter()
+  //       to preserve row 2 ARRAYFORMULA calculations.</pre>
+
+      <h3>SOH Update Logic — Stock Movement Completion</h3>
+      <pre class="code-block">
+// completeStockMovement() — applied locally AND sent to GAS:
+
+// 1. Deduct from source:
+source = SOH.find(skuCode == sku AND rackLocation == fromLoc)
+source.qtySoh = Math.max(0, source.qtySoh - moveQty)
+
+// 2. Add to destination (Transfer only):
+IF type == 'Transfer location' AND toLoc != 'Deduction':
+  dest = SOH.find(skuCode == sku AND rackLocation == toLoc)
+  IF dest:    dest.qtySoh += moveQty
+  ELSE:       SOH.push({ skuCode, rackLocation: toLoc, qtySoh: moveQty })</pre>
+
+      <h3>Role Elevation Check</h3>
+      <pre class="code-block">
+// Elevated roles see ALL records; others see only their own:
+ELEVATED_ROLES = ['super', 'admin', 'manager', 'supervisor', 'spv']
+
+isElevatedRole(user) {
+  return ELEVATED_ROLES.includes(user.role.toLowerCase().trim())
+}</pre>
+
+      <h3>Data Expiry TTL</h3>
+      <pre class="code-block">
+DATA_EXPIRY_DURATION_MS = 1 * 60 * 1000  // 1 minute TTL
+
+isExpired = (Date.now() - lastSyncTime) >= DATA_EXPIRY_DURATION_MS
+
+// Background auto-refresh: runs every 60 seconds via setInterval
+// Checks current active tab and refreshes only that section's data.</pre>
+    </div>
+  </div>
+
+  <!-- ======= S8: Status Lifecycles ======= -->
+  <div class="section" id="s8">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>Status Lifecycle Diagrams</h2>
+    </div>
+    <div class="section-body">
+      <p>Every operational entity follows a strict one-way status progression. Once a status advances, it cannot go backwards.</p>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Request_Checker Status Lifecycle</span>
+        <button class="btn-view-chart" onclick="openChart('lc1', 'Request_Checker Status Lifecycle')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="lc1">
+flowchart LR
+    A(["Created"]) --> B["Pending"]
+    B -- "Picker starts picking" --> C["Picking"]
+    C -- "All quantity put away" --> D["Completed"]
+      </pre>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Picking_Task Status Lifecycle</span>
+        <button class="btn-view-chart" onclick="openChart('lc2', 'Picking_Task Status Lifecycle')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="lc2">
+flowchart LR
+    A(["Created by swipe-confirm"]) --> B["Picking"]
+    B -- "sumPutaway >= task.qty" --> C["Completed"]
+      </pre>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Stock_Movement Status Lifecycle</span>
+        <button class="btn-view-chart" onclick="openChart('lc3', 'Stock_Movement Status Lifecycle')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="lc3">
+flowchart LR
+    A(["Created"]) --> B["Pending"]
+    B -- "Assigned to staff" --> C["Assigned"]
+    C -- "Dual verification passed" --> D["Done"]
+    B -- "Cancelled by user" --> E["Deleted"]
+    note1["Only Pending tasks\ncan be edited or cancelled"]
+      </pre>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Lost_And_Found Status Lifecycle</span>
+        <button class="btn-view-chart" onclick="openChart('lc4', 'Lost & Found Status Lifecycle')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="lc4">
+flowchart LR
+    A(["Created"]) --> B["Pending"]
+    B -- "Picker starts picking" --> C["Picking"]
+    C -- "Putaway completed" --> D["Completed"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- ======= S9: Sync Rules ======= -->
+  <div class="section" id="s9">
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <h2>Sync &amp; Data Expiry Rules</h2>
+    </div>
+    <div class="section-body">
+      <h3>Section-Level Sync Map</h3>
+      <p>When a user navigates to a tab, only the sheets required for that section are fetched. Master reference data (SKUs, Zones, Racks, Users) is excluded from navigation syncs.</p>
+      <table>
+        <tr><th>Tab ID</th><th>Sheets Fetched on Navigation</th></tr>
+        <tr><td><code>home</code></td><td>None</td></tr>
+        <tr><td><code>requestPickup</code></td><td><code>Request_Checker</code>, <code>SO_DATA</code></td></tr>
+        <tr><td><code>pickingTask</code></td><td><code>Picking_Task</code>, <code>Request_Checker</code>, <code>Putaway</code>, <code>SOH</code></td></tr>
+        <tr><td><code>lostAndFound</code></td><td><code>Lost_And_Found</code></td></tr>
+        <tr><td><code>soh</code></td><td><code>SOH</code></td></tr>
+        <tr><td><code>stockMovement</code></td><td><code>Stock_Movement</code>, <code>Stock_Activity</code>, <code>SOH</code></td></tr>
+        <tr><td><code>admin</code></td><td><code>User_DB</code></td></tr>
+      </table>
+
+      <h3>Master Data — Fetch Triggers</h3>
+      <table>
+        <tr><th>Sheet</th><th>Fetched On</th><th>Excluded From</th></tr>
+        <tr><td><code>SKUs_DB</code></td><td>Fresh login, browser F5 refresh, Flush Cache &amp; Resync</td><td>All navigation syncs</td></tr>
+        <tr><td><code>Zone</code></td><td>Fresh login, browser F5 refresh, Flush Cache &amp; Resync</td><td>All navigation syncs</td></tr>
+        <tr><td><code>Racks</code></td><td>Fresh login, browser F5 refresh, Flush Cache &amp; Resync; also on pickingTask, soh, stockMovement nav</td><td>requestPickup, lostAndFound, admin navs</td></tr>
+        <tr><td><code>Checker_Lines</code></td><td>Fresh login, browser F5 refresh, Flush Cache &amp; Resync</td><td>All navigation syncs</td></tr>
+        <tr><td><code>User_DB</code></td><td>Fresh login, browser F5 refresh, Admin tab navigation</td><td>Other navigation syncs</td></tr>
+      </table>
+
+      <h3>TTL &amp; Auto-Refresh</h3>
+      <pre class="code-block">
+DATA_EXPIRY_DURATION_MS = 60_000   // 1 minute
+
+// Background check every 60 seconds:
+setInterval(() => checkAndRefreshIfExpired(), 60_000)
+
+checkAndRefreshIfExpired():
+  IF (Date.now() - lastSyncTime) >= DATA_EXPIRY_DURATION_MS AND NOT isSyncing:
+    syncSectionData(window.irmsActiveTab)</pre>
+    </div>
+  </div>
+
+  <!-- ======= S10: Validation ======= -->
+  <div class="section" id="s10">
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <h2>Validation Rules</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr><th>Module</th><th>Field</th><th>Rule</th><th>Error Action</th></tr>
+        <tr><td rowspan="3">Pickup Request</td><td><code>skuCode</code></td><td>Must be selected from SKUs_DB (non-empty)</td><td>Toast error, block submit</td></tr>
+        <tr><td><code>checkerLine</code></td><td>Must be selected from Checker_Lines (non-empty)</td><td>Toast error, block submit</td></tr>
+        <tr><td><code>qty</code></td><td>Integer &gt; 0</td><td>Toast error, block submit</td></tr>
+        <tr><td rowspan="2">Putaway</td><td><code>location</code></td><td>Must be selected from Racks list (non-empty)</td><td>Toast error, block submit</td></tr>
+        <tr><td><code>qtyPut</code></td><td>Integer &ge; 1 and &le; remaining task qty</td><td>Toast error, block submit</td></tr>
+        <tr><td rowspan="2">Stock Movement — SKU Verify</td><td><code>inputSkuCode</code></td><td>Must exactly match <code>movement.skuCode</code> (case-insensitive trim)</td><td>Error highlight, block Step 2</td></tr>
+        <tr><td><code>toLocation</code></td><td>Required for Transfer type; locked to "Deduction" for deduction type</td><td>Error highlight, block completion</td></tr>
+        <tr><td rowspan="2">Stock Deduction</td><td><code>qty</code></td><td>1 &le; qty &le; current <code>qtySoh</code></td><td>Toast error, block submit</td></tr>
+        <tr><td><code>reason</code></td><td>Must select from preset reasons</td><td>Toast error, block submit</td></tr>
+        <tr><td rowspan="2">User (Admin)</td><td><code>staffId</code></td><td>Must be unique across all users</td><td>Throw error — "Staff ID already exists"</td></tr>
+        <tr><td><code>name</code></td><td>Required, non-empty</td><td>Throw error</td></tr>
+        <tr><td>Zone (Admin)</td><td><code>zoneName</code></td><td>Must be unique (case-insensitive)</td><td>Throw error — "Zone already exists"</td></tr>
+        <tr><td>Rack (Admin)</td><td><code>locationName</code></td><td>Must be unique (case-insensitive)</td><td>Throw error — "Rack already exists"</td></tr>
+        <tr><td>Checker Line (Admin)</td><td><code>lineName</code></td><td>Must be unique (case-insensitive)</td><td>Throw error — "Checker Line already exists"</td></tr>
+        <tr><td>Login</td><td><code>name + password</code></td><td>Match found in User_DB (normalize: <code>trim().toLowerCase()</code>)</td><td>Toast — "Invalid Staff Name or Password"</td></tr>
+        <tr><td>Stock Movement (cancel)</td><td><code>status</code></td><td>Only <code>Pending</code> tasks can be cancelled</td><td>Throw — "Only pending tasks can be cancelled"</td></tr>
+        <tr><td>Stock Movement (edit)</td><td><code>status</code></td><td>Only <code>Pending</code> tasks can be edited</td><td>Throw — "Only pending stock movement tasks can be edited"</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======= S11: Permissions ======= -->
+  <div class="section" id="s11">
+    <div class="section-header">
+      <div class="section-num">11</div>
+      <h2>Role &amp; Permission Matrix</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr><th>Feature</th><th>Super / Admin / Manager / Supervisor</th><th>Staff / Checker</th><th>Picker</th></tr>
+        <tr><td>View all records (all users)</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-red">Own only</span></td><td><span class="badge badge-red">Own only</span></td></tr>
+        <tr><td>Create Pickup Request</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-amber">Limited</span></td></tr>
+        <tr><td>Start Picking (swipe-confirm)</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td></tr>
+        <tr><td>Complete Putaway</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td></tr>
+        <tr><td>Create Stock Deduction</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-amber">Depends on access</span></td></tr>
+        <tr><td>Complete Stock Movement (dual-verify)</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td></tr>
+        <tr><td>Create Lost &amp; Found entry</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-amber">Limited</span></td></tr>
+        <tr><td>Access Admin Panel</td><td><span class="badge badge-green">Yes (Super only)</span></td><td><span class="badge badge-red">No</span></td><td><span class="badge badge-red">No</span></td></tr>
+        <tr><td>Add / Edit / Delete Users</td><td><span class="badge badge-green">Yes (Super only)</span></td><td><span class="badge badge-red">No</span></td><td><span class="badge badge-red">No</span></td></tr>
+        <tr><td>Add / Edit / Delete Zones</td><td><span class="badge badge-green">Yes (Super only)</span></td><td><span class="badge badge-red">No</span></td><td><span class="badge badge-red">No</span></td></tr>
+        <tr><td>Add / Edit / Delete Racks</td><td><span class="badge badge-green">Yes (Super only)</span></td><td><span class="badge badge-red">No</span></td><td><span class="badge badge-red">No</span></td></tr>
+        <tr><td>Add / Edit / Delete Checker Lines</td><td><span class="badge badge-green">Yes (Super only)</span></td><td><span class="badge badge-red">No</span></td><td><span class="badge badge-red">No</span></td></tr>
+        <tr><td>Flush Cache &amp; Full Resync</td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td><td><span class="badge badge-green">Yes</span></td></tr>
+      </table>
+
+      <div class="callout amber">
+        <div class="callout-icon">!</div>
+        <div><strong>Elevated role check:</strong> The function <code>isElevatedRole(user)</code> returns <code>true</code> for roles: <code>super</code>, <code>admin</code>, <code>manager</code>, <code>supervisor</code>, <code>spv</code> (case-insensitive). Elevated users always see all records regardless of their own name.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======= S12: ID Scheme ======= -->
+  <div class="section" id="s12">
+    <div class="section-header">
+      <div class="section-num">12</div>
+      <h2>ID Generation Scheme</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr><th>Entity</th><th>Prefix</th><th>Format</th><th>Example</th><th>Generated By</th></tr>
+        <tr><td>Pickup Request</td><td><code>RC-</code></td><td><code>RC-</code> + 6 random digits</td><td><code>RC-482917</code></td><td>Client-side, on form open</td></tr>
+        <tr><td>Lost &amp; Found Entry</td><td><code>LF-</code></td><td><code>LF-</code> + 6 random digits</td><td><code>LF-728341</code></td><td>Client-side, on form open</td></tr>
+        <tr><td>Picking Task</td><td><code>PK-</code></td><td><code>PK-</code> + 6 random digits</td><td><code>PK-391042</code></td><td>Client-side, on swipe-confirm</td></tr>
+        <tr><td>Putaway Record</td><td><code>PT-</code></td><td><code>PT-</code> + 6 random digits</td><td><code>PT-820193</code></td><td>Client-side, on putaway submit</td></tr>
+        <tr><td>Stock Movement</td><td><code>SM</code></td><td><code>SM</code> + 6 random digits (no dash)</td><td><code>SM482917</code></td><td>Client-side, on deduction/transfer create</td></tr>
+        <tr><td>Stock Activity Log</td><td><code>SA</code></td><td><code>SA</code> + 6 random digits (no dash)</td><td><code>SA391042</code></td><td>Client-side, on movement completion or putaway</td></tr>
+        <tr><td>Zone</td><td>—</td><td><code>Date.now()</code> as string (unix ms)</td><td><code>1722271200000</code></td><td>Client-side, on zone create</td></tr>
+        <tr><td>Checker Line</td><td>—</td><td><code>Date.now()</code> as string (unix ms)</td><td><code>1722271300000</code></td><td>Client-side, on checker line create</td></tr>
+      </table>
+
+      <div class="callout blue">
+        <div class="callout-icon">i</div>
+        <div><strong>Collision probability:</strong> The 6-digit random ID space is 900,000 values. For a warehouse environment with typical request volumes, the collision probability per day is negligibly low. All IDs are generated client-side and persisted immediately to IndexedDB before being sent to Google Sheets.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ CHART MODAL ============ -->
+<div id="chartModal">
+  <div class="modal-box">
+    <div class="modal-toolbar">
+      <span class="modal-title" id="modalTitle">Diagram</span>
+      <div class="modal-controls">
+        <button class="ctrl-btn" onclick="zoomIn()">+ Zoom In</button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button class="ctrl-btn" onclick="zoomOut()">- Zoom Out</button>
+        <button class="ctrl-btn" onclick="resetView()">Reset</button>
+        <button class="ctrl-btn close-btn" onclick="closeChart()">Close</button>
+      </div>
+    </div>
+    <div class="modal-hint">Scroll to zoom &middot; Click and drag to pan &middot; Double-click to reset</div>
+    <div class="modal-canvas" id="modalCanvas">
+      <div class="chart-inner" id="chartInner"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#eef6ff',
+      primaryTextColor: '#1e293b',
+      primaryBorderColor: '#1565c0',
+      lineColor: '#1565c0',
+      secondaryColor: '#f0fdf4',
+      tertiaryColor: '#fefce8',
+      fontFamily: 'Segoe UI, system-ui, sans-serif',
+      fontSize: '13px',
+    },
+    er: { diagramPadding: 20, layoutDirection: 'TB', minEntityWidth: 100, minEntityHeight: 75, entityPadding: 15, useMaxWidth: true },
+    flowchart: { curve: 'basis', padding: 24 },
+  });
+
+  const rendered = {};
+  async function renderAll() {
+    const sources = document.querySelectorAll('.mermaid-source');
+    for (const el of sources) {
+      const id = el.id;
+      const code = el.textContent.trim();
+      try {
+        const { svg } = await mermaid.render('svg_' + id, code);
+        rendered[id] = svg;
+      } catch(e) {
+        rendered[id] = `<pre style="color:red;padding:16px;background:#fff1f1;border-radius:8px;">Render error: ${e.message}</pre>`;
+      }
+    }
+  }
+  renderAll();
+
+  let scale = 1, offsetX = 0, offsetY = 0;
+  let isDragging = false, dragStartX, dragStartY, dragStartOffX, dragStartOffY;
+  const modal = document.getElementById('chartModal');
+  const canvas = document.getElementById('modalCanvas');
+  const inner = document.getElementById('chartInner');
+  const zoomLevelEl = document.getElementById('zoomLevel');
+  const modalTitle = document.getElementById('modalTitle');
+
+  function applyTransform() {
+    inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+  function openChart(chartId, title) {
+    if (!rendered[chartId]) { alert('Chart is still rendering, please try again.'); return; }
+    inner.innerHTML = rendered[chartId];
+    modalTitle.textContent = title;
+    scale = 1; offsetX = 0; offsetY = 0;
+    applyTransform();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(fitChart, 80);
+  }
+  function fitChart() {
+    const svg = inner.querySelector('svg');
+    if (!svg) return;
+    const cr = canvas.getBoundingClientRect();
+    const sw = svg.getBoundingClientRect().width || 600;
+    const sh = svg.getBoundingClientRect().height || 400;
+    scale = Math.min((cr.width - 80) / sw, (cr.height - 80) / sh, 1.4);
+    offsetX = (cr.width - sw * scale) / 2;
+    offsetY = (cr.height - sh * scale) / 2;
+    applyTransform();
+  }
+  function closeChart() { modal.classList.remove('open'); document.body.style.overflow = ''; }
+  function zoomIn() { scale = Math.min(scale * 1.2, 6); applyTransform(); }
+  function zoomOut() { scale = Math.max(scale / 1.2, 0.1); applyTransform(); }
+  function resetView() { scale = 1; offsetX = 0; offsetY = 0; applyTransform(); setTimeout(fitChart, 40); }
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const d = e.deltaY < 0 ? 1.12 : 1/1.12;
+    const ns = Math.max(0.1, Math.min(6, scale * d));
+    offsetX = mx - (mx - offsetX) * (ns / scale);
+    offsetY = my - (my - offsetY) * (ns / scale);
+    scale = ns; applyTransform();
+  }, { passive: false });
+
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+    dragStartOffX = offsetX; dragStartOffY = offsetY;
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    offsetX = dragStartOffX + (e.clientX - dragStartX);
+    offsetY = dragStartOffY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; canvas.classList.remove('dragging'); });
+  canvas.addEventListener('dblclick', resetView);
+  modal.addEventListener('click', e => { if (e.target === modal) closeChart(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChart(); });
+</script>
+</body>
+</html>
