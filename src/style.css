@@ -1228,8 +1228,44 @@ body {
   .app-main-content,
   .main-content,
   .card-panel,
+  .mobile-card-list,
+  .page-content-container,
+  #tabContentArea,
   #appContent {
-    padding-bottom: 80px !important;
+    padding-bottom: 140px !important;
+  }
+
+  /* Fixed Floating Bulk Action Bar Container (Positioned above frozen bottom navigation) */
+  #mobileFloatingActionBarContainer {
+    position: fixed !important;
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px) + 12px) !important;
+    left: 16px !important;
+    right: 16px !important;
+    z-index: 2500 !important;
+    pointer-events: none !important;
+  }
+
+  .mobile-floating-action-bar {
+    width: 100% !important;
+    height: 48px !important;
+    background: linear-gradient(135deg, var(--primary-600), var(--primary-800)) !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 14px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    box-shadow: 0 8px 24px rgba(21, 101, 192, 0.4) !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+  }
+
+  .mobile-floating-action-bar:active {
+    transform: scale(0.98) !important;
   }
 
   .sidebar-header,
