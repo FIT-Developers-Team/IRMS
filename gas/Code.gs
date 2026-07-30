@@ -771,6 +771,11 @@ function handleCompleteStockMovement(ss, data) {
     var toLocation = data.toLocation || rowData['tolocation'] || '';
     var assignedBy = data.assignedBy || rowData['assignedby'] || '';
     var staffName = data.staffName || rowData['staffname'] || '';
+    var productId = data.productId || '';
+    var l0CategoryName = data.l0CategoryName || '';
+    var l1CategoryName = data.l1CategoryName || '';
+    var l2CategoryName = data.l2CategoryName || '';
+    var foodOrNonFood = data.foodOrNonFood || '';
 
     // 3. Record Stock Activity log
     try {
@@ -843,12 +848,19 @@ function handleCompleteStockMovement(ss, data) {
       var sHeaders = sohValues[0];
       
       var sUpdatedAtCol = -1, sSkuCol = -1, sLocCol = -1, sQtySohCol = -1;
+      var sProductIdCol = -1, sProductNameCol = -1, sL0Col = -1, sL1Col = -1, sL2Col = -1, sFoodCol = -1;
       for (var col = 0; col < sHeaders.length; col++) {
         var cleanH = String(sHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
         if (cleanH === 'updatedat') sUpdatedAtCol = col;
         if (cleanH === 'skunumber' || cleanH === 'skucode' || cleanH === 'sku') sSkuCol = col;
         if (cleanH === 'racklocation' || cleanH === 'location') sLocCol = col;
         if (cleanH === 'qtysoh' || cleanH === 'qty') sQtySohCol = col;
+        if (cleanH === 'productid') sProductIdCol = col;
+        if (cleanH === 'productname' || cleanH === 'product') sProductNameCol = col;
+        if (cleanH === 'l0categoryname') sL0Col = col;
+        if (cleanH === 'l1categoryname') sL1Col = col;
+        if (cleanH === 'l2categoryname') sL2Col = col;
+        if (cleanH === 'foodornonfood') sFoodCol = col;
       }
 
       var formattedNowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
@@ -887,10 +899,30 @@ function handleCompleteStockMovement(ss, data) {
           sohSheet.getRange(destRowIdx + 1, sQtySohCol + 1).setValue(currQty2 + qty);
           if (sUpdatedAtCol !== -1) sohSheet.getRange(destRowIdx + 1, sUpdatedAtCol + 1).setValue(formattedNowStr);
         } else {
+          // Older clients may not send SKU metadata. Reuse it from another
+          // SOH row for the same SKU (normally the source rack) as a fallback.
+          if (sSkuCol !== -1) {
+            for (var metadataRow = 1; metadataRow < sohValues.length; metadataRow++) {
+              if (String(sohValues[metadataRow][sSkuCol]).trim() !== String(skuCode).trim()) continue;
+              if (!productId && sProductIdCol !== -1) productId = sohValues[metadataRow][sProductIdCol] || '';
+              if (!productName && sProductNameCol !== -1) productName = sohValues[metadataRow][sProductNameCol] || '';
+              if (!l0CategoryName && sL0Col !== -1) l0CategoryName = sohValues[metadataRow][sL0Col] || '';
+              if (!l1CategoryName && sL1Col !== -1) l1CategoryName = sohValues[metadataRow][sL1Col] || '';
+              if (!l2CategoryName && sL2Col !== -1) l2CategoryName = sohValues[metadataRow][sL2Col] || '';
+              if (!foodOrNonFood && sFoodCol !== -1) foodOrNonFood = sohValues[metadataRow][sFoodCol] || '';
+              break;
+            }
+          }
+
           var sohPayload = {
             updatedAt: formattedNowStr,
+            productId: productId,
             skuNumber: skuCode,
             productName: productName,
+            l0CategoryName: l0CategoryName,
+            l1CategoryName: l1CategoryName,
+            l2CategoryName: l2CategoryName,
+            foodOrNonFood: foodOrNonFood,
             rackLocation: toLocation,
             qtySoh: qty,
             qtyOnSo: 0,

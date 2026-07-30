@@ -1887,6 +1887,7 @@ class DatabaseService {
     const sku = movement.skuCode;
     const fromLoc = movement.fromLocation;
     const toLoc = movement.toLocation;
+    const skuDetails = this.lookupSkuDetails(sku) || {};
 
     // Deduct from source rack location
     const sourceSohIdx = this.soh.findIndex(s => s.skuCode === sku && s.rackLocation === fromLoc);
@@ -1905,6 +1906,12 @@ class DatabaseService {
         // Create new rack entry in SOH
         this.soh.push({
           skuCode: sku,
+          productId: skuDetails.productId || '',
+          productName: skuDetails.productName || movement.productName || '',
+          l0CategoryName: skuDetails.l0CategoryName || '',
+          l1CategoryName: skuDetails.l1CategoryName || '',
+          l2CategoryName: skuDetails.l2CategoryName || '',
+          foodOrNonFood: skuDetails.foodOrNonFood || '',
           rackLocation: toLoc,
           qtySoh: moveQty,
           updatedAt: new Date().toISOString(),
@@ -1965,7 +1972,17 @@ class DatabaseService {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'completeStockMovement', movementId, completedBy: movement.completedBy })
+          body: JSON.stringify({
+            action: 'completeStockMovement',
+            movementId,
+            completedBy: movement.completedBy,
+            productId: skuDetails.productId || '',
+            productName: skuDetails.productName || movement.productName || '',
+            l0CategoryName: skuDetails.l0CategoryName || '',
+            l1CategoryName: skuDetails.l1CategoryName || '',
+            l2CategoryName: skuDetails.l2CategoryName || '',
+            foodOrNonFood: skuDetails.foodOrNonFood || ''
+          })
         });
         setTimeout(() => this.syncGoogleSheets(['soh']), 2500);
       } catch (err) {
