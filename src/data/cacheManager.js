@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'IRMS_IndexedDB_Cache';
-const DB_VERSION = 1;
+const DB_VERSION = 3;
 
 class CacheManager {
   constructor() {
@@ -15,50 +15,60 @@ class CacheManager {
   async init() {
     if (this.initPromise) return this.initPromise;
 
-    this.initPromise = new Promise((resolve, reject) => {
+    this.initPromise = new Promise((resolve) => {
       if (!window.indexedDB) {
         console.warn('IndexedDB is not supported in this environment. Falling back to in-memory/localStorage.');
         resolve(false);
         return;
       }
 
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      const openDb = (version) => {
+        const req = version ? indexedDB.open(DB_NAME, version) : indexedDB.open(DB_NAME);
 
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result;
+        req.onupgradeneeded = (event) => {
+          const db = event.target.result;
 
-        const stores = [
-          { name: 'requests', keyPath: 'ticketId' },
-          { name: 'pickingTasks', keyPath: 'pickingId' },
-          { name: 'lostAndFound', keyPath: 'ticketId' },
-          { name: 'soh', keyPath: 'id' },
-          { name: 'stockMovements', keyPath: 'movementId' },
-          { name: 'skusDb', keyPath: 'sku_number' },
-          { name: 'racks', keyPath: 'locationName' },
-          { name: 'zones', keyPath: 'zone' },
-          { name: 'checkerLines', keyPath: 'lineName' },
-          { name: 'putaway', keyPath: 'ticketId' },
-          { name: 'soData', keyPath: 'id' },
-          { name: 'stockActivity', keyPath: 'activityId' },
-          { name: 'syncMetadata', keyPath: 'storeName' }
-        ];
+          const stores = [
+            { name: 'requests', keyPath: 'ticketId' },
+            { name: 'pickingTasks', keyPath: 'pickingId' },
+            { name: 'lostAndFound', keyPath: 'ticketId' },
+            { name: 'soh', keyPath: 'id' },
+            { name: 'stockMovements', keyPath: 'movementId' },
+            { name: 'skusDb', keyPath: 'sku_number' },
+            { name: 'racks', keyPath: 'locationName' },
+            { name: 'zones', keyPath: 'zone' },
+            { name: 'checkerLines', keyPath: 'lineName' },
+            { name: 'putaway', keyPath: 'ticketId' },
+            { name: 'soData', keyPath: 'id' },
+            { name: 'stockActivity', keyPath: 'activityId' },
+            { name: 'syncMetadata', keyPath: 'storeName' }
+          ];
 
-        stores.forEach(s => {
-          if (!db.objectStoreNames.contains(s.name)) {
-            db.createObjectStore(s.name, { keyPath: s.keyPath });
+          stores.forEach(s => {
+            if (!db.objectStoreNames.contains(s.name)) {
+              db.createObjectStore(s.name, { keyPath: s.keyPath });
+            }
+          });
+        };
+
+        req.onsuccess = (event) => {
+          this.db = event.target.result;
+          resolve(true);
+        };
+
+        req.onerror = (event) => {
+          const err = event.target.error;
+          if (err && err.name === 'VersionError' && version) {
+            console.warn(`IndexedDB VersionError for requested version ${version}. Falling back to current version open...`);
+            openDb(null);
+            return;
           }
-        });
+          console.error('IndexedDB open error:', err);
+          resolve(false);
+        };
       };
 
-      request.onsuccess = (event) => {
-        this.db = event.target.result;
-        resolve(true);
-      };
-
-      request.onerror = (event) => {
-        console.error('IndexedDB open error:', event.target.error);
-        resolve(false);
-      };
+      openDb(DB_VERSION);
     });
 
     return this.initPromise;

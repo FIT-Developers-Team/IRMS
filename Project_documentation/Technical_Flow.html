@@ -31,6 +31,35 @@
     }
     .container { max-width: 980px; margin: 0 auto; }
 
+    /* Top Navigation Bar */
+    .doc-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      flex-wrap: wrap;
+    }
+    .doc-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+    .doc-nav a:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .doc-nav a.active {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
     /* Header */
     header {
       background: #1565c0;
@@ -289,6 +318,16 @@
 </head>
 <body>
 <div class="container">
+
+  <!-- Top Navigation Bar -->
+  <nav class="doc-nav">
+    <a href="User_Manual.html">User Manual</a>
+    <a href="Technical_Flow.html" class="active">Technical Flow</a>
+    <a href="Technical_Specification.html">Technical Specification</a>
+    <a href="Workflow.html">Workflow Diagram</a>
+    <a href="Architecture.html">Architecture</a>
+    <a href="Backend_Behavior.html">Backend Behavior</a>
+  </nav>
 
   <header>
     <div class="tag">User Guide — Technical Flow</div>

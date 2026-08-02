@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRMS App User Manual — How to Use the Application</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fc;
+      --surface: #ffffff;
+      --primary: #1565c0;
+      --primary-light: #eef6ff;
+      --primary-dark: #0d47a1;
+      --accent: #0288d1;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.75;
+      padding: 32px 16px;
+    }
+    .container { max-width: 980px; margin: 0 auto; }
+
+    /* Top Navigation Bar */
+    .doc-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      flex-wrap: wrap;
+    }
+    .doc-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+    .doc-nav a:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .doc-nav a.active {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    /* Header */
+    header {
+      background: #1565c0;
+      border-radius: 24px;
+      padding: 44px 52px;
+      margin-bottom: 40px;
+      color: #fff;
+    }
+    header .tag {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    header h1 { font-size: 30px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.5px; }
+    header p { font-size: 15px; opacity: 0.78; max-width: 650px; line-height: 1.6; }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      margin-bottom: 40px;
+    }
+    .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
+    .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px; }
+    .toc-grid a { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 14px; padding: 4px 0; border-bottom: 1px dashed var(--border); display: block; }
+    .toc-grid a:hover { color: var(--primary-dark); border-bottom-color: var(--primary); }
+
+    /* Sections */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .section-num {
+      background: var(--primary);
+      color: #fff;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 17px; font-weight: 700; color: var(--primary); }
+    .section-body { padding: 28px 32px; }
+
+    /* Typography */
+    h3 { font-size: 14px; font-weight: 700; color: var(--primary-dark); margin: 24px 0 8px; display: flex; align-items: center; gap: 8px; }
+    h3::before { content: ''; display: block; width: 3px; height: 16px; background: var(--primary); border-radius: 2px; }
+    p { margin: 8px 0; font-size: 14px; color: var(--text); }
+    ul, ol { padding-left: 20px; font-size: 14px; color: var(--text); }
+    li { margin: 6px 0; line-height: 1.6; }
+    strong { color: var(--primary-dark); }
+    code {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--primary);
+    }
+
+    /* Info Callouts */
+    .callout {
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 13px;
+      line-height: 1.6;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .callout-tag { font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; flex-shrink: 0; }
+    .callout.blue { background: #eff8ff; border-left: 4px solid var(--primary); color: #1e3a5f; }
+    .callout.blue .callout-tag { background: #dbeafe; color: var(--primary-dark); }
+    .callout.green { background: #f0fdf4; border-left: 4px solid var(--green); color: #14532d; }
+    .callout.green .callout-tag { background: #d1fae5; color: #065f46; }
+    .callout.amber { background: #fffbeb; border-left: 4px solid var(--amber); color: #78350f; }
+    .callout.amber .callout-tag { background: #fef3c7; color: #92400e; }
+
+    /* Step List */
+    .step-list { list-style: none; padding: 0; margin: 10px 0; }
+    .step-list li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    .step-num {
+      background: var(--primary);
+      color: #fff;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .step-content { flex: 1; }
+    .step-label { font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .step-desc { color: var(--text-muted); font-size: 13px; }
+
+    /* Data Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+    }
+    td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+    tr:nth-child(even) td { background: #fafbff; }
+
+    /* Badges */
+    .badge { display: inline-block; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .badge-blue { background: var(--primary-light); color: var(--primary); }
+    .badge-green { background: #d1fae5; color: #065f46; }
+    .badge-amber { background: #fef3c7; color: #92400e; }
+    .badge-red { background: #fee2e2; color: #991b1b; }
+
+    /* Role Cards */
+    .role-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+    .role-card { background: var(--primary-light); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+    .role-card .role-name { font-size: 13px; font-weight: 800; color: var(--primary); margin-bottom: 6px; }
+    .role-card ul { padding-left: 16px; font-size: 12px; color: var(--text-muted); }
+    .role-card li { margin: 3px 0; }
+
+    /* View Chart Button */
+    .chart-trigger-wrap {
+      margin: 20px 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .chart-label-text {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .btn-view-chart {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.12s;
+    }
+    .btn-view-chart:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    .btn-view-chart:active { transform: translateY(0); }
+    .mermaid-source { display: none; }
+
+    /* ========== CHART MODAL ========== */
+    #chartModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: rgba(10, 20, 50, 0.72);
+      backdrop-filter: blur(6px);
+      align-items: center;
+      justify-content: center;
+    }
+    #chartModal.open { display: flex; }
+    .modal-box {
+      position: relative;
+      background: var(--surface);
+      border-radius: 20px;
+      width: calc(100vw - 48px);
+      height: calc(100vh - 80px);
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--primary-light);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: var(--primary); }
+    .modal-controls { display: flex; align-items: center; gap: 8px; }
+    .ctrl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ctrl-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .ctrl-btn.close-btn { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .ctrl-btn.close-btn:hover { background: #fee2e2; }
+    .zoom-level { font-size: 12px; font-weight: 700; color: var(--text-muted); min-width: 44px; text-align: center; }
+    .modal-hint { font-size: 11px; color: var(--text-muted); padding: 6px 20px; background: #fafbff; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modal-canvas { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+    .modal-canvas.dragging { cursor: grabbing; }
+    .chart-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; display: flex; align-items: center; justify-content: center; padding: 40px; }
+    .chart-inner svg { max-width: none !important; height: auto; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    @media (max-width: 600px) {
+      .toc-grid { grid-template-columns: 1fr; }
+      .role-grid { grid-template-columns: 1fr; }
+      header { padding: 28px 24px; }
+      .section-body { padding: 20px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Top Navigation Bar -->
+  <nav class="doc-nav">
+    <a href="User_Manual.html" class="active">User Manual</a>
+    <a href="Technical_Flow.html">Technical Flow</a>
+    <a href="Technical_Specification.html">Technical Specification</a>
+    <a href="Workflow.html">Workflow Diagram</a>
+    <a href="Architecture.html">Architecture</a>
+    <a href="Backend_Behavior.html">Backend Behavior</a>
+  </nav>
+
+  <header>
+    <div class="tag">Operational Guide — App User Manual</div>
+    <h1>IRMS — How to Use the Application</h1>
+    <p>Step-by-step practical guide for warehouse staff, checkers, pickers, and administrators on using the Inventory Recovery Management System application in daily operations.</p>
+  </header>
+
+  <div class="toc">
+    <div class="toc-label">Table of Contents</div>
+    <div class="toc-grid">
+      <a href="#u1">1. Getting Started &amp; Login</a>
+      <a href="#u2">2. Creating a Pickup Request</a>
+      <a href="#u3">3. Claiming &amp; Starting Picking Tasks</a>
+      <a href="#u4">4. Putting Away Items into Racks</a>
+      <a href="#u5">5. Moving Stock Between Rack Locations</a>
+      <a href="#u6">6. Deducting Damaged or Lost Stock</a>
+      <a href="#u7">7. Recording Found Items (Lost &amp; Found)</a>
+      <a href="#u8">8. Monitoring Stock on Hand (SOH)</a>
+      <a href="#u9">9. Master Data Management (Admin)</a>
+      <a href="#u10">10. Data Syncing &amp; Troubleshooting</a>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 1 ============================== -->
+  <div class="section" id="u1">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>Getting Started &amp; Login</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Before performing tasks in IRMS, you must authenticate using your assigned staff credentials. Your user role determines which features and buttons appear in the navigation bar.</p>
+
+      <div class="role-grid">
+        <div class="role-card">
+          <div class="role-name">Super (Admin)</div>
+          <ul>
+            <li>Full system navigation access</li>
+            <li>Can create/edit users, zones, racks, checker lines</li>
+            <li>Can view and manage all staff records</li>
+          </ul>
+        </div>
+        <div class="role-card">
+          <div class="role-name">Staff / Checker</div>
+          <ul>
+            <li>Create new Pickup Requests</li>
+            <li>Log Lost &amp; Found entries</li>
+            <li>View own requested tickets</li>
+          </ul>
+        </div>
+        <div class="role-card">
+          <div class="role-name">Picker</div>
+          <ul>
+            <li>View Waiting List &amp; claim tasks</li>
+            <li>Perform rack putaway</li>
+            <li>Execute stock transfers &amp; deductions</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>How to Log In</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Open the application URL</div>
+            <div class="step-desc">Open the IRMS application in your browser. If you previously logged in on the same device and your session is active, the dashboard loads automatically.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Enter Username and Password</div>
+            <div class="step-desc">Type your registered staff username and password into the login form. Verification occurs instantly on your device.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Select shift and access Dashboard</div>
+            <div class="step-desc">Upon successful login, your 4-hour active shift session begins. The application syncs reference data (products, racks, zones) in the background.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout amber">
+        <span class="callout-tag">Session Note</span>
+        <div>Your login session remains active for <strong>4 hours</strong>. If inactive or expired, a secure lock modal prompts for your password to resume work without losing pending entries.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Login &amp; Role Workflow</span>
+        <button class="btn-view-chart" onclick="openChart('um1', 'Login & Role Workflow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="um1">
+flowchart TD
+    A["Open Application"] --> B{"Session Active?"}
+    B -- Yes --> C["Access Dashboard"]
+    B -- No --> D["Show Login Form"]
+    D --> E["Enter Username & Password"]
+    E --> F{"Credentials Valid?"}
+    F -- No --> G["Display Error Message"]
+    G --> D
+    F -- Yes --> H["Save 4-Hour Local Session"]
+    H --> C
+    C --> I{"Check Role Permissions"}
+    I -->|Admin| J["Show Full Navigation Menu"]
+    I -->|Checker| K["Show Request & Lost-Found Menu"]
+    I -->|Picker| L["Show Picking, Putaway & Movement Menu"]
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 2 ============================== -->
+  <div class="section" id="u2">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Creating a Pickup Request</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Checkers or staff members create a <strong>Pickup Request</strong> when items accumulated at checker lines need to be picked up by warehouse pickers and put into rack inventory.</p>
+
+      <h3>How to Submit a Request</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Navigate to "Pickup Request" and click "+ New Pickup Request"</div>
+            <div class="step-desc">Click the primary action button. A request form opens, and a unique tracking ID (e.g. <code>RC-482917</code>) is automatically generated.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Select SKU Code</div>
+            <div class="step-desc">Select or type the product SKU code. The system automatically populates the Product Name, Category, and Type (Food / Non-Food).</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Choose Checker Line and enter Quantity</div>
+            <div class="step-desc">Select the Checker Line location where the items are physically sitting. Input the exact number of units and optional notes.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">Click "Submit Request"</div>
+            <div class="step-desc">The request immediately appears in your request table with status <span class="badge badge-amber">Pending</span>. It is simultaneously synced to Google Sheets and added to the Picking Task waiting list.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout green">
+        <span class="callout-tag">Tip</span>
+        <div>You can search your submitted requests by Ticket ID, SKU, or Product Name using the search filter bar at the top of the Pickup Request table.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Pickup Request Procedure</span>
+        <button class="btn-view-chart" onclick="openChart('um2', 'Pickup Request Procedure')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="um2">
+flowchart TD
+    A["Click + New Pickup Request"] --> B["Ticket ID Auto-Generated (RC-XXXXXX)"]
+    B --> C["Select Product SKU"]
+    C --> D["Auto-Fill Product Details"]
+    D --> E["Select Checker Line & Enter Qty"]
+    E --> F["Click Submit"]
+    F --> G["Saved Locally & Enqueued to Sheets"]
+    G --> H["Status set to Pending"]
+    H --> I["Visible in Picker Waiting List"]
+      </pre>
+
+  <!-- ============================== SECTION 3 ============================== -->
+  <div class="section" id="u3">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>Claiming &amp; Starting Picking Tasks</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Pickers inspect open pending requests in the <strong>Picking Task</strong> module, select items to collect from checker lines, and swipe to confirm task ownership.</p>
+
+      <h3>How to Start Picking</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Open "Picking Task" and view "Waiting List"</div>
+            <div class="step-desc">The Waiting List tab displays all pending pickup requests and lost &amp; found items waiting for physical collection.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Select items to pick</div>
+            <div class="step-desc">Checkbox desired items on desktop or tap task cards on mobile. A floating bottom action bar shows the count of selected items.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Tap "Start Picking"</div>
+            <div class="step-desc">A swipe confirmation modal appears listing all selected items for final review.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">Swipe slider right to confirm</div>
+            <div class="step-desc">Drag the interactive slider past 90% to confirm. Unique Picking IDs (e.g. <code>PK-391042</code>) are generated, assigning tasks to your account in status <span class="badge badge-blue">Picking</span>.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout blue">
+        <span class="callout-tag">Safety Feature</span>
+        <div>The swipe gesture prevents accidental task claims. Once confirmed, claimed items move to your personal "In Progress" tab.</div>
+      </div>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Task Claiming Procedure</span>
+        <button class="btn-view-chart" onclick="openChart('um3', 'Task Claiming Procedure')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="um3">
+flowchart TD
+    A["Open Picking Task -> Waiting List"] --> B["Select Item Checkboxes / Cards"]
+    B --> C["Tap Start Picking Button"]
+    C --> D["Review Item List in Modal"]
+    D --> E{"Swipe Slider > 90% Right?"}
+    E -- No --> D
+    E -- Yes --> F["Generate PK-XXXXXX Ticket IDs"]
+    F --> G["Assign Picker Name & Change Status to Picking"]
+    G --> H["Move Tasks to In Progress Tab"]
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 4 ============================== -->
+  <div class="section" id="u4">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>Putting Away Items into Racks (Putaway)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Once picked items are transported to warehouse racking, the picker executes a <strong>Putaway</strong> to place items in a specific rack location and update Stock on Hand (SOH).</p>
+
+      <h3>How to Complete a Putaway</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Open "Picking Task" -> "In Progress" tab</div>
+            <div class="step-desc">Locate your active picking task and click the "Complete / Putaway" action button.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Select destination Zone and Rack location</div>
+            <div class="step-desc">Use the location picker to search and select the exact rack identifier (e.g. Zone A, Rack <code>A-01-02</code>).</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Confirm putaway quantity</div>
+            <div class="step-desc">Verify quantity being stored. If full quantity is put away, the task marks <span class="badge badge-green">Completed</span>. For partial quantities, remaining units stay in progress.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">Click "Submit Putaway"</div>
+            <div class="step-desc">The system logs a Putaway record (<code>PT-XXXXXX</code>), creates a Stock Activity movement log, and immediately increases SOH for that product at the chosen rack.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Putaway Procedure</span>
+        <button class="btn-view-chart" onclick="openChart('um4', 'Putaway Procedure')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="um4">
+flowchart TD
+    A["Click Complete / Putaway on Active Task"] --> B["Select Destination Rack Location"]
+    B --> C["Enter Putaway Quantity"]
+    C --> D["Submit Form"]
+    D --> E["Generate PT-XXXXXX Record"]
+    E --> F["Create Stock Activity Log"]
+    F --> G["Increase SOH Count at Rack Location"]
+    G --> H{"All Quantity Stored?"}
+    H -- Yes --> I["Status set to Completed"]
+    H -- No --> J["Remaining Qty Remains In Progress"]
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 5 ============================== -->
+  <div class="section" id="u5">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>Moving Stock Between Rack Locations</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>When stock needs to be relocated from one rack to another, a <strong>Stock Transfer</strong> task is processed through a mandatory 2-step verification procedure to eliminate scanning errors.</p>
+
+      <h3>Step-by-Step Transfer Procedure</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Open "Stock Movement" and click "Complete Task"</div>
+            <div class="step-desc">Select an assigned movement task from the task queue. The verification dialog opens.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Step 1: Scan or Type SKU Code</div>
+            <div class="step-desc">Scan barcode or manually enter the item SKU code. The system checks exact code equality. If unmatched, execution stops.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Step 2: Confirm Destination Rack</div>
+            <div class="step-desc">Confirm destination rack location where physical items are deposited.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">Click "Verify &amp; Complete"</div>
+            <div class="step-desc">The app decreases SOH at origin rack, increases SOH at target rack, logs dual stock activity entries (Outbound and Inbound), and updates status to <span class="badge badge-green">Done</span>.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Double-Verification Transfer Procedure</span>
+        <button class="btn-view-chart" onclick="openChart('um5', 'Double-Verification Transfer Procedure')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="um5">
+flowchart TD
+    A["Select Stock Movement Task"] --> B["Click Complete Task"]
+    B --> C["Step 1: Input / Scan SKU Code"]
+    C --> D{"SKU Matches Expected Item?"}
+    D -- No --> E["Error: Barcode Mismatch (Blocked)"]
+    E --> C
+    D -- Yes --> F["Step 2: Input / Confirm Target Location"]
+    F --> G["Click Verify & Complete"]
+    G --> H["Decrease SOH at Origin Rack"]
+    H --> I["Increase SOH at Target Rack"]
+    I --> J["Log Outbound & Inbound Activity Records"]
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 6 ============================== -->
+  <div class="section" id="u6">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Deducting Damaged or Lost Stock</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>If items in rack inventory are damaged, expired, missing, or require inventory audit adjustment, staff must submit a <strong>Stock Deduction</strong> request.</p>
+
+      <h3>How to Deduct Stock</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Locate item in Stock on Hand (SOH)</div>
+            <div class="step-desc">Open the SOH module, find the affected product-rack record, and click "Deduct Stock".</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Select Reason and enter Quantity</div>
+            <div class="step-desc">Choose reason: Bad/Damaged/Expired, Lost/Missing, Discrepancy Correction, or Sample/Testing. Target destination is locked to <code>Deduction</code>.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Submit Deduction Request</div>
+            <div class="step-desc">A Stock Movement task of type <code>Deduction</code> is enqueued. Stock is NOT subtracted until double verification is completed in Stock Movement.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <div class="step-label">Complete verification in Stock Movement</div>
+            <div class="step-desc">The assigned staff verifies SKU scanning in Stock Movement module to permanently decrement SOH.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Stock Deduction Flow</span>
+        <button class="btn-view-chart" onclick="openChart('um6', 'Stock Deduction Flow')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="um6">
+flowchart TD
+    A["Find Item in SOH List"] --> B["Click Deduct Stock"]
+    B --> C["Select Reason & Qty"]
+    C --> D["Submit Deduction Request"]
+    D --> E["Enqueue Stock Movement (Type: Deduction)"]
+    E --> F["Perform SKU Scan Verification in Movement"]
+    F --> G["Permanently Decrement SOH & Log Deduction Activity"]
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 7 ============================== -->
+  <div class="section" id="u7">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Recording Found Items (Lost &amp; Found)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Unplaced or stray items discovered anywhere in the warehouse are registered via <strong>Lost &amp; Found</strong> so pickers can retrieve them and store them in permanent rack inventory.</p>
+
+      <h3>How to Log Found Items</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Navigate to "Lost &amp; Found" and click "+ New Entry"</div>
+            <div class="step-desc">A ticket identifier (e.g. <code>LF-728341</code>) is automatically generated.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Enter Product SKU, Quantity, and Temporary Location</div>
+            <div class="step-desc">Input product SKU code, quantity found, and physical zone/area where item was discovered.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Submit Lost &amp; Found Entry</div>
+            <div class="step-desc">Entry saves with status <span class="badge badge-amber">Pending</span> and automatically routes into the Picking Task Waiting List for putaway processing.</div>
+          </div>
+        </li>
+      </ul>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 8 ============================== -->
+  <div class="section" id="u8">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>Monitoring Stock on Hand (SOH)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>The <strong>Stock on Hand (SOH)</strong> screen provides live visibility into total warehouse inventory breakdown by product SKU, category, zone, rack location, and aging metric.</p>
+
+      <h3>Key Features &amp; Filtering</h3>
+      <table>
+        <tr><th>Feature</th><th>Description</th><th>Use Case</th></tr>
+        <tr>
+          <td><strong>Summary KPI Cards</strong></td>
+          <td>Displays Total Unique SKUs, Total Item Units, High-Age items, and Deduction counts.</td>
+          <td>Quick operational audit dashboard view.</td>
+        </tr>
+        <tr>
+          <td><strong>Search Bar</strong></td>
+          <td>Filter by product SKU, product name, or rack code.</td>
+          <td>Locating specific stock locations instantly.</td>
+        </tr>
+        <tr>
+          <td><strong>High-Age Stock Filter</strong></td>
+          <td>Highlight items stored longer than standard retention threshold.</td>
+          <td>Stock rotation and inventory auditing.</td>
+        </tr>
+      </table>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 9 ============================== -->
+  <div class="section" id="u9">
+    <div class="section-header">
+      <div class="section-num">9</div>
+      <h2>Master Data Management (Admin)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Users with the <strong>Super (Admin)</strong> role manage system master data using the Admin Panel. Changes sync directly to reference sheets and update pickers' forms instantly.</p>
+
+      <h3>Admin Configuration Options</h3>
+      <table>
+        <tr><th>Module</th><th>Configurable Data</th><th>Impact</th></tr>
+        <tr>
+          <td><strong>User Management</strong></td>
+          <td>Add staff accounts, edit roles (Super/Staff/Picker), update passwords.</td>
+          <td>Controls authentication and feature permission access.</td>
+        </tr>
+        <tr>
+          <td><strong>Zone Management</strong></td>
+          <td>Create, rename, or delete warehouse zone codes.</td>
+          <td>Updates zone choices across putaway and location pickers.</td>
+        </tr>
+        <tr>
+          <td><strong>Rack Management</strong></td>
+          <td>Add rack codes with zone, aisle, bay, level, and capacity attributes.</td>
+          <td>Defines valid location targets for putaway and transfers.</td>
+        </tr>
+        <tr>
+          <td><strong>Checker Lines</strong></td>
+          <td>Configure active checker line identifiers.</td>
+          <td>Updates available origin lines in pickup request forms.</td>
+        </tr>
+      </table>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 10 ============================== -->
+  <div class="section" id="u10">
+    <div class="section-header">
+      <div class="section-num">10</div>
+      <h2>Data Syncing &amp; Troubleshooting</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Data Syncing Mechanism</h3>
+      <p>IRMS operates on an offline-first architecture. All records are saved instantly to local browser database (IndexedDB) and synchronized with Google Sheets in the background.</p>
+
+      <h3>Sync Toolbar Controls</h3>
+      <ul>
+        <li><strong>Sync Button (Header Bar)</strong> — Triggers a manual background refresh of active tab data from Google Sheets.</li>
+        <li><strong>Flush Cache &amp; Full Resync</strong> — Clears local browser cache and re-downloads all product catalogs, racks, zones, and task lists from cloud storage.</li>
+      </ul>
+
+      <h3>Troubleshooting Common Issues</h3>
+      <table>
+        <tr><th>Issue</th><th>Probable Cause</th><th>Resolution Action</th></tr>
+        <tr>
+          <td>SKU Scan Mismatch Error</td>
+          <td>Scanned barcode does not match task target SKU.</td>
+          <td>Verify physical item barcode against task ticket SKU code.</td>
+        </tr>
+        <tr>
+          <td>Session Expired Lock Screen</td>
+          <td>4-hour shift duration elapsed.</td>
+          <td>Enter password in lock modal to unlock session. Unsaved draft data remains intact.</td>
+        </tr>
+        <tr>
+          <td>Data Not Appearing for Teammates</td>
+          <td>Internet connection temporarily disconnected.</td>
+          <td>App will auto-sync once connection restores. Click manual Sync button when back online.</td>
+        </tr>
+      </table>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ CHART MODAL ============ -->
+<div id="chartModal">
+  <div class="modal-box">
+    <div class="modal-toolbar">
+      <span class="modal-title" id="modalTitle">Chart</span>
+      <div class="modal-controls">
+        <button class="ctrl-btn" onclick="zoomIn()">+ Zoom In</button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button class="ctrl-btn" onclick="zoomOut()">- Zoom Out</button>
+        <button class="ctrl-btn" onclick="resetView()">Reset</button>
+        <button class="ctrl-btn close-btn" onclick="closeChart()">Close</button>
+      </div>
+    </div>
+    <div class="modal-hint">Scroll to zoom &middot; Click and drag to pan &middot; Double-click to reset</div>
+    <div class="modal-canvas" id="modalCanvas">
+      <div class="chart-inner" id="chartInner"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#eef6ff',
+      primaryTextColor: '#1e293b',
+      primaryBorderColor: '#1565c0',
+      lineColor: '#1565c0',
+      secondaryColor: '#f0fdf4',
+      tertiaryColor: '#fefce8',
+      fontFamily: 'Segoe UI, system-ui, sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', padding: 24 },
+    sequence: { actorMargin: 60, messageMargin: 30 },
+  });
+
+  const rendered = {};
+  async function renderAll() {
+    const sources = document.querySelectorAll('.mermaid-source');
+    for (const el of sources) {
+      const id = el.id;
+      const code = el.textContent.trim();
+      try {
+        const { svg } = await mermaid.render('svg_' + id, code);
+        rendered[id] = svg;
+      } catch(e) {
+        rendered[id] = `<pre style="color:red;padding:16px;">Render error: ${e.message}</pre>`;
+      }
+    }
+  }
+  renderAll();
+
+  let scale = 1, offsetX = 0, offsetY = 0;
+  let isDragging = false, dragStartX, dragStartY, dragStartOffX, dragStartOffY;
+
+  const modal = document.getElementById('chartModal');
+  const canvas = document.getElementById('modalCanvas');
+  const inner = document.getElementById('chartInner');
+  const zoomLevelEl = document.getElementById('zoomLevel');
+  const modalTitle = document.getElementById('modalTitle');
+
+  function applyTransform() {
+    inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function openChart(chartId, title) {
+    if (!rendered[chartId]) { alert('Chart is still rendering, please try again in a moment.'); return; }
+    inner.innerHTML = rendered[chartId];
+    modalTitle.textContent = title;
+    scale = 1; offsetX = 0; offsetY = 0;
+    applyTransform();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(fitChart, 80);
+  }
+
+  function fitChart() {
+    const svg = inner.querySelector('svg');
+    if (!svg) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const svgW = svg.getBoundingClientRect().width || 600;
+    const svgH = svg.getBoundingClientRect().height || 400;
+    const scaleX = (canvasRect.width - 80) / svgW;
+    const scaleY = (canvasRect.height - 80) / svgH;
+    scale = Math.min(scaleX, scaleY, 1.4);
+    offsetX = (canvasRect.width - svgW * scale) / 2;
+    offsetY = (canvasRect.height - svgH * scale) / 2;
+    applyTransform();
+  }
+
+  function closeChart() { modal.classList.remove('open'); document.body.style.overflow = ''; }
+  function zoomIn() { scale = Math.min(scale * 1.2, 6); applyTransform(); }
+  function zoomOut() { scale = Math.max(scale / 1.2, 0.1); applyTransform(); }
+  function resetView() { scale = 1; offsetX = 0; offsetY = 0; applyTransform(); setTimeout(fitChart, 40); }
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+    const delta = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const newScale = Math.max(0.1, Math.min(6, scale * delta));
+    offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+    offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+    dragStartOffX = offsetX; dragStartOffY = offsetY;
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    offsetX = dragStartOffX + (e.clientX - dragStartX);
+    offsetY = dragStartOffY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; canvas.classList.remove('dragging'); });
+  canvas.addEventListener('dblclick', resetView);
+  modal.addEventListener('click', e => { if (e.target === modal) closeChart(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChart(); });
+</script>
+</body>
+</html>

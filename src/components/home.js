@@ -141,25 +141,70 @@ export function renderHome(container, currentUser) {
           </div>
         </div>
 
-        <!-- Quick Tips & Help Guide -->
-        <div style="background: #f8fafc; border: 1.5px solid var(--border-light); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px;">
-          <h4 style="font-size: 14px; font-weight: 800; color: var(--primary-900); margin: 0; display: flex; align-items: center; gap: 8px;">
-            <span class="material-icons-round" style="color: var(--primary-600);">help_outline</span>
-            System Quick Guides
-          </h4>
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; font-size: 12px; line-height: 1.5; color: var(--text-secondary);">
+        <!-- Project Documentation Portal -->
+        <div style="background: #ffffff; border: 1.5px solid var(--border-light); border-radius: 16px; padding: 24px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
             <div>
-              <strong style="color: var(--text-primary); display: block; margin-bottom: 2px;">Offline Operations Support</strong>
-              All claims, picks, and changes are cached locally in the database. If internet drops, work is saved and synced when network returns.
+              <h4 style="font-size: 16px; font-weight: 800; color: var(--primary-900); margin: 0; display: flex; align-items: center; gap: 8px;">
+                <span class="material-icons-round" style="color: var(--primary-600);">auto_stories</span>
+                System Documentation Portal
+              </h4>
+              <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Comprehensive operational guides, technical specs, workflow diagrams, and architecture blueprints.</p>
             </div>
-            <div>
-              <strong style="color: var(--text-primary); display: block; margin-bottom: 2px;">Filters and Search</strong>
-              Table columns are filterable in-header. You can type comparison selectors (like <code>&gt;10</code>, <code>&lt;=2</code>) inside metric columns to slice listings instantly.
-            </div>
-            <div>
-              <strong style="color: var(--text-primary); display: block; margin-bottom: 2px;">Detailed Rack Breakdown</strong>
-              On the SOH screen, clicking on a SKU row reveals all physical location details, stock quantities, and aging values inside a details popup.
-            </div>
+            <a href="./Project_documentation/User_Manual.html" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--primary-600); color: #ffffff; text-decoration: none; border-radius: 10px; font-size: 12px; font-weight: 700; transition: background 0.2s;">
+              <span class="material-icons-round" style="font-size: 16px;">open_in_new</span>
+              Open Full Manual
+            </a>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+            <a href="./Project_documentation/User_Manual.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
+                <span class="material-icons-round" style="font-size: 20px;">menu_book</span>
+                <strong style="font-size: 13px; color: var(--text-primary);">User Manual</strong>
+              </div>
+              <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Step-by-step app user guide for pickup requests, picking tasks, putaway, and SOH monitoring.</span>
+            </a>
+
+            <a href="./Project_documentation/Technical_Flow.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
+                <span class="material-icons-round" style="font-size: 20px;">alt_route</span>
+                <strong style="font-size: 13px; color: var(--text-primary);">Technical Flow</strong>
+              </div>
+              <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Plain-language explanation of features, interactive flowcharts, and background storage rules.</span>
+            </a>
+
+            <a href="./Project_documentation/Technical_Specification.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
+                <span class="material-icons-round" style="font-size: 20px;">description</span>
+                <strong style="font-size: 13px; color: var(--text-primary);">Technical Spec</strong>
+              </div>
+              <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Complete reference: ERD, 13 Google Sheets tabs, data model fields, and validation matrix.</span>
+            </a>
+
+            <a href="./Project_documentation/Workflow.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
+                <span class="material-icons-round" style="font-size: 20px;">schema</span>
+                <strong style="font-size: 13px; color: var(--text-primary);">Workflow Diagram</strong>
+              </div>
+              <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Visual diagrams detailing state transitions, double-verification flows, and user lifecycles.</span>
+            </a>
+
+            <a href="./Project_documentation/Architecture.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
+                <span class="material-icons-round" style="font-size: 20px;">layers</span>
+                <strong style="font-size: 13px; color: var(--text-primary);">Architecture</strong>
+              </div>
+              <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Multi-tier architecture, component modules, security RBAC model, and Docker container setup.</span>
+            </a>
+
+            <a href="./Project_documentation/Backend_Behavior.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+              <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
+                <span class="material-icons-round" style="font-size: 20px;">dns</span>
+                <strong style="font-size: 13px; color: var(--text-primary);">Backend Behavior</strong>
+              </div>
+              <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Dual-endpoint model: gviz CSV read endpoint + Apps Script REST API mutation endpoint.</span>
+            </a>
           </div>
         </div>
 

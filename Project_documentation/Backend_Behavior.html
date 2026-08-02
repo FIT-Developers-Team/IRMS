@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRMS Backend Behavior — Processing &amp; Data Flow Reference</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fc;
+      --surface: #ffffff;
+      --primary: #1565c0;
+      --primary-light: #eef6ff;
+      --primary-dark: #0d47a1;
+      --accent: #0288d1;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.75;
+      padding: 32px 16px;
+    }
+    .container { max-width: 980px; margin: 0 auto; }
+
+    /* Top Navigation Bar */
+    .doc-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      flex-wrap: wrap;
+    }
+    .doc-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+    .doc-nav a:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .doc-nav a.active {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    /* Header */
+    header {
+      background: #1565c0;
+      border-radius: 24px;
+      padding: 44px 52px;
+      margin-bottom: 40px;
+      color: #fff;
+    }
+    header .tag {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    header h1 { font-size: 30px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.5px; }
+    header p { font-size: 15px; opacity: 0.78; max-width: 650px; line-height: 1.6; }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      margin-bottom: 40px;
+    }
+    .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
+    .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px; }
+    .toc-grid a { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 14px; padding: 4px 0; border-bottom: 1px dashed var(--border); display: block; }
+    .toc-grid a:hover { color: var(--primary-dark); border-bottom-color: var(--primary); }
+
+    /* Sections */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .section-num {
+      background: var(--primary);
+      color: #fff;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 17px; font-weight: 700; color: var(--primary); }
+    .section-body { padding: 28px 32px; }
+
+    /* Typography */
+    h3 { font-size: 14px; font-weight: 700; color: var(--primary-dark); margin: 24px 0 8px; display: flex; align-items: center; gap: 8px; }
+    h3::before { content: ''; display: block; width: 3px; height: 16px; background: var(--primary); border-radius: 2px; }
+    p { margin: 8px 0; font-size: 14px; color: var(--text); }
+    ul, ol { padding-left: 20px; font-size: 14px; color: var(--text); }
+    li { margin: 6px 0; line-height: 1.6; }
+    strong { color: var(--primary-dark); }
+    code {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--primary);
+    }
+
+    /* Callout Boxes */
+    .callout {
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 13px;
+      line-height: 1.6;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .callout-tag { font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; flex-shrink: 0; }
+    .callout.blue { background: #eff8ff; border-left: 4px solid var(--primary); color: #1e3a5f; }
+    .callout.blue .callout-tag { background: #dbeafe; color: var(--primary-dark); }
+    .callout.green { background: #f0fdf4; border-left: 4px solid var(--green); color: #14532d; }
+    .callout.green .callout-tag { background: #d1fae5; color: #065f46; }
+    .callout.amber { background: #fffbeb; border-left: 4px solid var(--amber); color: #78350f; }
+    .callout.amber .callout-tag { background: #fef3c7; color: #92400e; }
+
+    /* Step List */
+    .step-list { list-style: none; padding: 0; margin: 10px 0; }
+    .step-list li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    .step-num {
+      background: var(--primary);
+      color: #fff;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .step-content { flex: 1; }
+    .step-label { font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .step-desc { color: var(--text-muted); font-size: 13px; }
+
+    /* Data Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+    }
+    td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+    tr:nth-child(even) td { background: #fafbff; }
+
+    /* View Chart Button */
+    .chart-trigger-wrap {
+      margin: 20px 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .chart-label-text {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .btn-view-chart {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.12s;
+    }
+    .btn-view-chart:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    .btn-view-chart:active { transform: translateY(0); }
+    .mermaid-source { display: none; }
+
+    /* ========== CHART MODAL ========== */
+    #chartModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: rgba(10, 20, 50, 0.72);
+      backdrop-filter: blur(6px);
+      align-items: center;
+      justify-content: center;
+    }
+    #chartModal.open { display: flex; }
+    .modal-box {
+      position: relative;
+      background: var(--surface);
+      border-radius: 20px;
+      width: calc(100vw - 48px);
+      height: calc(100vh - 80px);
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--primary-light);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: var(--primary); }
+    .modal-controls { display: flex; align-items: center; gap: 8px; }
+    .ctrl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ctrl-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .ctrl-btn.close-btn { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .ctrl-btn.close-btn:hover { background: #fee2e2; }
+    .zoom-level { font-size: 12px; font-weight: 700; color: var(--text-muted); min-width: 44px; text-align: center; }
+    .modal-hint { font-size: 11px; color: var(--text-muted); padding: 6px 20px; background: #fafbff; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modal-canvas { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+    .modal-canvas.dragging { cursor: grabbing; }
+    .chart-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; display: flex; align-items: center; justify-content: center; padding: 40px; }
+    .chart-inner svg { max-width: none !important; height: auto; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    @media (max-width: 600px) {
+      .toc-grid { grid-template-columns: 1fr; }
+      header { padding: 28px 24px; }
+      .section-body { padding: 20px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Top Navigation Bar -->
+  <nav class="doc-nav">
+    <a href="User_Manual.html">User Manual</a>
+    <a href="Technical_Flow.html">Technical Flow</a>
+    <a href="Technical_Specification.html">Technical Specification</a>
+    <a href="Workflow.html">Workflow Diagram</a>
+    <a href="Architecture.html">Architecture</a>
+    <a href="Backend_Behavior.html" class="active">Backend Behavior</a>
+  </nav>
+
+  <header>
+    <div class="tag">Technical Reference — Dual Backend Endpoints</div>
+    <h1>IRMS — Backend Behavior &amp; Data Operations</h1>
+    <p>Detailed technical reference explaining the dual-endpoint backend model — direct Google Sheets gviz CSV retrieval for high-speed data reads, and Google Apps Script (`Code.gs`) Web App REST endpoints for transaction writes, updates, and validations.</p>
+  </header>
+
+  <div class="toc">
+    <div class="toc-label">Table of Contents</div>
+    <div class="toc-grid">
+      <a href="#b1">1. Dual-Endpoint Architecture Overview</a>
+      <a href="#b2">2. Data Retrieval via Google Sheets CSV Endpoint</a>
+      <a href="#b3">3. Data Mutation via Apps Script API Endpoint</a>
+      <a href="#b4">4. Google Apps Script Routing &amp; Controller Actions</a>
+      <a href="#b5">5. In-Place Stock Aggregation &amp; Formula Safety</a>
+      <a href="#b6">6. Post-Mutation Cache Reconciliation Sync</a>
+      <a href="#b7">7. Administrative Data Deletion Logic</a>
+      <a href="#b8">8. Concurrency Protection &amp; Validation Rules</a>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 1 ============================== -->
+  <div class="section" id="b1">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>Dual-Endpoint Architecture Overview</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>IRMS implements a decoupled <strong>Dual-Endpoint Backend Architecture</strong> defined in <code>src/config/googleSheets.js</code>. Rather than routing all operations through a single server bottleneck, the application splits data reads and data writes into two specialized network channels.</p>
+
+      <h3>The Dual-Endpoint Channels</h3>
+      <table>
+        <tr><th>Channel</th><th>Target Endpoint URL</th><th>Protocol &amp; Format</th><th>Primary Function</th></tr>
+        <tr>
+          <td><strong>Read Path (Data Retrieval)</strong></td>
+          <td><code>https://docs.google.com/spreadsheets/d/{spreadsheetId}/gviz/tq?tqx=out:csv&amp;sheet={sheetName}</code></td>
+          <td>HTTP GET / Direct CSV Stream</td>
+          <td>Fetches raw worksheet tables directly from Google Sheets Visualization API with zero Apps Script execution delay.</td>
+        </tr>
+        <tr>
+          <td><strong>Write Path (Data Mutation)</strong></td>
+          <td><code>https://script.google.com/macros/s/{scriptId}/exec</code> (`webAppUrl`)</td>
+          <td>HTTP POST / JSON Payload</td>
+          <td>Executes transaction writes, status updates, stock calculations, administrative CRUD, and script locking in Apps Script (`gas/Code.gs`).</td>
+        </tr>
+      </table>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Dual-Endpoint Data Flow Architecture</span>
+        <button class="btn-view-chart" onclick="openChart('be1', 'Dual-Endpoint Data Flow Architecture')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="be1">
+flowchart TD
+    subgraph Client ["Client Engine (src/data/db.js)"]
+        Cache["IndexedDB Local Storage"]
+        CSV_Parser["Client-Side CSV Parser"]
+    end
+
+    subgraph GoogleCloud ["Google Cloud Data Services"]
+        subgraph ReadEndpoint ["Read Channel (Google Sheets gviz API)"]
+            GVIZ["gviz/tq CSV Export Endpoint"]
+        end
+        subgraph WriteEndpoint ["Write Channel (Google Apps Script)"]
+            GAS["Google Apps Script Web App (Code.gs)"]
+            Lock["ScriptLock Concurrency Guard"]
+        end
+        Spreadsheet[("Google Sheets Spreadsheet (13 Worksheets)")]
+    end
+
+    Client -- "1. Read Data (HTTP GET)" --> GVIZ
+    GVIZ -- "2. Stream Raw CSV" --> CSV_Parser
+    CSV_Parser --> Cache
+
+    Client -- "3. Write Mutation (HTTP POST JSON)" --> GAS
+    GAS --> Lock
+    Lock -->|Process Transaction| Spreadsheet
+    Spreadsheet -. "4. Live Sheet Data" .-> GVIZ
+    GAS -- "5. Return Status JSON" --> Client
+    Client -. "6. Delayed Background CSV Re-Fetch" .-> GVIZ
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 2 ============================== -->
+  <div class="section" id="b2">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Data Retrieval via Google Sheets CSV Endpoint</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Data reading does <em>not</em> execute Google Apps Script `doGet` functions. Instead, `src/data/db.js` fetches raw CSV text directly from the public Google Sheets Visualization API (`gviz/tq`). This bypassing strategy eliminates Apps Script quota usage and delivers ultra-fast data reads.</p>
+
+      <h3>How Data is Retrieved &amp; Processed</h3>
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Dispatch Parallel CSV Fetches</div>
+            <div class="step-desc">`db.js` constructs parallel HTTP GET requests targeting specific worksheet tabs (e.g. `SOH`, `Request_Checker`, `Picking_Task`, `SKUs_DB`) with a unique cache-buster parameter (`t=${Date.now()}`).</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">Client-Side CSV Parsing</div>
+            <div class="step-desc">The raw CSV text response is parsed line-by-line in JavaScript. Row 0 provides header column names, while subsequent rows are converted into structured JavaScript object arrays.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">IndexedDB Store Update</div>
+            <div class="step-desc">Parsed objects are written into local IndexedDB object stores, making current inventory and task data available instantly to UI components.</div>
+          </div>
+        </li>
+      </ul>
+
+      <div class="callout blue">
+        <span class="callout-tag">Architectural Advantage</span>
+        <div>Direct gviz CSV streaming allows parallel downloading of all 13 spreadsheet tabs in under 300ms, completely bypassing the 6-minute Google Apps Script execution timeout limit.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 3 ============================== -->
+  <div class="section" id="b3">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>Data Mutation via Apps Script API Endpoint</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>All data creation, status updates, putaway records, stock transfers, deductions, and admin operations are sent via HTTP POST to the Google Apps Script Web App Endpoint (`webAppUrl`).</p>
+
+      <h3>Payload Transmission Model</h3>
+      <p>Mutations transmit a JSON body containing an `action` string and data fields:</p>
+      <pre><code>fetch(GOOGLE_SHEETS_CONFIG.webAppUrl, {
+  method: 'POST',
+  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  body: JSON.stringify({
+    action: 'createPutaway',
+    putawayId: 'PT-481029',
+    pickingId: 'PK-391042',
+    skuCode: 'SKU-8812',
+    rackLocation: 'A-01-02',
+    qtyPut: 10,
+    operator: 'John Doe'
+  })
+});</code></pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 4 ============================== -->
+  <div class="section" id="b4">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>Google Apps Script Routing &amp; Controller Actions</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Inside `gas/Code.gs`, `doPost(e)` parses `e.postData.contents` into a JSON object and dispatches control to specialized action handlers.</p>
+
+      <h3>Backend Route Dispatcher (Action Handlers)</h3>
+      <table>
+        <tr><th>Action Name</th><th>Handler Function</th><th>Target Sheet</th><th>Operation Completed</th></tr>
+        <tr>
+          <td><code>createPickingTasks</code></td>
+          <td><code>handleCreatePickingTasks()</code></td>
+          <td>Picking_Task, Request_Checker, Lost_And_Found</td>
+          <td>Appends picking tasks (`PK-XXXXXX`), updates parent requests status to `Picking`.</td>
+        </tr>
+        <tr>
+          <td><code>createPutaway</code></td>
+          <td><code>handleCreatePutaway()</code></td>
+          <td>Putaway, Stock_Activity, SOH, Picking_Task</td>
+          <td>Logs putaway record (`PT-XXXXXX`), logs stock activity movement, increments SOH count at target rack, and marks task `Completed`.</td>
+        </tr>
+        <tr>
+          <td><code>completeStockMovement</code></td>
+          <td><code>handleCompleteStockMovement()</code></td>
+          <td>Stock_Movement, Stock_Activity, SOH</td>
+          <td>Executes 2-step verification, decrements SOH at source rack, increments SOH at destination rack (transfers only), and updates movement status to `Done`.</td>
+        </tr>
+        <tr>
+          <td><code>createLostAndFound</code></td>
+          <td><code>handleCreateLostAndFound()</code></td>
+          <td>Lost_And_Found</td>
+          <td>Appends stray item record (`LF-XXXXXX`) with status `Pending` for picker waiting list.</td>
+        </tr>
+        <tr>
+          <td><code>addUser</code> / <code>deleteUser</code></td>
+          <td><code>handleAddUser()</code> / <code>handleDeleteUser()</code></td>
+          <td>User_DB</td>
+          <td>Creates or removes staff account credentials and role assignments.</td>
+        </tr>
+        <tr>
+          <td><code>addRack</code> / <code>deleteRack</code></td>
+          <td><code>handleAddRack()</code> / <code>handleDeleteRack()</code></td>
+          <td>Racks</td>
+          <td>Adds or deletes rack location master reference records.</td>
+        </tr>
+      </table>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 5 ============================== -->
+  <div class="section" id="b5">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>In-Place Stock Aggregation &amp; Formula Safety</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>When stock changes occur, `Code.gs` executes in-place cell arithmetic on the `SOH` sheet rather than appending redundant rows or inserting blank lines.</p>
+
+      <h3>Stock Aggregation Rules</h3>
+      <ul>
+        <li>Scans `SOH` worksheet for a row matching both `SKU Code` and `Rack Location`.</li>
+        <li><strong>Row Exists</strong>: Adds putaway quantity or subtracts movement/deduction quantity from existing `qtySoh` cell in-place.</li>
+        <li><strong>No Row Exists</strong>: Appends a new row at `lastDataRow + 1` without calling `insertRowAfter`.</li>
+      </ul>
+
+      <div class="callout green">
+        <span class="callout-tag">Formula Protection</span>
+        <div>`Code.gs` explicitly skips writing to formula columns (`qtyonso`, `countso`, `qtyonldp`, `stockage`, `actionsuggestion`), ensuring Google Sheets `ARRAYFORMULA` row expansions remain completely intact.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 6 ============================== -->
+  <div class="section" id="b6">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Post-Mutation Cache Reconciliation Sync</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>After a client receives a successful response from Apps Script POST request, it performs a <strong>Delayed Background Reconciliation Sync</strong>:</p>
+
+      <ul class="step-list">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <div class="step-label">Optimistic UI &amp; Apps Script POST</div>
+            <div class="step-desc">UI updates locally instantly. POST request executes on Apps Script.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <div class="step-label">2.5-Second Delay Buffer</div>
+            <div class="step-desc">Client waits 2.5 seconds to allow Google Sheets spreadsheet engine to finish calculating formulas and flushing background saves.</div>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <div class="step-label">Background CSV Re-Fetch</div>
+            <div class="step-desc">Client re-downloads target sheet CSV via gviz endpoint, updating IndexedDB to mirror exact authoritative spreadsheet state.</div>
+          </div>
+        </li>
+      </ul>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 7 ============================== -->
+  <div class="section" id="b7">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Administrative Data Deletion Logic</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Admin deletion operations locate target rows by primary key header matching and remove the row from Google Sheets using `sheet.deleteRow(rowIndex)`.</p>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 8 ============================== -->
+  <div class="section" id="b8">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>Concurrency Protection &amp; Validation Rules</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Concurrency Protection</h3>
+      <p>Simultaneous POST requests acquire atomic lock protection via `LockService.getScriptLock().waitLock(10000)`, preventing race conditions during concurrent stock updates.</p>
+
+      <h3>Summary Table of Dual Backend Model</h3>
+      <table>
+        <tr><th>Operation Type</th><th>Endpoint Used</th><th>Data Format</th><th>Key Advantage</th></tr>
+        <tr>
+          <td><strong>Data Reads</strong></td>
+          <td>Google Sheets gviz CSV Endpoint</td>
+          <td>CSV Stream</td>
+          <td>Zero Apps Script quota usage, high-speed parallel reads</td>
+        </tr>
+        <tr>
+          <td><strong>Data Writes &amp; Updates</strong></td>
+          <td>Google Apps Script Web App Endpoint (`Code.gs`)</td>
+          <td>JSON Payload</td>
+          <td>Atomic concurrency locking, array formula safety, status lifecycles</td>
+        </tr>
+      </table>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ CHART MODAL ============ -->
+<div id="chartModal">
+  <div class="modal-box">
+    <div class="modal-toolbar">
+      <span class="modal-title" id="modalTitle">Chart</span>
+      <div class="modal-controls">
+        <button class="ctrl-btn" onclick="zoomIn()">+ Zoom In</button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button class="ctrl-btn" onclick="zoomOut()">- Zoom Out</button>
+        <button class="ctrl-btn" onclick="resetView()">Reset</button>
+        <button class="ctrl-btn close-btn" onclick="closeChart()">Close</button>
+      </div>
+    </div>
+    <div class="modal-hint">Scroll to zoom &middot; Click and drag to pan &middot; Double-click to reset</div>
+    <div class="modal-canvas" id="modalCanvas">
+      <div class="chart-inner" id="chartInner"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#eef6ff',
+      primaryTextColor: '#1e293b',
+      primaryBorderColor: '#1565c0',
+      lineColor: '#1565c0',
+      secondaryColor: '#f0fdf4',
+      tertiaryColor: '#fefce8',
+      fontFamily: 'Segoe UI, system-ui, sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', padding: 24 },
+    sequence: { actorMargin: 60, messageMargin: 30 },
+  });
+
+  const rendered = {};
+  async function renderAll() {
+    const sources = document.querySelectorAll('.mermaid-source');
+    for (const el of sources) {
+      const id = el.id;
+      const code = el.textContent.trim();
+      try {
+        const { svg } = await mermaid.render('svg_' + id, code);
+        rendered[id] = svg;
+      } catch(e) {
+        rendered[id] = `<pre style="color:red;padding:16px;">Render error: ${e.message}</pre>`;
+      }
+    }
+  }
+  renderAll();
+
+  let scale = 1, offsetX = 0, offsetY = 0;
+  let isDragging = false, dragStartX, dragStartY, dragStartOffX, dragStartOffY;
+
+  const modal = document.getElementById('chartModal');
+  const canvas = document.getElementById('modalCanvas');
+  const inner = document.getElementById('chartInner');
+  const zoomLevelEl = document.getElementById('zoomLevel');
+  const modalTitle = document.getElementById('modalTitle');
+
+  function applyTransform() {
+    inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function openChart(chartId, title) {
+    if (!rendered[chartId]) { alert('Chart is still rendering, please try again in a moment.'); return; }
+    inner.innerHTML = rendered[chartId];
+    modalTitle.textContent = title;
+    scale = 1; offsetX = 0; offsetY = 0;
+    applyTransform();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(fitChart, 80);
+  }
+
+  function fitChart() {
+    const svg = inner.querySelector('svg');
+    if (!svg) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const svgW = svg.getBoundingClientRect().width || 600;
+    const svgH = svg.getBoundingClientRect().height || 400;
+    const scaleX = (canvasRect.width - 80) / svgW;
+    const scaleY = (canvasRect.height - 80) / svgH;
+    scale = Math.min(scaleX, scaleY, 1.4);
+    offsetX = (canvasRect.width - svgW * scale) / 2;
+    offsetY = (canvasRect.height - svgH * scale) / 2;
+    applyTransform();
+  }
+
+  function closeChart() { modal.classList.remove('open'); document.body.style.overflow = ''; }
+  function zoomIn() { scale = Math.min(scale * 1.2, 6); applyTransform(); }
+  function zoomOut() { scale = Math.max(scale / 1.2, 0.1); applyTransform(); }
+  function resetView() { scale = 1; offsetX = 0; offsetY = 0; applyTransform(); setTimeout(fitChart, 40); }
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+    const delta = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const newScale = Math.max(0.1, Math.min(6, scale * delta));
+    offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+    offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+    dragStartOffX = offsetX; dragStartOffY = offsetY;
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    offsetX = dragStartOffX + (e.clientX - dragStartX);
+    offsetY = dragStartOffY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; canvas.classList.remove('dragging'); });
+  canvas.addEventListener('dblclick', resetView);
+  modal.addEventListener('click', e => { if (e.target === modal) closeChart(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChart(); });
+</script>
+</body>
+</html>
