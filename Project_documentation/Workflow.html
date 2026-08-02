@@ -259,6 +259,10 @@
       overflow: hidden;
       position: relative;
       cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      background: var(--bg);
     }
     .modal-canvas.dragging { cursor: grabbing; }
 
@@ -266,15 +270,19 @@
       position: absolute;
       top: 0; left: 0;
       transform-origin: 0 0;
-      /* JS sets transform */
       display: flex;
       align-items: center;
       justify-content: center;
       padding: 40px;
+      pointer-events: auto;
     }
     .chart-inner svg {
       max-width: none !important;
-      height: auto;
+      max-height: none !important;
+      width: auto !important;
+      height: auto !important;
+      display: block;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -772,26 +780,47 @@ sequenceDiagram
     if (!rendered[chartId]) { alert('Chart is still rendering, please try again.'); return; }
     inner.innerHTML = rendered[chartId];
     modalTitle.textContent = title;
-    // Reset view and center
+    
+    const svg = inner.querySelector('svg');
+    if (svg) {
+      svg.style.maxWidth = 'none';
+      svg.style.maxHeight = 'none';
+    }
+
     scale = 1;
     offsetX = 0;
     offsetY = 0;
     applyTransform();
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
-    // Auto-fit after brief render
     setTimeout(fitChart, 80);
   }
 
   function fitChart() {
     const svg = inner.querySelector('svg');
     if (!svg) return;
+
+    let svgW = 800, svgH = 600;
+    if (svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width > 0) {
+      svgW = svg.viewBox.baseVal.width;
+      svgH = svg.viewBox.baseVal.height;
+    } else {
+      const rect = svg.getBoundingClientRect();
+      svgW = rect.width || 800;
+      svgH = rect.height || 600;
+    }
+
+    svg.setAttribute('width', svgW);
+    svg.setAttribute('height', svgH);
+
     const canvasRect = canvas.getBoundingClientRect();
-    const svgW = svg.getBoundingClientRect().width || svg.viewBox.baseVal.width || 600;
-    const svgH = svg.getBoundingClientRect().height || svg.viewBox.baseVal.height || 400;
+    if (canvasRect.width === 0 || canvasRect.height === 0) return;
+
     const scaleX = (canvasRect.width - 80) / svgW;
     const scaleY = (canvasRect.height - 80) / svgH;
     scale = Math.min(scaleX, scaleY, 1.4);
+    if (scale < 0.2) scale = 0.2;
+
     offsetX = (canvasRect.width - svgW * scale) / 2;
     offsetY = (canvasRect.height - svgH * scale) / 2;
     applyTransform();
@@ -802,18 +831,18 @@ sequenceDiagram
     document.body.style.overflow = '';
   }
 
-  function zoomIn()  { scale = Math.min(scale * 1.2, 6); applyTransform(); }
-  function zoomOut() { scale = Math.max(scale / 1.2, 0.1); applyTransform(); }
+  function zoomIn()  { scale = Math.min(scale * 1.25, 8); applyTransform(); }
+  function zoomOut() { scale = Math.max(scale / 1.25, 0.1); applyTransform(); }
   function resetView() { scale = 1; offsetX = 0; offsetY = 0; applyTransform(); setTimeout(fitChart, 40); }
 
-  // Mouse wheel zoom (centered on cursor)
+  // Mouse wheel zoom
   canvas.addEventListener('wheel', e => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    const delta = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    const newScale = Math.max(0.1, Math.min(6, scale * delta));
+    const delta = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    const newScale = Math.max(0.1, Math.min(8, scale * delta));
     offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
     offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
     scale = newScale;
@@ -829,15 +858,57 @@ sequenceDiagram
     dragStartOffY = offsetY;
     canvas.classList.add('dragging');
   });
+
   window.addEventListener('mousemove', e => {
     if (!isDragging) return;
     offsetX = dragStartOffX + (e.clientX - dragStartX);
     offsetY = dragStartOffY + (e.clientY - dragStartY);
     applyTransform();
   });
+
   window.addEventListener('mouseup', () => {
     isDragging = false;
     canvas.classList.remove('dragging');
+  });
+
+  // Touch support for mobile devices
+  let touchStartDist = 0;
+  canvas.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      isDragging = true;
+      dragStartX = e.touches[0].clientX;
+      dragStartY = e.touches[0].clientY;
+      dragStartOffX = offsetX;
+      dragStartOffY = offsetY;
+    } else if (e.touches.length === 2) {
+      isDragging = false;
+      touchStartDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: true });
+
+  canvas.addEventListener('touchmove', e => {
+    if (isDragging && e.touches.length === 1) {
+      offsetX = dragStartOffX + (e.touches[0].clientX - dragStartX);
+      offsetY = dragStartOffY + (e.touches[0].clientY - dragStartY);
+      applyTransform();
+    } else if (e.touches.length === 2 && touchStartDist > 0) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const factor = dist / touchStartDist;
+      scale = Math.max(0.1, Math.min(8, scale * factor));
+      touchStartDist = dist;
+      applyTransform();
+    }
+  }, { passive: true });
+
+  canvas.addEventListener('touchend', () => {
+    isDragging = false;
+    touchStartDist = 0;
   });
 
   // Double-click to reset
