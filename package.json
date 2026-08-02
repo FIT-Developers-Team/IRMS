@@ -4,8 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "sync-docs": "node -e \"const fs = require('fs'); fs.mkdirSync('public/Project_documentation', {recursive: true}); fs.readdirSync('Project_documentation').forEach(f => { if(f.endsWith('.html')) fs.copyFileSync('Project_documentation/' + f, 'public/Project_documentation/' + f); });\"",
+    "dev": "npm run sync-docs && vite",
+    "build": "npm run sync-docs && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {

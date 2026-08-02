@@ -151,14 +151,14 @@ export function renderHome(container, currentUser) {
               </h4>
               <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Comprehensive operational guides, technical specs, workflow diagrams, and architecture blueprints.</p>
             </div>
-            <a href="./Project_documentation/User_Manual.html" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--primary-600); color: #ffffff; text-decoration: none; border-radius: 10px; font-size: 12px; font-weight: 700; transition: background 0.2s;">
+            <button id="openFullManualBtn" style="display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--primary-600); color: #ffffff; border: none; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.2s;">
               <span class="material-icons-round" style="font-size: 16px;">open_in_new</span>
               Open Full Manual
-            </a>
+            </button>
           </div>
 
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
-            <a href="./Project_documentation/User_Manual.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+            <a href="/Project_documentation/User_Manual.html" data-doc-title="User Manual (How to Use Apps)" class="doc-card-link" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
               <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
                 <span class="material-icons-round" style="font-size: 20px;">menu_book</span>
                 <strong style="font-size: 13px; color: var(--text-primary);">User Manual</strong>
@@ -166,7 +166,7 @@ export function renderHome(container, currentUser) {
               <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Step-by-step app user guide for pickup requests, picking tasks, putaway, and SOH monitoring.</span>
             </a>
 
-            <a href="./Project_documentation/Technical_Flow.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+            <a href="/Project_documentation/Technical_Flow.html" data-doc-title="Technical Flow" class="doc-card-link" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
               <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
                 <span class="material-icons-round" style="font-size: 20px;">alt_route</span>
                 <strong style="font-size: 13px; color: var(--text-primary);">Technical Flow</strong>
@@ -174,7 +174,7 @@ export function renderHome(container, currentUser) {
               <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Plain-language explanation of features, interactive flowcharts, and background storage rules.</span>
             </a>
 
-            <a href="./Project_documentation/Technical_Specification.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+            <a href="/Project_documentation/Technical_Specification.html" data-doc-title="Technical Specification" class="doc-card-link" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
               <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
                 <span class="material-icons-round" style="font-size: 20px;">description</span>
                 <strong style="font-size: 13px; color: var(--text-primary);">Technical Spec</strong>
@@ -182,7 +182,7 @@ export function renderHome(container, currentUser) {
               <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Complete reference: ERD, 13 Google Sheets tabs, data model fields, and validation matrix.</span>
             </a>
 
-            <a href="./Project_documentation/Workflow.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+            <a href="/Project_documentation/Workflow.html" data-doc-title="Workflow Diagram" class="doc-card-link" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
               <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
                 <span class="material-icons-round" style="font-size: 20px;">schema</span>
                 <strong style="font-size: 13px; color: var(--text-primary);">Workflow Diagram</strong>
@@ -190,7 +190,7 @@ export function renderHome(container, currentUser) {
               <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Visual diagrams detailing state transitions, double-verification flows, and user lifecycles.</span>
             </a>
 
-            <a href="./Project_documentation/Architecture.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+            <a href="/Project_documentation/Architecture.html" data-doc-title="System Architecture" class="doc-card-link" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
               <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
                 <span class="material-icons-round" style="font-size: 20px;">layers</span>
                 <strong style="font-size: 13px; color: var(--text-primary);">Architecture</strong>
@@ -198,7 +198,7 @@ export function renderHome(container, currentUser) {
               <span style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.4;">Multi-tier architecture, component modules, security RBAC model, and Docker container setup.</span>
             </a>
 
-            <a href="./Project_documentation/Backend_Behavior.html" target="_blank" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
+            <a href="/Project_documentation/Backend_Behavior.html" data-doc-title="Backend Behavior" class="doc-card-link" style="text-decoration: none; background: var(--surface-body); border: 1px solid var(--border-light); border-radius: 12px; padding: 16px; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 6px;" onmouseover="this.style.borderColor='var(--primary-600)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-light)'; this.style.transform='translateY(0)'">
               <div style="display: flex; align-items: center; gap: 8px; color: var(--primary-600);">
                 <span class="material-icons-round" style="font-size: 20px;">dns</span>
                 <strong style="font-size: 13px; color: var(--text-primary);">Backend Behavior</strong>
@@ -210,6 +210,28 @@ export function renderHome(container, currentUser) {
 
       </div>
     `;
+
+    // Attach event listeners for in-app documentation modal viewing
+    const fullManualBtn = container.querySelector('#openFullManualBtn');
+    if (fullManualBtn) {
+      fullManualBtn.addEventListener('click', () => {
+        openDocModal('/Project_documentation/User_Manual.html', 'User Manual (How to Use Apps)');
+      });
+    }
+
+    const docLinks = container.querySelectorAll('.doc-card-link');
+    docLinks.forEach(link => {
+      link.addEventListener('click', (e) => {
+        // Left-click opens in-app modal viewer
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) {
+          e.preventDefault();
+          const href = link.getAttribute('href');
+          const title = link.getAttribute('data-doc-title') || 'Documentation';
+          openDocModal(href, title);
+        }
+      });
+    });
+
   } catch (err) {
     console.error('[renderHome Error]', err);
     container.innerHTML = `
@@ -219,4 +241,45 @@ export function renderHome(container, currentUser) {
       </div>
     `;
   }
+}
+
+export function openDocModal(docPath, title) {
+  const existing = document.getElementById('docViewerModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'docViewerModal';
+  modal.style.cssText = 'position: fixed; inset: 0; z-index: 99999; background: rgba(10, 20, 50, 0.75); backdrop-filter: blur(8px); display: flex; flex-direction: column; padding: 20px; box-sizing: border-box;';
+
+  modal.innerHTML = `
+    <div style="background: #ffffff; border-radius: 16px; width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.35);">
+      <div style="padding: 14px 20px; background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%); color: #ffffff; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="material-icons-round" style="color: #38bdf8;">auto_stories</span>
+          <strong style="font-size: 15px; font-weight: 700;">${escapeHtml(title)}</strong>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <a href="${escapeHtml(docPath)}" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(255,255,255,0.18); color: #ffffff; text-decoration: none; border-radius: 8px; font-size: 12px; font-weight: 700;">
+            <span class="material-icons-round" style="font-size: 16px;">open_in_new</span>
+            Open in New Window
+          </a>
+          <button id="closeDocModalBtn" style="background: rgba(255,255,255,0.2); border: none; color: #ffffff; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+            <span class="material-icons-round">close</span>
+          </button>
+        </div>
+      </div>
+      <iframe src="${escapeHtml(docPath)}" style="width: 100%; height: 100%; border: none; flex: 1;"></iframe>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  const closeBtn = modal.querySelector('#closeDocModalBtn');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => modal.remove());
+  }
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
 }

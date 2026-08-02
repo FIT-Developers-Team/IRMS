@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRMS Workflow Documentation</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fc;
+      --surface: #ffffff;
+      --primary: #1565c0;
+      --primary-light: #eef6ff;
+      --primary-dark: #0d47a1;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      padding: 32px 16px;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+
+    /* Top Navigation Bar */
+    .doc-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      flex-wrap: wrap;
+    }
+    .doc-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+    .doc-nav a:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .doc-nav a.active {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    /* Header */
+    header {
+      background: #1565c0;
+      border-radius: 24px;
+      padding: 40px 48px;
+      margin-bottom: 40px;
+      color: #fff;
+    }
+    header h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.5px; }
+    header p { font-size: 15px; opacity: 0.75; }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      margin-bottom: 40px;
+    }
+    .toc h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
+    .toc ol { padding-left: 20px; }
+    .toc li { margin: 7px 0; }
+    .toc a { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 14px; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* Sections */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-num {
+      background: var(--primary);
+      color: #fff;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 17px; font-weight: 700; color: var(--primary); }
+    .section-body { padding: 28px 32px; }
+    h3 { font-size: 14px; font-weight: 700; color: var(--text); margin: 22px 0 8px; }
+    p { margin: 8px 0; font-size: 14px; }
+    ul, ol { padding-left: 22px; font-size: 14px; }
+    li { margin: 5px 0; }
+    code {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--primary);
+    }
+
+    /* View Chart Button */
+    .chart-trigger-wrap {
+      margin: 20px 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .chart-label-text {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .btn-view-chart {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.12s;
+      letter-spacing: 0.2px;
+    }
+    .btn-view-chart:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    .btn-view-chart:active { transform: translateY(0); }
+    .btn-view-chart svg { flex-shrink: 0; }
+
+    /* Hidden mermaid source (renders off-screen) */
+    .mermaid-source { display: none; }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+    th {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+    }
+    td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #fafbff; }
+    .badge { display: inline-block; background: var(--primary); color: #fff; border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .badge-green { background: #10b981; }
+    .badge-amber { background: #f59e0b; }
+
+    /* ========== CHART MODAL ========== */
+    #chartModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: rgba(10, 20, 50, 0.72);
+      backdrop-filter: blur(6px);
+      align-items: center;
+      justify-content: center;
+    }
+    #chartModal.open { display: flex; }
+
+    .modal-box {
+      position: relative;
+      background: var(--surface);
+      border-radius: 20px;
+      width: calc(100vw - 48px);
+      height: calc(100vh - 80px);
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }
+
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--primary-light);
+      flex-shrink: 0;
+    }
+    .modal-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    .modal-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ctrl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ctrl-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .ctrl-btn.close-btn { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .ctrl-btn.close-btn:hover { background: #fee2e2; }
+    .zoom-level {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      min-width: 44px;
+      text-align: center;
+    }
+
+    .modal-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      padding: 6px 20px;
+      background: #fafbff;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    /* Chart canvas area */
+    .modal-canvas {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      cursor: grab;
+    }
+    .modal-canvas.dragging { cursor: grabbing; }
+
+    .chart-inner {
+      position: absolute;
+      top: 0; left: 0;
+      transform-origin: 0 0;
+      /* JS sets transform */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+    .chart-inner svg {
+      max-width: none !important;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Top Navigation Bar -->
+  <nav class="doc-nav">
+    <a href="User_Manual.html">User Manual</a>
+    <a href="Technical_Flow.html">Technical Flow</a>
+    <a href="Technical_Specification.html">Technical Specification</a>
+    <a href="Workflow.html" class="active">Workflow Diagram</a>
+    <a href="Architecture.html">Architecture</a>
+    <a href="Backend_Behavior.html">Backend Behavior</a>
+  </nav>
+
+  <header>
+    <h1>IRMS — Workflow Documentation</h1>
+    <p>Inventory Recovery Management System &middot; Comprehensive Step-by-Step Process Flows</p>
+  </header>
+
+  <div class="toc">
+    <h2>Table of Contents</h2>
+    <ol>
+      <li><a href="#s1">User Authentication &amp; Role-Based Access Control</a></li>
+      <li><a href="#s2">Pickup Request Workflow (Request_Checker)</a></li>
+      <li><a href="#s3">Picking Task &amp; Putaway Execution Workflow</a></li>
+      <li><a href="#s4">Stock On Hand (SOH) &amp; Stock Deduction Workflow</a></li>
+      <li><a href="#s5">Stock Movement &amp; Dual Verification Workflow</a></li>
+      <li><a href="#s6">Lost &amp; Found Management Workflow</a></li>
+      <li><a href="#s7">Admin &amp; Reference Data Management Workflow</a></li>
+      <li><a href="#s8">Data Synchronization &amp; Cache Lifecycle Workflow</a></li>
+    </ol>
+  </div>
+
+  <!-- Section 1 -->
+  <div class="section" id="s1">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>User Authentication &amp; Role-Based Access Control</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>The authentication system secures access using role-based permissions (<code>Super</code> vs <code>Staff</code>/<code>Checker</code>/<code>Picker</code>), supports 0ms offline startup via IndexedDB cache hydration, and maintains reactive session freshness with automatic inactivity locks.</p>
+      <h3>Step-by-Step Workflow</h3>
+      <ol>
+        <li><strong>Application Launch &amp; Local Session Check</strong>: <code>main.js</code> checks <code>localStorage</code> for <code>irms_logged_in_user</code>. If valid, hydrates IndexedDB and renders dashboard instantly (0ms). If not, redirects to login.</li>
+        <li><strong>Login Credentials Submission</strong>: Validates name + password against <code>User_DB</code>. On success, saves session and fetches master data. On failure, shows error toast.</li>
+        <li><strong>Session Auto-Lock &amp; Expiry</strong>: <code>checkAndRefreshIfExpired()</code> monitors activity. Inactive sessions trigger password re-verification modal.</li>
+        <li><strong>Refresh Options Modal</strong>: Offers <em>Regular Refresh</em> (section sync) or <em>Flush Cache &amp; Full Resync</em> (purge IndexedDB + full reload).</li>
+      </ol>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Authentication &amp; Session Flowchart</span>
+        <button class="btn-view-chart" onclick="openChart('chart1', 'Authentication &amp; Session Flowchart')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart1">
+flowchart TD
+    A["App Launch"] --> B{"Local Session\nin localStorage?"}
+    B -- Yes --> C["Hydrate IndexedDB Cache (0ms)"]
+    C --> D["Render Dashboard & Operational View"]
+    B -- No --> E["Render Login Screen"]
+    E --> F["User Submits Name & Password"]
+    F --> G{"Validate Credentials\nagainst User_DB"}
+    G -- Invalid --> H["Show Error Toast"]
+    H --> E
+    G -- Valid --> I["Save User Session to localStorage"]
+    I --> J["Fetch Master Data:\nSKUs_DB, Zone, Racks, Checker_Lines"]
+    J --> D
+    D --> K{"Session Timeout\nor Inactive?"}
+    K -- Yes --> L["Show Password Re-Verification Modal"]
+    L --> F
+    K -- No --> M["Continue Normal Operations"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- Section 2 -->
+  <div class="section" id="s2">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Pickup Request Workflow (Request_Checker)</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>Enables checkers and warehouse staff to create requests for item retrieval from checker lines. Each request generates a unique ticket ID (<code>#RC-XXXXXX</code>), auto-populates product metadata from <code>SKUs_DB</code>, and logs the request to Google Sheets.</p>
+      <h3>Step-by-Step Workflow</h3>
+      <ol>
+        <li><strong>Initiate Request</strong>: Click <strong>+ New Pickup Request</strong>. Opens <code>openNewRequestModal()</code>.</li>
+        <li><strong>Form Entry &amp; Auto-population</strong>: Auto-generates <code>#RC-XXXXXX</code>. Selecting a SKU populates Product Name, Categories, and Food/Non-Food classification. User selects Checker Line and inputs Qty.</li>
+        <li><strong>Validation &amp; Submission</strong>: Validates <code>skuCode</code>, <code>checkerLine</code>, <code>qty &gt; 0</code>. Dispatches to <code>handleCreateRequest</code> in Google Apps Script. Status set to <code>Pending</code>.</li>
+      </ol>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Pickup Request Process Flowchart</span>
+        <button class="btn-view-chart" onclick="openChart('chart2', 'Pickup Request Process Flowchart')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart2">
+flowchart TD
+    A["Click + New Pickup Request"] --> B["Generate Unique Ticket ID\n#RC-XXXXXX"]
+    B --> C["Select SKU Code"]
+    C --> D["Auto-populate Product Name,\nCategories, Food/Non-Food"]
+    D --> E["Select Checker Line"]
+    E --> F["Input Qty & Notes"]
+    F --> G{"Validate Inputs"}
+    G -- Invalid --> H["Show Validation Toast"]
+    H --> C
+    G -- Valid --> I["Set Status = Pending"]
+    I --> J["Dispatch to Google Sheets\nRequest_Checker"]
+    J --> K["Update Local IndexedDB Cache"]
+    K --> L["Refresh Request List\nTable & Show Toast"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- Section 3 -->
+  <div class="section" id="s3">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>Picking Task &amp; Putaway Execution Workflow</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>Aggregates unpicked requests from <code>Request_Checker</code> and <code>Lost_And_Found</code>, manages bulk picking assignments via a Swipe-to-Confirm slider, and oversees putaway completion into warehouse racks.</p>
+      <h3>Phase A — Waiting List &amp; Task Selection</h3>
+      <ul>
+        <li>Queries <code>db.getPendingRequests()</code> and <code>db.getPendingLostAndFound()</code>.</li>
+        <li>Desktop: checkbox selection; Mobile: tap cards &rarr; Floating Action Bar shows <strong>Start Picking (N)</strong>.</li>
+      </ul>
+      <h3>Phase B — Swipe-to-Confirm</h3>
+      <ul>
+        <li>Tapping <strong>Start Picking</strong> opens confirmation modal with swipe slider.</li>
+        <li>Dragging thumb &ge; 90% fires <code>startPickingTasks()</code>, generates <code>#PT-XXXXXX</code>, updates status to <code>Picking</code>.</li>
+      </ul>
+      <h3>Phase C — Putaway Execution</h3>
+      <ul>
+        <li>User opens <code>openPutawayModal()</code>, selects Zone-filtered rack via chip picker.</li>
+        <li>Submits via <code>handleCreatePutaway</code> &rarr; writes to <code>Putaway</code>, <code>Stock_Activity</code> (<code>SA-XXXXXX</code>), and updates <code>SOH</code> (existing row or append at bottom, never <code>insertRowAfter</code>).</li>
+      </ul>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Picking Task Lifecycle Flowchart</span>
+        <button class="btn-view-chart" onclick="openChart('chart3', 'Picking Task Lifecycle Flowchart')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart3">
+flowchart TD
+    A["Unpicked Tasks\nin Waiting List"] --> B["User Selects Tasks"]
+    B --> C["Click Start Picking (N)"]
+    C --> D["Open Confirm Modal\nwith Swipe Slider"]
+    D --> E{"User Swipes\nRight > 90%?"}
+    E -- No --> D
+    E -- Yes --> F["Generate Picking ID\n#PT-XXXXXX"]
+    F --> G["Update Status = Picking"]
+    G --> H["Task Moves to\nPicking In Progress Tab"]
+    H --> I["User Clicks Complete / Putaway"]
+    I --> J["Select Destination Rack\nLocation via Chip Modal"]
+    J --> K["Submit Putaway Data"]
+    K --> L["Append to Putaway Sheet"]
+    L --> M["Log Activity SA-XXXXXX\nin Stock_Activity"]
+    M --> N{"SKU + Rack\nExists in SOH?"}
+    N -- Yes --> O["Update Qty SOH\non Existing Row"]
+    N -- No --> P["Append New Row at Bottom\nwithout shifting rows"]
+    O --> Q["Set Status = Completed\n& Refresh Views"]
+    P --> Q
+      </pre>
+    </div>
+  </div>
+
+  <!-- Section 4 -->
+  <div class="section" id="s4">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>Stock On Hand (SOH) &amp; Stock Deduction Workflow</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>Provides real-time inventory visibility across all rack locations with KPI cards, multi-criteria search filters, and a controlled Stock Deduction assignment process.</p>
+      <h3>Step-by-Step Workflow</h3>
+      <ol>
+        <li><strong>KPI Dashboard</strong>: Total SOH SKUs, Total Qty SOH, High Age Stock, Deduction Required.</li>
+        <li><strong>Initiate Deduction</strong>: Select row &rarr; Click <strong>Deduct Stock</strong> &rarr; Opens <code>openStockDeductionModal()</code>.</li>
+        <li><strong>Deduction Entry</strong>: Select reason (Bad/Damaged/Expired, Lost/Missing, Discrepancy Correction, Sample/Testing). Enter Qty. <code>To Location</code> is locked to <code>Deduction</code>.</li>
+        <li><strong>Submission</strong>: Creates <code>Stock_Movement</code> record (<code>Type = Stock deduction</code>, <code>Status = Assigned</code>).</li>
+      </ol>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Stock Deduction Flowchart</span>
+        <button class="btn-view-chart" onclick="openChart('chart4', 'Stock Deduction Flowchart')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart4">
+flowchart TD
+    A["View SOH Inventory Table"] --> B["Select SKU Row\n& Click Deduct Stock"]
+    B --> C["Open Stock Deduction Modal"]
+    C --> D["Select Deduction Reason\ne.g. Bad/Damaged/Expired"]
+    D --> E["Input Qty to Deduct"]
+    E --> F["To Location Locked\nto Deduction"]
+    F --> G["Click Submit Stock Deduction"]
+    G --> H["Create Stock_Movement Record\nType=Stock deduction, Status=Assigned"]
+    H --> I["Append to Stock_Movement Sheet"]
+    I --> J["Display Success Toast\n& Move to Stock Movement Queue"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- Section 5 -->
+  <div class="section" id="s5">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>Stock Movement &amp; Dual Verification Workflow</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>Executes rack-to-rack location transfers and final stock deduction authorization. Completing a movement requires a <strong>Dual Verification</strong> step confirming SKU Code and Location to prevent warehouse errors.</p>
+      <h3>Step-by-Step Workflow</h3>
+      <ol>
+        <li><strong>View Active Movements</strong>: Tasks filtered into <code>Transfer location</code> or <code>Stock deduction</code>.</li>
+        <li><strong>Initiate Verification</strong>: Click <strong>Complete Task</strong> &rarr; Opens <code>openCompleteMovementModal()</code>.</li>
+        <li><strong>Step 1 — SKU Verification</strong>: Scan or type SKU Code. Mismatch blocks completion.</li>
+        <li><strong>Step 2 — Location Verification</strong>: Confirm destination rack (or <code>Deduction</code> for stock deductions).</li>
+        <li><strong>Execution</strong>: Status = <code>Done</code>. Dual activity log: <code>[-]</code> from source rack + <code>[+]</code> to destination rack. SOH updated live.</li>
+      </ol>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Dual Verification Flowchart</span>
+        <button class="btn-view-chart" onclick="openChart('chart5', 'Dual Verification Flowchart')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart5">
+flowchart TD
+    A["Active Stock Movement Task"] --> B["Click Complete Task"]
+    B --> C["Open Dual Verification Modal"]
+    C --> D["Step 1: Input & Verify SKU Code"]
+    D --> E{"SKU Matches\nTask SKU?"}
+    E -- Mismatch --> F["Show Mismatch Error & Lock"]
+    F --> D
+    E -- Match --> G["Step 2: Input & Verify Location"]
+    G --> H["Click Verify & Complete"]
+    H --> I["Update Stock_Movement\nStatus = Done"]
+    I --> J["Log Outbound Activity\n-Qty in Stock_Activity"]
+    J --> K{"Type == Transfer\nlocation?"}
+    K -- Yes --> L["Log Inbound Activity\n+Qty in Stock_Activity"]
+    L --> M["Deduct from Source SOH\n& Add to Dest SOH"]
+    K -- No --> N["Deduct from Source\nSOH Row Only"]
+    M --> O["Refresh UI Views\n& Display Toast"]
+    N --> O
+      </pre>
+    </div>
+  </div>
+
+  <!-- Section 6 -->
+  <div class="section" id="s6">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Lost &amp; Found Management Workflow</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>Enables recording uncataloged, misplaced, or found items with ticket ID <code>#LF-XXXXXX</code>. Found items automatically join the picking waiting list for putaway recovery into active SOH.</p>
+      <h3>Step-by-Step Workflow</h3>
+      <ol>
+        <li><strong>Log Found Item</strong>: Click <strong>+ New Lost &amp; Found Entry</strong> &rarr; Opens <code>openLostAndFoundModal()</code>.</li>
+        <li><strong>Form Entry</strong>: Auto-generate <code>#LF-XXXXXX</code>. Enter SKU, Product Name, Qty. Select Found At Zone via chip picker (z-index 6000 above form modal z-index 5000).</li>
+        <li><strong>Submission</strong>: Status = <code>Pending</code>. Saved to <code>Lost_And_Found</code> sheet. Auto-appears in Picking Waiting List.</li>
+      </ol>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Lost &amp; Found Recovery Flowchart</span>
+        <button class="btn-view-chart" onclick="openChart('chart6', 'Lost &amp; Found Recovery Flowchart')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart6">
+flowchart TD
+    A["Click + New Lost & Found Entry"] --> B["Generate Ticket ID\n#LF-XXXXXX"]
+    B --> C["Enter SKU Code,\nProduct Name & Qty"]
+    C --> D["Select Found At Zone\nvia Chip Modal"]
+    D --> E["Input Found Location & Notes"]
+    E --> F["Set Status = Pending"]
+    F --> G["Dispatch to Google Sheets\nLost_And_Found"]
+    G --> H["Auto-integrate into\nPicking Task Waiting List"]
+    H --> I["Picker Putaway Recovery to SOH"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- Section 7 -->
+  <div class="section" id="s7">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Admin &amp; Reference Data Management Workflow</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>Restricted to <code>Super</code> role only. Manages master reference datasets: Users, Warehouse Zones, Rack Locations, and Checker Lines.</p>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Admin Sub-Tab Structure</span>
+        <button class="btn-view-chart" onclick="openChart('chart7', 'Admin Sub-Tab Structure')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart7">
+flowchart TD
+    Admin["Admin Panel\n(Super Role Only)"] --> U["User Management"]
+    Admin --> Z["Zone Management"]
+    Admin --> R["Rack Management"]
+    Admin --> C["Checker Line Management"]
+    U --> U1["Add New Staff Account"]
+    U --> U2["Edit Role & Password"]
+    U --> U3["Delete User Account"]
+    Z --> Z1["Add Warehouse Zone"]
+    Z --> Z2["Edit Zone Name & Code"]
+    Z --> Z3["Delete Zone"]
+    R --> R1["Add Rack Location"]
+    R --> R2["Assign Zone & Capacity"]
+    R --> R3["Delete Rack Location"]
+    C --> C1["Add Checker Line ID"]
+    C --> C2["Edit Line Description"]
+    C --> C3["Delete Line"]
+      </pre>
+    </div>
+  </div>
+
+  <!-- Section 8 -->
+  <div class="section" id="s8">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>Data Synchronization &amp; Cache Lifecycle Workflow</h2>
+    </div>
+    <div class="section-body">
+      <h3>Overview</h3>
+      <p>IRMS implements an offline-first <strong>Hybrid Cache &amp; Sync Architecture</strong> combining IndexedDB for 0ms local hydration, section-isolated navigation syncs, and Google Apps Script (<code>Code.gs</code>) sheet updates in the background.</p>
+      <h3>Dataset Synchronization Classifications</h3>
+      <table>
+        <tr><th>Dataset Name</th><th>Classification</th><th>Fetch Trigger</th></tr>
+        <tr><td><code>SKUs_DB</code></td><td><span class="badge badge-amber">Master Reference</span></td><td>App launch / fresh login / F5 browser refresh only</td></tr>
+        <tr><td><code>Zone</code></td><td><span class="badge badge-amber">Master Reference</span></td><td>App launch / fresh login / F5 browser refresh only</td></tr>
+        <tr><td><code>Checker_Lines</code></td><td><span class="badge badge-amber">Master Reference</span></td><td>App launch / fresh login / F5 browser refresh only</td></tr>
+        <tr><td><code>Racks</code></td><td><span class="badge badge-amber">Master Reference</span></td><td>App launch / fresh login / F5 browser refresh only</td></tr>
+        <tr><td><code>User_DB</code></td><td><span class="badge badge-amber">Master Reference</span></td><td>App launch / fresh login / F5 browser refresh only</td></tr>
+        <tr><td><code>Request_Checker</code></td><td><span class="badge badge-green">Operational</span></td><td>Navigation to Pickup Request tab</td></tr>
+        <tr><td><code>Picking_Task</code></td><td><span class="badge badge-green">Operational</span></td><td>Navigation to Picking Task tab</td></tr>
+        <tr><td><code>Putaway</code></td><td><span class="badge badge-green">Operational</span></td><td>Navigation to Picking Task tab</td></tr>
+        <tr><td><code>SOH</code></td><td><span class="badge badge-green">Operational</span></td><td>Navigation to SOH tab</td></tr>
+        <tr><td><code>Stock_Movement</code></td><td><span class="badge badge-green">Operational</span></td><td>Navigation to Stock Movement tab</td></tr>
+        <tr><td><code>Stock_Activity</code></td><td><span class="badge badge-green">Operational</span></td><td>Navigation to Stock Movement tab</td></tr>
+        <tr><td><code>Lost_And_Found</code></td><td><span class="badge badge-green">Operational</span></td><td>Navigation to Lost &amp; Found tab</td></tr>
+      </table>
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Data Synchronization Sequence Diagram</span>
+        <button class="btn-view-chart" onclick="openChart('chart8', 'Data Synchronization Sequence Diagram')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="chart8">
+sequenceDiagram
+    autonumber
+    actor User
+    participant App as IRMS Frontend
+    participant Cache as IndexedDB CacheManager
+    participant GAS as Google Apps Script
+    participant Sheets as Google Sheets
+
+    User->>App: Launch Application / Login
+    App->>Cache: initCache() Read All Stores
+    Cache-->>App: Return Cached JSON (0ms)
+    App-->>User: Render Complete Dashboard Immediately
+
+    Note over App,GAS: Startup / Login Master Sync
+    App->>GAS: syncGoogleSheets userDb, skusDb, zones, racks, checkerLines
+    GAS->>Sheets: Fetch Master Reference Range Values
+    Sheets-->>GAS: Return Rows Data
+    GAS-->>App: Return JSON Payload
+    App->>Cache: Save Master Datasets to IndexedDB
+
+    Note over User,App: Page Tab Navigation
+    User->>App: Click Stock Movement Tab
+    App->>GAS: syncSectionData stockMovement [Operational Only]
+    GAS->>Sheets: Fetch Stock_Movement & Stock_Activity Rows
+    Sheets-->>GAS: Return Operational Rows Data
+    GAS-->>App: Return Operational Payload
+    App->>Cache: Update Stock_Movement & Stock_Activity Stores
+    App-->>User: Render Fresh Operational Views
+      </pre>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-num" style="background:#10b981;">S</div>
+      <h2>Summary Matrix of System Feature Workflows</h2>
+    </div>
+    <div class="section-body">
+      <table>
+        <tr>
+          <th>Feature Module</th><th>Primary User Role</th><th>Initiating Action</th><th>Sheets Updated</th><th>Key Output</th>
+        </tr>
+        <tr><td><strong>Pickup Request</strong></td><td>Checker / Staff</td><td>Create Request Modal</td><td><code>Request_Checker</code></td><td><code>#RC-XXXXXX</code></td></tr>
+        <tr><td><strong>Picking Task</strong></td><td>Picker / Staff</td><td>Swipe-to-Confirm Slider</td><td><code>Picking_Task</code>, <code>Request_Checker</code>, <code>Lost_And_Found</code></td><td><code>#PT-XXXXXX</code></td></tr>
+        <tr><td><strong>Putaway Completion</strong></td><td>Picker / Staff</td><td>Submit Putaway Modal</td><td><code>Putaway</code>, <code>Stock_Activity</code>, <code>SOH</code></td><td><code>SA-XXXXXX</code></td></tr>
+        <tr><td><strong>Stock Deduction</strong></td><td>Staff / Super</td><td>Submit SOH Deduction</td><td><code>Stock_Movement</code></td><td>Movement (Deduction)</td></tr>
+        <tr><td><strong>Stock Movement</strong></td><td>Staff / Super</td><td>Dual SKU &amp; Location Verify</td><td><code>Stock_Movement</code>, <code>Stock_Activity</code>, <code>SOH</code></td><td><code>SA-XXXXXX</code></td></tr>
+        <tr><td><strong>Lost &amp; Found</strong></td><td>Staff / Checker</td><td>Create L&amp;F Modal</td><td><code>Lost_And_Found</code></td><td><code>#LF-XXXXXX</code></td></tr>
+        <tr><td><strong>Admin Management</strong></td><td>Super Role Only</td><td>Add/Edit Admin Forms</td><td><code>User_DB</code>, <code>Zone</code>, <code>Racks</code>, <code>Checker_Lines</code></td><td>Master Record Updates</td></tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ CHART MODAL ============ -->
+<div id="chartModal">
+  <div class="modal-box">
+    <div class="modal-toolbar">
+      <span class="modal-title" id="modalTitle">Chart</span>
+      <div class="modal-controls">
+        <button class="ctrl-btn" onclick="zoomIn()">+ Zoom In</button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button class="ctrl-btn" onclick="zoomOut()">- Zoom Out</button>
+        <button class="ctrl-btn" onclick="resetView()">Reset</button>
+        <button class="ctrl-btn close-btn" onclick="closeChart()">Close</button>
+      </div>
+    </div>
+    <div class="modal-hint">Scroll to zoom &middot; Click and drag to pan &middot; Double-click to reset</div>
+    <div class="modal-canvas" id="modalCanvas">
+      <div class="chart-inner" id="chartInner"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#eef6ff',
+      primaryTextColor: '#1e293b',
+      primaryBorderColor: '#1565c0',
+      lineColor: '#1565c0',
+      secondaryColor: '#f0fdf4',
+      tertiaryColor: '#fefce8',
+      fontFamily: 'Segoe UI, system-ui, sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', padding: 24 },
+    sequence: { actorMargin: 60, messageMargin: 30 },
+  });
+
+  // Pre-render all charts into hidden cache divs
+  const rendered = {};
+  async function renderAll() {
+    const sources = document.querySelectorAll('.mermaid-source');
+    for (const el of sources) {
+      const id = el.id;
+      const code = el.textContent.trim();
+      try {
+        const { svg } = await mermaid.render('svg_' + id, code);
+        rendered[id] = svg;
+      } catch(e) {
+        rendered[id] = `<pre style="color:red;padding:16px;">Render error: ${e.message}</pre>`;
+      }
+    }
+  }
+  renderAll();
+
+  // Zoom & Pan State
+  let scale = 1;
+  let offsetX = 0, offsetY = 0;
+  let isDragging = false;
+  let dragStartX, dragStartY, dragStartOffX, dragStartOffY;
+
+  const modal = document.getElementById('chartModal');
+  const canvas = document.getElementById('modalCanvas');
+  const inner = document.getElementById('chartInner');
+  const zoomLevelEl = document.getElementById('zoomLevel');
+  const modalTitle = document.getElementById('modalTitle');
+
+  function applyTransform() {
+    inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function openChart(chartId, title) {
+    if (!rendered[chartId]) { alert('Chart is still rendering, please try again.'); return; }
+    inner.innerHTML = rendered[chartId];
+    modalTitle.textContent = title;
+    // Reset view and center
+    scale = 1;
+    offsetX = 0;
+    offsetY = 0;
+    applyTransform();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    // Auto-fit after brief render
+    setTimeout(fitChart, 80);
+  }
+
+  function fitChart() {
+    const svg = inner.querySelector('svg');
+    if (!svg) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const svgW = svg.getBoundingClientRect().width || svg.viewBox.baseVal.width || 600;
+    const svgH = svg.getBoundingClientRect().height || svg.viewBox.baseVal.height || 400;
+    const scaleX = (canvasRect.width - 80) / svgW;
+    const scaleY = (canvasRect.height - 80) / svgH;
+    scale = Math.min(scaleX, scaleY, 1.4);
+    offsetX = (canvasRect.width - svgW * scale) / 2;
+    offsetY = (canvasRect.height - svgH * scale) / 2;
+    applyTransform();
+  }
+
+  function closeChart() {
+    modal.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function zoomIn()  { scale = Math.min(scale * 1.2, 6); applyTransform(); }
+  function zoomOut() { scale = Math.max(scale / 1.2, 0.1); applyTransform(); }
+  function resetView() { scale = 1; offsetX = 0; offsetY = 0; applyTransform(); setTimeout(fitChart, 40); }
+
+  // Mouse wheel zoom (centered on cursor)
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const delta = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const newScale = Math.max(0.1, Math.min(6, scale * delta));
+    offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+    offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  // Drag to pan
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragStartOffX = offsetX;
+    dragStartOffY = offsetY;
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    offsetX = dragStartOffX + (e.clientX - dragStartX);
+    offsetY = dragStartOffY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+    canvas.classList.remove('dragging');
+  });
+
+  // Double-click to reset
+  canvas.addEventListener('dblclick', resetView);
+
+  // Close on overlay click (outside modal-box)
+  modal.addEventListener('click', e => {
+    if (e.target === modal) closeChart();
+  });
+
+  // Escape key
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeChart();
+  });
+</script>
+</body>
+</html>

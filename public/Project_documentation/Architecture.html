@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IRMS System Architecture — Component & Data Flow Reference</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7fc;
+      --surface: #ffffff;
+      --primary: #1565c0;
+      --primary-light: #eef6ff;
+      --primary-dark: #0d47a1;
+      --accent: #0288d1;
+      --green: #10b981;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.75;
+      padding: 32px 16px;
+    }
+    .container { max-width: 980px; margin: 0 auto; }
+
+    /* Top Navigation Bar */
+    .doc-nav {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 12px;
+      flex-wrap: wrap;
+    }
+    .doc-nav a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+    }
+    .doc-nav a:hover {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+    .doc-nav a.active {
+      background: var(--primary);
+      color: #ffffff;
+    }
+
+    /* Header */
+    header {
+      background: #1565c0;
+      border-radius: 24px;
+      padding: 44px 52px;
+      margin-bottom: 40px;
+      color: #fff;
+    }
+    header .tag {
+      display: inline-block;
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    header h1 { font-size: 30px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.5px; }
+    header p { font-size: 15px; opacity: 0.78; max-width: 650px; line-height: 1.6; }
+
+    /* TOC */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 32px;
+      margin-bottom: 40px;
+    }
+    .toc-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 14px; }
+    .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 32px; }
+    .toc-grid a { color: var(--primary); text-decoration: none; font-weight: 600; font-size: 14px; padding: 4px 0; border-bottom: 1px dashed var(--border); display: block; }
+    .toc-grid a:hover { color: var(--primary-dark); border-bottom-color: var(--primary); }
+
+    /* Sections */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 32px;
+      overflow: hidden;
+    }
+    .section-header {
+      background: var(--primary-light);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 28px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .section-num {
+      background: var(--primary);
+      color: #fff;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 13px;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 17px; font-weight: 700; color: var(--primary); }
+    .section-body { padding: 28px 32px; }
+
+    /* Typography */
+    h3 { font-size: 14px; font-weight: 700; color: var(--primary-dark); margin: 24px 0 8px; display: flex; align-items: center; gap: 8px; }
+    h3::before { content: ''; display: block; width: 3px; height: 16px; background: var(--primary); border-radius: 2px; }
+    p { margin: 8px 0; font-size: 14px; color: var(--text); }
+    ul, ol { padding-left: 20px; font-size: 14px; color: var(--text); }
+    li { margin: 6px 0; line-height: 1.6; }
+    strong { color: var(--primary-dark); }
+    code {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'Consolas', monospace;
+      font-size: 12px;
+      color: var(--primary);
+    }
+
+    /* Callout Boxes */
+    .callout {
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 13px;
+      line-height: 1.6;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .callout-tag { font-weight: 800; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; flex-shrink: 0; }
+    .callout.blue { background: #eff8ff; border-left: 4px solid var(--primary); color: #1e3a5f; }
+    .callout.blue .callout-tag { background: #dbeafe; color: var(--primary-dark); }
+    .callout.green { background: #f0fdf4; border-left: 4px solid var(--green); color: #14532d; }
+    .callout.green .callout-tag { background: #d1fae5; color: #065f46; }
+    .callout.amber { background: #fffbeb; border-left: 4px solid var(--amber); color: #78350f; }
+    .callout.amber .callout-tag { background: #fef3c7; color: #92400e; }
+
+    /* Step List */
+    .step-list { list-style: none; padding: 0; margin: 10px 0; }
+    .step-list li {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      margin: 12px 0;
+      font-size: 14px;
+    }
+    .step-num {
+      background: var(--primary);
+      color: #fff;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .step-content { flex: 1; }
+    .step-label { font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .step-desc { color: var(--text-muted); font-size: 13px; }
+
+    /* Component Grid */
+    .comp-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 16px 0; }
+    .comp-card { background: #fafbff; border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .comp-card .comp-title { font-size: 14px; font-weight: 800; color: var(--primary); margin-bottom: 4px; }
+    .comp-card .comp-file { font-family: 'Consolas', monospace; font-size: 11px; color: var(--text-muted); margin-bottom: 8px; display: block; }
+    .comp-card p { font-size: 12px; color: var(--text); margin: 0; }
+
+    /* Data Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th {
+      background: var(--primary-light);
+      color: var(--primary);
+      font-weight: 700;
+      text-align: left;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+    }
+    td { padding: 9px 14px; border: 1px solid var(--border); vertical-align: top; line-height: 1.55; }
+    tr:nth-child(even) td { background: #fafbff; }
+
+    /* View Chart Button */
+    .chart-trigger-wrap {
+      margin: 20px 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .chart-label-text {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+    }
+    .btn-view-chart {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.12s;
+    }
+    .btn-view-chart:hover { background: var(--primary-dark); transform: translateY(-1px); }
+    .btn-view-chart:active { transform: translateY(0); }
+    .mermaid-source { display: none; }
+
+    /* ========== CHART MODAL ========== */
+    #chartModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      background: rgba(10, 20, 50, 0.72);
+      backdrop-filter: blur(6px);
+      align-items: center;
+      justify-content: center;
+    }
+    #chartModal.open { display: flex; }
+    .modal-box {
+      position: relative;
+      background: var(--surface);
+      border-radius: 20px;
+      width: calc(100vw - 48px);
+      height: calc(100vh - 80px);
+      max-width: 1200px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--primary-light);
+      flex-shrink: 0;
+    }
+    .modal-title { font-size: 14px; font-weight: 700; color: var(--primary); }
+    .modal-controls { display: flex; align-items: center; gap: 8px; }
+    .ctrl-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ctrl-btn:hover { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .ctrl-btn.close-btn { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+    .ctrl-btn.close-btn:hover { background: #fee2e2; }
+    .zoom-level { font-size: 12px; font-weight: 700; color: var(--text-muted); min-width: 44px; text-align: center; }
+    .modal-hint { font-size: 11px; color: var(--text-muted); padding: 6px 20px; background: #fafbff; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .modal-canvas { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+    .modal-canvas.dragging { cursor: grabbing; }
+    .chart-inner { position: absolute; top: 0; left: 0; transform-origin: 0 0; display: flex; align-items: center; justify-content: center; padding: 40px; }
+    .chart-inner svg { max-width: none !important; height: auto; }
+
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    @media (max-width: 600px) {
+      .toc-grid { grid-template-columns: 1fr; }
+      .comp-grid { grid-template-columns: 1fr; }
+      header { padding: 28px 24px; }
+      .section-body { padding: 20px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Top Navigation Bar -->
+  <nav class="doc-nav">
+    <a href="User_Manual.html">User Manual</a>
+    <a href="Technical_Flow.html">Technical Flow</a>
+    <a href="Technical_Specification.html">Technical Specification</a>
+    <a href="Workflow.html">Workflow Diagram</a>
+    <a href="Architecture.html" class="active">Architecture</a>
+    <a href="Backend_Behavior.html">Backend Behavior</a>
+  </nav>
+
+  <header>
+    <div class="tag">Technical Reference — Architecture</div>
+    <h1>IRMS — System Architecture Blueprint</h1>
+    <p>Comprehensive architectural specification of the Inventory Recovery Management System — component layers, offline-first client engine, API controller routes, state sync pipelines, and database storage.</p>
+  </header>
+
+  <div class="toc">
+    <div class="toc-label">Table of Contents</div>
+    <div class="toc-grid">
+      <a href="#a1">1. High-Level Architecture Overview</a>
+      <a href="#a2">2. Client Component Architecture</a>
+      <a href="#a3">3. Data &amp; Offline-First Engine Architecture</a>
+      <a href="#a4">4. End-to-End Data Flow Architecture</a>
+      <a href="#a5">5. Security &amp; Authentication Architecture</a>
+      <a href="#a6">6. Backend Controller &amp; Lock Architecture</a>
+      <a href="#a7">7. Database Storage Architecture (Google Sheets)</a>
+      <a href="#a8">8. Container &amp; Deployment Infrastructure</a>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 1 ============================== -->
+  <div class="section" id="a1">
+    <div class="section-header">
+      <div class="section-num">1</div>
+      <h2>High-Level Architecture Overview</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>The Inventory Recovery Management System (IRMS) is designed as a decoupled, multi-tier, offline-first Web Application. It combines a zero-latency Single Page Application (SPA) frontend running directly in client browsers with an asynchronous cloud persistence backend powered by Google Apps Script (GAS) and Google Sheets.</p>
+
+      <h3>Core Architectural Layers</h3>
+      <ul>
+        <li><strong>Presentation Layer</strong> — Modular Vanilla JavaScript UI components compiled with Vite, using responsive CSS and state-driven DOM rendering.</li>
+        <li><strong>Client Persistence Layer</strong> — IndexedDB embedded database and Cache Manager maintaining local operational and reference data for zero-latency UI operations and offline support.</li>
+        <li><strong>Transport Layer</strong> — HTTP REST API protocol executing asynchronous fetch calls with JSON payload structures between client engine and backend endpoints.</li>
+        <li><strong>Application Server Layer</strong> — Google Apps Script (GAS) web application (`Code.gs`) executing modular route controllers, validation rules, and atomic execution locks.</li>
+        <li><strong>Data Storage Layer</strong> — Relational database schema implemented across 13 dedicated worksheets inside a centralized Google Sheets Spreadsheet.</li>
+      </ul>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">System Layer Architecture Diagram</span>
+        <button class="btn-view-chart" onclick="openChart('arch1', 'System Layer Architecture Diagram')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="arch1">
+flowchart TD
+    subgraph Client ["Client Browser Runtime"]
+        subgraph UI ["Presentation Layer (Vite / Vanilla JS)"]
+            UI_Views["UI Components (Login, Pickup, Task, Putaway, SOH, Admin)"]
+            UI_Utils["Security & Alert Utilities"]
+        end
+        subgraph DataEngine ["Data Engine Layer"]
+            DB_Manager["IndexedDB Database Engine (db.js)"]
+            Cache_Manager["TTL & Refresh Cache Manager (cacheManager.js)"]
+            Session_Manager["Local Storage Session Store"]
+        end
+    end
+
+    subgraph Server ["Backend Execution Layer (Google Cloud)"]
+        subgraph GAS ["Google Apps Script (Code.gs)"]
+            Router["Request Router (doGet / doPost)"]
+            Controllers["22 Action Controllers"]
+            LockService["ScriptLock Concurrency Engine"]
+        end
+        subgraph Persistence ["Persistence Storage Layer"]
+            Spreadsheet["Google Sheets Database (13 Worksheets)"]
+        end
+      end
+
+    UI_Views <--> DataEngine
+    DataEngine <-->|JSON over HTTP REST| Router
+    Router --> LockService
+    LockService --> Controllers
+    Controllers <-->|SpreadsheetApp API| Spreadsheet
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 2 ============================== -->
+  <div class="section" id="a2">
+    <div class="section-header">
+      <div class="section-num">2</div>
+      <h2>Client Component Architecture</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>The client application is built as a single-page application structured into decoupled module components under <code>src/components/</code>. Each component handles view rendering, local state management, user event listeners, and interaction with <code>db.js</code>.</p>
+
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-title">Login Component</div>
+          <span class="comp-file">src/components/login.js</span>
+          <p>Renders credential login form, validates staff passwords against local reference cache, initiates 4-hour session timer, and triggers initial sync.</p>
+        </div>
+        <div class="comp-card">
+          <div class="comp-title">Request Pickup Component</div>
+          <span class="comp-file">src/components/requestPickup.js</span>
+          <p>Manages pickup request creation form, handles SKU code auto-fill from product catalog, generates ticket IDs, and renders user ticket history.</p>
+        </div>
+        <div class="comp-card">
+          <div class="comp-title">Picking Task Component</div>
+          <span class="comp-file">src/components/pickingTask.js</span>
+          <p>Renders waiting task list, manages multi-item selection state, executes swipe-to-confirm modal, and handles rack putaway modal workflow.</p>
+        </div>
+        <div class="comp-card">
+          <div class="comp-title">Stock Movement Component</div>
+          <span class="comp-file">src/components/stockMovement.js</span>
+          <p>Renders transfer and deduction task queues, executes 2-step verification modal (SKU scan match + location target), and updates movement status.</p>
+        </div>
+        <div class="comp-card">
+          <div class="comp-title">Stock on Hand (SOH) Component</div>
+          <span class="comp-file">src/components/soh.js</span>
+          <p>Renders real-time inventory dashboard, calculates summary KPIs, provides SKU/category/rack filtering, and triggers stock deduction requests.</p>
+        </div>
+        <div class="comp-card">
+          <div class="comp-title">Admin Master Data Component</div>
+          <span class="comp-file">src/components/admin.js</span>
+          <p>Restricted to Super role. Provides CRUD interfaces for managing staff accounts, warehouse zones, rack locations, and checker lines.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 3 ============================== -->
+  <div class="section" id="a3">
+    <div class="section-header">
+      <div class="section-num">3</div>
+      <h2>Data &amp; Offline-First Engine Architecture</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>IRMS uses an <strong>Optimistic Offline-First Architecture</strong>. All read and write operations are executed against the local IndexedDB instance in 0ms, allowing immediate UI updates. Data changes are queued and synchronized with Google Sheets asynchronously in the background.</p>
+
+      <h3>Caching &amp; Sync Rules</h3>
+      <table>
+        <tr><th>Data Category</th><th>Storage Store</th><th>TTL / Refresh Strategy</th><th>Sync Triggers</th></tr>
+        <tr>
+          <td>Operational Collections (Requests, Tasks, Movements, SOH)</td>
+          <td>IndexedDB Operational Stores</td>
+          <td>Stale-while-revalidate (60-second background re-fetch threshold)</td>
+          <td>Section navigation, form submission, manual sync button click</td>
+        </tr>
+        <tr>
+          <td>Master / Reference Data (Products, Racks, Zones, Users, Lines)</td>
+          <td>IndexedDB Reference Stores</td>
+          <td>Session TTL (persists for active shift session)</td>
+          <td>Session startup login, manual full resync action</td>
+        </tr>
+        <tr>
+          <td>Session State (User, Role, Expiry)</td>
+          <td>Browser LocalStorage</td>
+          <td>4-Hour Shift Expiry</td>
+          <td>Login success, logout, session expiration interval check</td>
+        </tr>
+      </table>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Offline-First Sync Engine Architecture</span>
+        <button class="btn-view-chart" onclick="openChart('arch3', 'Offline-First Sync Engine Architecture')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="arch3">
+flowchart TD
+    UserAction["User Action (Submit Form / Complete Task)"] --> WriteLocal["1. Write Record to IndexedDB (0ms)"]
+    WriteLocal --> UpdateUI["2. Render Updated UI Instantly"]
+    WriteLocal --> EnqueueSync["3. Dispatch Background HTTP POST to GAS"]
+    EnqueueSync --> GAS_Process["4. GAS Validates & Writes to Google Sheets"]
+    GAS_Process --> Response["5. GAS Returns Success Response"]
+    Response --> Reconfirm["6. 2.5s Delay: Re-download Latest Data to Confirm Consistency"]
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 4 ============================== -->
+  <div class="section" id="a4">
+    <div class="section-header">
+      <div class="section-num">4</div>
+      <h2>End-to-End Data Flow Architecture</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>Data moves across client and server boundaries in structured JSON packages through dedicated data flows. Below is the lifecycle sequence of a complete operational flow from request creation to putaway and SOH increment.</p>
+
+      <div class="chart-trigger-wrap">
+        <span class="chart-label-text">Operational End-to-End Sequence</span>
+        <button class="btn-view-chart" onclick="openChart('arch4', 'Operational End-to-End Sequence')">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          View Chart
+        </button>
+      </div>
+      <pre class="mermaid mermaid-source" id="arch4">
+sequenceDiagram
+    actor Checker
+    actor Picker
+    participant UI as Frontend App
+    participant DB as IndexedDB
+    participant GAS as Google Apps Script
+    participant Sheet as Google Sheets
+
+    Checker->>UI: Submit Pickup Request (RC-1001)
+    UI->>DB: Save Request (Status: Pending)
+    UI->>GAS: HTTP POST action=createRequest
+    GAS->>Sheet: Append Row to Request_Checker Sheet
+
+    Picker->>UI: View Waiting List & Swipe Start Picking
+    UI->>DB: Update Task (Status: Picking, ID: PK-2001)
+    UI->>GAS: HTTP POST action=startPickingTasks
+    GAS->>Sheet: Update Picking_Task & Request_Checker Status
+
+    Picker->>UI: Select Rack Location & Complete Putaway
+    UI->>DB: Update Task (Status: Completed) & Add SOH Entry
+    UI->>GAS: HTTP POST action=completePutaway
+    GAS->>Sheet: Write Putaway Row, Stock_Activity Row & Update SOH Sheet
+      </pre>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 5 ============================== -->
+  <div class="section" id="a5">
+    <div class="section-header">
+      <div class="section-num">5</div>
+      <h2>Security &amp; Authentication Architecture</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Security Model</h3>
+      <p>Security is enforced across both client execution and backend request validation layers:</p>
+      <ul>
+        <li><strong>Client Session Security</strong> — Authenticated staff sessions are encrypted and stored in local storage with a 4-hour expiration timestamp. A background interval timer validates session validity every 15 seconds.</li>
+        <li><strong>Role-Based Access Control (RBAC)</strong> — UI components dynamically hide or show feature routes based on staff roles (`Super`, `Staff/Checker`, `Picker`).</li>
+        <li><strong>Input Sanitization</strong> — Client utilities (`src/utils/security.js`) scrub user form input to prevent XSS script injection before storage or transmission.</li>
+        <li><strong>Backend Execution Locking</strong> — Concurrency protection via Google Apps Script `LockService.getScriptLock()` prevents race conditions during simultaneous stock edits.</li>
+      </ul>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 6 ============================== -->
+  <div class="section" id="a6">
+    <div class="section-header">
+      <div class="section-num">6</div>
+      <h2>Backend Controller &amp; Lock Architecture</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>The backend application logic is implemented in Google Apps Script inside <code>gas/Code.gs</code>. It operates as a web app receiving HTTP GET/POST requests and executing controller functions mapped to 22 action parameters.</p>
+
+      <h3>Backend Route Controllers (22 Actions)</h3>
+      <table>
+        <tr><th>Category</th><th>Action Name</th><th>Description &amp; Operation</th></tr>
+        <tr>
+          <td><strong>Bootstrap</strong></td>
+          <td><code>getInitialData</code></td>
+          <td>Fetches product DB, racks, zones, users, and checker lines in a single JSON payload.</td>
+        </tr>
+        <tr>
+          <td><strong>Requests</strong></td>
+          <td><code>getRequests</code>, <code>createRequest</code>, <code>updateRequestStatus</code></td>
+          <td>Queries, appends, and updates pickup request records in Request_Checker sheet.</td>
+        </tr>
+        <tr>
+          <td><strong>Picking &amp; Putaway</strong></td>
+          <td><code>getPickingTasks</code>, <code>startPickingTasks</code>, <code>completePutaway</code></td>
+          <td>Manages picking state transitions, putaway logs, and atomic SOH increments.</td>
+        </tr>
+        <tr>
+          <td><strong>Stock &amp; Movements</strong></td>
+          <td><code>getSOH</code>, <code>updateSOH</code>, <code>getMovements</code>, <code>createMovement</code>, <code>completeMovement</code></td>
+          <td>Handles inventory counts, double verification transfers, and stock deductions.</td>
+        </tr>
+        <tr>
+          <td><strong>Lost &amp; Found</strong></td>
+          <td><code>getLostAndFound</code>, <code>createLostAndFound</code></td>
+          <td>Logs stray inventory entries and enqueues tasks into picking waiting list.</td>
+        </tr>
+        <tr>
+          <td><strong>Admin Management</strong></td>
+          <td><code>getUsers</code>, <code>saveUser</code>, <code>deleteUser</code>, <code>getZones</code>, <code>saveZone</code>, <code>deleteZone</code>, <code>getRacks</code>, <code>saveRack</code>, <code>deleteRack</code>, <code>getCheckerLines</code>, <code>saveCheckerLine</code>, <code>deleteCheckerLine</code></td>
+          <td>Executes master reference data CRUD operations on administrative worksheets.</td>
+        </tr>
+      </table>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 7 ============================== -->
+  <div class="section" id="a7">
+    <div class="section-header">
+      <div class="section-num">7</div>
+      <h2>Database Storage Architecture (Google Sheets)</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>The database persistence storage consists of 13 structured worksheets within Google Sheets serving as a relational database model.</p>
+
+      <div class="comp-grid">
+        <div class="comp-card">
+          <div class="comp-title">Operational Worksheets (7)</div>
+          <p><code>Request_Checker</code>, <code>Picking_Task</code>, <code>Putaway</code>, <code>SOH</code>, <code>Stock_Movement</code>, <code>Lost_And_Found</code>, <code>Stock_Activity</code></p>
+        </div>
+        <div class="comp-card">
+          <div class="comp-title">Master / Reference Worksheets (6)</div>
+          <p><code>Product_DB</code>, <code>Racks</code>, <code>Zone</code>, <code>User_DB</code>, <code>Checker_Lines</code>, <code>Config</code></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 8 ============================== -->
+  <div class="section" id="a8">
+    <div class="section-header">
+      <div class="section-num">8</div>
+      <h2>Container &amp; Deployment Infrastructure</h2>
+    </div>
+    <div class="section-body">
+
+      <h3>Overview</h3>
+      <p>IRMS is packaged for production deployment using Docker and Nginx, serving the optimized static assets built by Vite.</p>
+
+      <h3>Deployment Stack Components</h3>
+      <ul>
+        <li><strong>Build Engine</strong> — Node.js environment compiling ES modules and CSS assets into static distribution files in <code>dist/</code> using Vite (`npm run build`).</li>
+        <li><strong>Web Server</strong> — Nginx (`nginx.conf`) configured for SPA routing, fallback rules, and gzip static asset compression.</li>
+        <li><strong>Container Runtime</strong> — Docker containerized deployment runtime managed via `Dockerfile`.</li>
+      </ul>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ CHART MODAL ============ -->
+<div id="chartModal">
+  <div class="modal-box">
+    <div class="modal-toolbar">
+      <span class="modal-title" id="modalTitle">Chart</span>
+      <div class="modal-controls">
+        <button class="ctrl-btn" onclick="zoomIn()">+ Zoom In</button>
+        <span class="zoom-level" id="zoomLevel">100%</span>
+        <button class="ctrl-btn" onclick="zoomOut()">- Zoom Out</button>
+        <button class="ctrl-btn" onclick="resetView()">Reset</button>
+        <button class="ctrl-btn close-btn" onclick="closeChart()">Close</button>
+      </div>
+    </div>
+    <div class="modal-hint">Scroll to zoom &middot; Click and drag to pan &middot; Double-click to reset</div>
+    <div class="modal-canvas" id="modalCanvas">
+      <div class="chart-inner" id="chartInner"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#eef6ff',
+      primaryTextColor: '#1e293b',
+      primaryBorderColor: '#1565c0',
+      lineColor: '#1565c0',
+      secondaryColor: '#f0fdf4',
+      tertiaryColor: '#fefce8',
+      fontFamily: 'Segoe UI, system-ui, sans-serif',
+      fontSize: '14px',
+    },
+    flowchart: { curve: 'basis', padding: 24 },
+    sequence: { actorMargin: 60, messageMargin: 30 },
+  });
+
+  const rendered = {};
+  async function renderAll() {
+    const sources = document.querySelectorAll('.mermaid-source');
+    for (const el of sources) {
+      const id = el.id;
+      const code = el.textContent.trim();
+      try {
+        const { svg } = await mermaid.render('svg_' + id, code);
+        rendered[id] = svg;
+      } catch(e) {
+        rendered[id] = `<pre style="color:red;padding:16px;">Render error: ${e.message}</pre>`;
+      }
+    }
+  }
+  renderAll();
+
+  let scale = 1, offsetX = 0, offsetY = 0;
+  let isDragging = false, dragStartX, dragStartY, dragStartOffX, dragStartOffY;
+
+  const modal = document.getElementById('chartModal');
+  const canvas = document.getElementById('modalCanvas');
+  const inner = document.getElementById('chartInner');
+  const zoomLevelEl = document.getElementById('zoomLevel');
+  const modalTitle = document.getElementById('modalTitle');
+
+  function applyTransform() {
+    inner.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function openChart(chartId, title) {
+    if (!rendered[chartId]) { alert('Chart is still rendering, please try again in a moment.'); return; }
+    inner.innerHTML = rendered[chartId];
+    modalTitle.textContent = title;
+    scale = 1; offsetX = 0; offsetY = 0;
+    applyTransform();
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    setTimeout(fitChart, 80);
+  }
+
+  function fitChart() {
+    const svg = inner.querySelector('svg');
+    if (!svg) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const svgW = svg.getBoundingClientRect().width || 600;
+    const svgH = svg.getBoundingClientRect().height || 400;
+    const scaleX = (canvasRect.width - 80) / svgW;
+    const scaleY = (canvasRect.height - 80) / svgH;
+    scale = Math.min(scaleX, scaleY, 1.4);
+    offsetX = (canvasRect.width - svgW * scale) / 2;
+    offsetY = (canvasRect.height - svgH * scale) / 2;
+    applyTransform();
+  }
+
+  function closeChart() { modal.classList.remove('open'); document.body.style.overflow = ''; }
+  function zoomIn() { scale = Math.min(scale * 1.2, 6); applyTransform(); }
+  function zoomOut() { scale = Math.max(scale / 1.2, 0.1); applyTransform(); }
+  function resetView() { scale = 1; offsetX = 0; offsetY = 0; applyTransform(); setTimeout(fitChart, 40); }
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
+    const delta = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    const newScale = Math.max(0.1, Math.min(6, scale * delta));
+    offsetX = mouseX - (mouseX - offsetX) * (newScale / scale);
+    offsetY = mouseY - (mouseY - offsetY) * (newScale / scale);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  canvas.addEventListener('mousedown', e => {
+    isDragging = true; dragStartX = e.clientX; dragStartY = e.clientY;
+    dragStartOffX = offsetX; dragStartOffY = offsetY;
+    canvas.classList.add('dragging');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isDragging) return;
+    offsetX = dragStartOffX + (e.clientX - dragStartX);
+    offsetY = dragStartOffY + (e.clientY - dragStartY);
+    applyTransform();
+  });
+  window.addEventListener('mouseup', () => { isDragging = false; canvas.classList.remove('dragging'); });
+  canvas.addEventListener('dblclick', resetView);
+  modal.addEventListener('click', e => { if (e.target === modal) closeChart(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeChart(); });
+</script>
+</body>
+</html>
