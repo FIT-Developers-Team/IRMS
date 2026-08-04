@@ -144,12 +144,18 @@ function renderUsersTab(container) {
           />
           <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px;">search</span>
         </div>
-        <div style="width: 140px; position: relative;">
-          <select id="userSearchField" class="text-control" style="height: 38px; font-size: 13px; border-radius: 10px; cursor: pointer; padding-right: 24px;">
-            <option value="all" ${userSearchField === 'all' ? 'selected' : ''}>All Fields</option>
-            <option value="staffId" ${userSearchField === 'staffId' ? 'selected' : ''}>Staff ID</option>
-            <option value="name" ${userSearchField === 'name' ? 'selected' : ''}>Name</option>
-          </select>
+        <div class="custom-dropdown-container" id="dropdown-user-search-field" style="width: 140px;">
+          <button type="button" class="custom-dropdown-trigger text-control" style="height: 38px; border-radius: 10px; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600;">
+            <span class="trigger-label">
+              ${userSearchField === 'all' ? 'All Fields' : userSearchField === 'staffId' ? 'Staff ID' : 'Name'}
+            </span>
+            <span class="material-icons-round trigger-icon" style="font-size: 16px; color: var(--text-muted);">expand_more</span>
+          </button>
+          <div class="custom-dropdown-menu" style="z-index: 2500;">
+            <div class="custom-dropdown-option ${userSearchField === 'all' ? 'active' : ''}" data-value="all">All Fields</div>
+            <div class="custom-dropdown-option ${userSearchField === 'staffId' ? 'active' : ''}" data-value="staffId">Staff ID</div>
+            <div class="custom-dropdown-option ${userSearchField === 'name' ? 'active' : ''}" data-value="name">Name</div>
+          </div>
         </div>
       </div>
 
@@ -183,16 +189,41 @@ function renderUsersTab(container) {
 
   // Wire search inputs
   const searchInput = container.querySelector('#userSearchInput');
-  const searchField = container.querySelector('#userSearchField');
+  const dropdownContainer = container.querySelector('#dropdown-user-search-field');
+  const dropdownTrigger = dropdownContainer.querySelector('.custom-dropdown-trigger');
 
   searchInput.addEventListener('input', (e) => {
     userSearchQuery = e.target.value;
     renderUsersTab(container);
   });
 
-  searchField.addEventListener('change', (e) => {
-    userSearchField = e.target.value;
-    renderUsersTab(container);
+  const onDocClick = (e) => {
+    if (!dropdownContainer.contains(e.target)) {
+      dropdownContainer.classList.remove('open');
+      document.removeEventListener('click', onDocClick);
+    }
+  };
+
+  dropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = dropdownContainer.classList.contains('open');
+    if (isOpen) {
+      dropdownContainer.classList.remove('open');
+      document.removeEventListener('click', onDocClick);
+    } else {
+      dropdownContainer.classList.add('open');
+      document.addEventListener('click', onDocClick);
+    }
+  });
+
+  dropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userSearchField = opt.dataset.value;
+      dropdownContainer.classList.remove('open');
+      document.removeEventListener('click', onDocClick);
+      renderUsersTab(container);
+    });
   });
 
   // Wire add button
