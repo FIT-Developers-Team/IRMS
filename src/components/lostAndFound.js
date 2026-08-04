@@ -1,6 +1,7 @@
 import { db } from '../data/db.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
 import { showAlertModal } from '../utils/alert.js';
+import { openCameraScanner } from '../utils/scanner.js';
 
 export function renderLostAndFound(container, currentUser) {
   let searchQuery = '';
@@ -201,15 +202,19 @@ export function renderLostAndFound(container, currentUser) {
               </div>
 
               <!-- SKU Code -->
-              <div class="form-field-wrapper">
+              <div class="form-field-wrapper" style="position: relative;">
                 <label class="form-label">SKU Code (User Input)</label>
                 <input 
                   type="text" 
                   id="lfSkuInput" 
                   class="text-control" 
                   placeholder="Enter SKU Code (e.g. 10000000004093)..." 
+                  style="padding-right: 36px;"
                   required
                 />
+                <button id="lfSkuScannerBtn" type="button" style="position: absolute; right: 10px; bottom: 26px; background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 50;" title="Scan SKU Barcode">
+                  <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
+                </button>
                 <span id="lfSkuPreview" style="font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-top: 4px; display: block; min-height: 16px;"></span>
               </div>
 
@@ -261,14 +266,18 @@ export function renderLostAndFound(container, currentUser) {
               </div>
 
               <!-- Found At -->
-              <div class="form-field-wrapper span-full" id="foundAtWrapper">
+              <div class="form-field-wrapper span-full" id="foundAtWrapper" style="position: relative;">
                 <label class="form-label">Found At (Location Code - Must contain selected Zone)</label>
                 <input 
                   type="text" 
                   id="lfFoundAtInput" 
                   class="text-control" 
                   placeholder="Enter location code (e.g. CBT-MZF3-35-03)..." 
+                  style="padding-right: 36px;"
                 />
+                <button id="lfFoundAtScannerBtn" type="button" style="position: absolute; right: 10px; bottom: 10px; background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 50;" title="Scan Location Barcode">
+                  <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
+                </button>
               </div>
             </div>
 
@@ -325,6 +334,36 @@ export function renderLostAndFound(container, currentUser) {
         lfSkuPreview.textContent = '';
       }
     });
+
+    const lfSkuScannerBtn = modalOverlay.querySelector('#lfSkuScannerBtn');
+    if (lfSkuScannerBtn) {
+      lfSkuScannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCameraScanner((scannedValue) => {
+          const val = String(scannedValue).trim();
+          lfSkuInput.value = val;
+          const name = db.lookupProductName(val);
+          if (name) {
+            lfSkuPreview.textContent = `Product Name: ${name}`;
+            lfSkuPreview.style.color = 'var(--success)';
+          } else {
+            lfSkuPreview.textContent = 'SKU not found in database';
+            lfSkuPreview.style.color = 'var(--warning)';
+          }
+        });
+      });
+    }
+
+    const lfFoundAtScannerBtn = modalOverlay.querySelector('#lfFoundAtScannerBtn');
+    if (lfFoundAtScannerBtn) {
+      lfFoundAtScannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCameraScanner((scannedValue) => {
+          const val = String(scannedValue).trim();
+          lfFoundAtInput.value = val;
+        });
+      });
+    }
 
     // Zone Hybrid Chip Modal Handler
     function openZoneChipModal() {

@@ -1,6 +1,7 @@
 import { db } from '../data/db.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
 import { showAlertModal } from '../utils/alert.js';
+import { openCameraScanner } from '../utils/scanner.js';
 
 export function renderRequestPickup(container, currentUser) {
   const storageKey = `irms_selected_checker_line_${currentUser.staffId}`;
@@ -197,14 +198,18 @@ export function renderRequestPickup(container, currentUser) {
               <!-- SO Number -->
               <div class="form-field-wrapper">
                 <label class="form-label">SO Number (User Input / Select)</label>
-                <div class="sku-dropdown-container">
+                <div class="sku-dropdown-container" style="position: relative;">
                   <input 
                     type="text" 
                     id="soInput" 
                     class="sku-search-input" 
                     placeholder="Type or select SO number..." 
+                    style="padding-right: 36px;"
                     required
                   />
+                  <button id="soScannerBtn" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 50;" title="Scan SO Barcode">
+                    <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
+                  </button>
                   <div class="sku-dropdown-menu" id="soMenu"></div>
                 </div>
               </div>
@@ -223,15 +228,19 @@ export function renderRequestPickup(container, currentUser) {
               <!-- Product Detail -->
               <div class="form-field-wrapper span-full">
                 <label class="form-label">Product Detail (Searchable SKU + Name)</label>
-                <div class="sku-dropdown-container">
+                <div class="sku-dropdown-container" style="position: relative;">
                   <input 
                     type="text" 
                     id="skuSearchInput" 
                     class="sku-search-input" 
                     placeholder="Please enter or select SO Number first..." 
+                    style="padding-right: 36px;"
                     disabled
                     required
                   />
+                  <button id="skuSearchScannerBtn" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 50;" title="Scan SKU Barcode">
+                    <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
+                  </button>
                   <div class="sku-dropdown-menu" id="skuMenu"></div>
                 </div>
                 <div id="selectedSkuDisplay" style="margin-top: 6px;"></div>
@@ -281,6 +290,75 @@ export function renderRequestPickup(container, currentUser) {
     const skuMenu = modalOverlay.querySelector('#skuMenu');
     const selectedSkuDisplay = modalOverlay.querySelector('#selectedSkuDisplay');
     const qtyInput = modalOverlay.querySelector('#qtyInput');
+
+    const soScannerBtn = modalOverlay.querySelector('#soScannerBtn');
+    if (soScannerBtn) {
+      soScannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCameraScanner((scannedValue) => {
+          const val = String(scannedValue).trim();
+          soInput.value = val;
+          selectedSoNumber = val;
+          renderSoMenu(val);
+          updateSkuEnablement();
+
+          const match = soList.find(item => item.soNumber.toLowerCase() === val.toLowerCase());
+          if (match) {
+            if (match.pickerName) {
+              selectedPickerName = match.pickerName;
+              pickerNameInput.value = match.pickerName;
+            }
+            skuSearchInput.focus();
+          }
+        });
+      });
+    }
+
+    const skuSearchScannerBtn = modalOverlay.querySelector('#skuSearchScannerBtn');
+    if (skuSearchScannerBtn) {
+      skuSearchScannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (skuSearchInput.disabled) {
+          showAlertModal('Please enter or select SO Number first.');
+          return;
+        }
+        openCameraScanner((scannedValue) => {
+          const val = String(scannedValue).trim();
+          skuSearchInput.value = val;
+          
+          const products = db.searchProducts(val, selectedSoNumber);
+          const match = products.find(item => item.skuNumber.toLowerCase() === val.toLowerCase());
+          if (match) {
+            selectedSku = { skuNumber: match.skuNumber, productName: match.productName };
+            skuSearchInput.value = `${match.skuNumber} - ${match.productName}`;
+            
+            const soDetails = db.getSoDetails(selectedSoNumber, match.skuNumber);
+            const soStatus = soDetails ? soDetails.status : 'N/A';
+            const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
+            
+            selectedSkuDisplay.innerHTML = `
+              <div class="autofill-badge success" style="margin-bottom: 8px;">
+                <span class="material-icons-round" style="font-size: 16px;">check_circle</span>
+                <span>Selected: <strong>SKU ${match.skuNumber}</strong> (${match.productName})</span>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                  <span class="material-icons-round" style="font-size: 16px;">info</span>
+                  <span>SO Status: <strong style="text-transform: uppercase;">${soStatus}</strong></span>
+                </div>
+                <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                  <span class="material-icons-round" style="font-size: 16px;">layers</span>
+                  <span>SO SUM(Qty): <strong>${soOrigQty}</strong></span>
+                </div>
+              </div>
+            `;
+          } else {
+            renderSkuMenu(val);
+            skuMenu.classList.add('open');
+          }
+        });
+      });
+    }
 
     const closeModal = () => modalOverlay.remove();
     closeBtn.addEventListener('click', closeModal);

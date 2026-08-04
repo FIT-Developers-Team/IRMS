@@ -1,6 +1,7 @@
 import { db } from '../data/db.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
 import { showAlertModal } from '../utils/alert.js';
+import { openCameraScanner } from '../utils/scanner.js';
 
 export function renderPickingTask(container, currentUser) {
   let activeFilter = 'all';
@@ -932,8 +933,11 @@ export function renderPickingTask(container, currentUser) {
                   </div>
                   <div class="custom-dropdown-menu" style="display: none; position: absolute; bottom: calc(100% + 4px); top: auto; left: 0; right: 0; background: #fff; border: 1.5px solid var(--border-light); border-radius: 12px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15); z-index: 5000; padding: 8px;">
                     <div style="margin-bottom: 8px; position: relative;">
-                      <input type="text" id="rackSearchFilterInput" class="text-control" placeholder="Search rack location or zone..." style="width: 100%; height: 36px; font-size: 12px; padding-left: 30px;" />
+                      <input type="text" id="rackSearchFilterInput" class="text-control" placeholder="Search rack location or zone..." style="width: 100%; height: 36px; font-size: 12px; padding-left: 30px; padding-right: 30px;" />
                       <span class="material-icons-round" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
+                      <button id="putawayLocationScannerBtn" type="button" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;" title="Scan Location Barcode">
+                        <span class="material-icons-round" style="font-size: 16px;">qr_code_scanner</span>
+                      </button>
                     </div>
                     <div id="rackOptionsList" style="display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto;"></div>
                   </div>
@@ -1024,6 +1028,30 @@ export function renderPickingTask(container, currentUser) {
     rackSearchInput.addEventListener('input', (e) => {
       renderRackOptions(e.target.value);
     });
+
+    const rackScannerBtn = rackDropdownContainer.querySelector('#putawayLocationScannerBtn');
+    if (rackScannerBtn) {
+      rackScannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCameraScanner((scannedValue) => {
+          const val = String(scannedValue).trim();
+          rackSearchInput.value = val;
+          renderRackOptions(val);
+          
+          const match = allRacks.find(r => r.name.toLowerCase() === val.toLowerCase());
+          if (match) {
+            selectedRackVal = match.name;
+            putawayLocationInput.value = selectedRackVal;
+            rackTriggerLabel.textContent = selectedRackVal;
+            rackTriggerLabel.style.color = 'var(--text-primary)';
+            rackTriggerLabel.style.fontWeight = '700';
+            putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
+            putawayLocationHelper.style.color = 'var(--success)';
+            rackMenuEl.style.display = 'none';
+          }
+        });
+      });
+    }
 
     document.addEventListener('click', (e) => {
       if (!rackDropdownContainer.contains(e.target)) {

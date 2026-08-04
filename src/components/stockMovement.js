@@ -1,4 +1,5 @@
 import { db } from '../data/db.js';
+import { openCameraScanner } from '../utils/scanner.js';
 
 export function renderStockMovement(container, currentUser) {
   let activeSubTab = 'tasks'; // 'tasks' | 'activities'
@@ -772,7 +773,7 @@ export function renderStockMovement(container, currentUser) {
 
           <form id="verifyCompletionForm" style="display: flex; flex-direction: column; gap: 14px;">
             <!-- 1. SKU Code Verification -->
-            <div class="form-group">
+            <div class="form-group" style="position: relative;">
               <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
                 1. Verify SKU Code <span style="color: var(--danger);">*</span>
               </label>
@@ -781,15 +782,18 @@ export function renderStockMovement(container, currentUser) {
                 id="verifySkuInput" 
                 class="text-control" 
                 placeholder="Scan or enter SKU Code..." 
-                style="width: 100%; height: 40px; font-family: monospace; font-size: 13px; font-weight: 700; text-transform: uppercase;"
+                style="width: 100%; height: 40px; font-family: monospace; font-size: 13px; font-weight: 700; text-transform: uppercase; padding-right: 36px;"
                 required 
                 autocomplete="off"
               />
+              <button id="verifySkuScannerBtn" type="button" style="position: absolute; right: 10px; bottom: 22px; background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 50;" title="Scan SKU Barcode">
+                <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
+              </button>
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Expected SKU: <strong style="font-family: monospace; color: var(--primary-800);">${esc(task.skuCode)}</strong></div>
             </div>
 
             <!-- 2. Location Input / Verification -->
-            <div class="form-group">
+            <div class="form-group" style="position: relative;">
               <label style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
                 ${isDeduction ? '2. Enter Destination Location / Bin' : '2. Verify Location'} <span style="color: var(--danger);">*</span>
               </label>
@@ -798,10 +802,13 @@ export function renderStockMovement(container, currentUser) {
                 id="verifyLocationInput" 
                 class="text-control" 
                 placeholder="${isDeduction ? 'Enter physical location or bin (outside system)...' : 'Scan or enter Location...'}" 
-                style="width: 100%; height: 40px; font-family: monospace; font-size: 13px; font-weight: 700; text-transform: uppercase;"
+                style="width: 100%; height: 40px; font-family: monospace; font-size: 13px; font-weight: 700; text-transform: uppercase; padding-right: 36px;"
                 required 
                 autocomplete="off"
               />
+              <button id="verifyLocationScannerBtn" type="button" style="position: absolute; right: 10px; bottom: 22px; background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 50;" title="Scan Location Barcode">
+                <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
+              </button>
               <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
                 ${isDeduction
                   ? 'Free-text location entry (destination is outside system e.g. disposal bin, damaged rack).'
@@ -838,6 +845,26 @@ export function renderStockMovement(container, currentUser) {
     const verifyLocationInput = modalOverlay.querySelector('#verifyLocationInput');
     const errorEl = modalOverlay.querySelector('#verifyModalError');
     const submitBtn = modalOverlay.querySelector('#submitVerifyBtn');
+
+    const skuScannerBtn = modalOverlay.querySelector('#verifySkuScannerBtn');
+    if (skuScannerBtn) {
+      skuScannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCameraScanner((scannedValue) => {
+          verifySkuInput.value = String(scannedValue).trim().toUpperCase();
+        });
+      });
+    }
+
+    const locScannerBtn = modalOverlay.querySelector('#verifyLocationScannerBtn');
+    if (locScannerBtn) {
+      locScannerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCameraScanner((scannedValue) => {
+          verifyLocationInput.value = String(scannedValue).trim().toUpperCase();
+        });
+      });
+    }
 
     verifyForm.addEventListener('submit', async (e) => {
       e.preventDefault();
