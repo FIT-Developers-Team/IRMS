@@ -1,4 +1,6 @@
 import { db } from '../data/db.js';
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
 
 export function renderSoh(container, currentUser) {
   let skuQuery = '';
@@ -18,6 +20,8 @@ export function renderSoh(container, currentUser) {
   let qtyOnLdpQuery = '';
   let stockAgeQuery = '';
 
+  let lastAggregatedList = [];
+
   container.innerHTML = `
     <div class="card-panel">
       <div class="card-title-group" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); margin-bottom: 0; width: 100%; box-sizing: border-box;">
@@ -27,8 +31,37 @@ export function renderSoh(container, currentUser) {
             <span>Stock On Hand (SOH)</span>
           </h3>
         </div>
-        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-          <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); white-space: nowrap;" id="sohCountBadge">0 SKUs</span>
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative;">
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; margin-right: 4px;" id="sohCountBadge">0 SKUs</span>
+          
+          <!-- SOH Export Dropdown -->
+          <div class="custom-dropdown-container" id="dropdown-soh-export">
+            <button id="sohExportBtn" class="btn-secondary" title="Export Stock Data" style="height: 28px; padding: 0 10px; font-size: 11px; font-weight: 700; gap: 4px; border-radius: 20px; flex-shrink: 0; white-space: nowrap; display: flex; align-items: center;">
+              <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">download</span>
+              <span>Export</span>
+              <span class="material-icons-round trigger-icon" style="font-size: 14px;">expand_more</span>
+            </button>
+            <div class="custom-dropdown-menu" id="menu-soh-export" style="right: 0; left: auto; min-width: 220px; z-index: 2000; padding: 6px 0;">
+              <div class="custom-dropdown-option" data-value="sku-csv" style="display: flex; align-items: center; padding: 8px 12px; font-size: 12px; cursor: pointer;">
+                <span class="material-icons-round" style="font-size:16px; margin-right:8px; color:var(--success);">table_view</span>
+                SKU Summary (CSV)
+              </div>
+              <div class="custom-dropdown-option" data-value="sku-xlsx" style="display: flex; align-items: center; padding: 8px 12px; font-size: 12px; cursor: pointer;">
+                <span class="material-icons-round" style="font-size:16px; margin-right:8px; color:var(--primary-600);">grid_on</span>
+                SKU Summary (Excel)
+              </div>
+              <div style="border-top: 1px solid var(--border-light); margin: 4px 0;"></div>
+              <div class="custom-dropdown-option" data-value="loc-csv" style="display: flex; align-items: center; padding: 8px 12px; font-size: 12px; cursor: pointer;">
+                <span class="material-icons-round" style="font-size:16px; margin-right:8px; color:var(--success);">table_view</span>
+                Location Details (CSV)
+              </div>
+              <div class="custom-dropdown-option" data-value="loc-xlsx" style="display: flex; align-items: center; padding: 8px 12px; font-size: 12px; cursor: pointer;">
+                <span class="material-icons-round" style="font-size:16px; margin-right:8px; color:var(--primary-600);">grid_on</span>
+                Location Details (Excel)
+              </div>
+            </div>
+          </div>
+
           <button id="toggleSohKpiBtn" class="btn-secondary" title="Toggle KPI summary cards" style="height: 28px; padding: 0 10px; font-size: 11px; font-weight: 700; gap: 4px; border-radius: 20px; flex-shrink: 0; white-space: nowrap;">
             <span class="material-icons-round" id="toggleSohKpiIcon" style="font-size: 15px;">${localStorage.getItem('irms_hide_kpis') === 'true' ? 'expand_more' : 'expand_less'}</span>
             <span id="toggleSohKpiText">${localStorage.getItem('irms_hide_kpis') === 'true' ? 'Show KPIs' : 'Hide KPIs'}</span>
@@ -654,6 +687,8 @@ export function renderSoh(container, currentUser) {
       aggregatedList = aggregatedList.filter(item => matchNumericFilter(item.stockAge, stockAgeQuery));
     }
 
+    lastAggregatedList = aggregatedList;
+
     sohCountBadge.textContent = `${aggregatedList.length} SKU${aggregatedList.length === 1 ? '' : 's'}`;
 
     if (!aggregatedList.length) {
@@ -955,6 +990,122 @@ export function renderSoh(container, currentUser) {
   mobileCountSoFilter.addEventListener('input', (e) => updateFilters({ countSoQuery: e.target.value.trim() }));
   mobileQtyOnLdpFilter.addEventListener('input', (e) => updateFilters({ qtyOnLdpQuery: e.target.value.trim() }));
   mobileStockAgeFilter.addEventListener('input', (e) => updateFilters({ stockAgeQuery: e.target.value.trim() }));
+
+  // --- Export Functionality (CSV & XLSX) ---
+  function getExportTimestamp() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}${mm}${dd}`;
+  }
+
+  function downloadCsv(data, filename) {
+    const csv = Papa.unparse(data);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function downloadXlsx(data, sheetName, filename) {
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+    XLSX.writeFile(workbook, filename);
+  }
+
+  function getSkuSummaryExportData() {
+    return lastAggregatedList.map(item => ({
+      'SKU Code': item.skuCode,
+      'Product Name': item.productName,
+      'Type': item.foodOrNonFood,
+      'L0 Category': item.l0CategoryName,
+      'L1 Category': item.l1CategoryName,
+      'L2 Category': item.l2CategoryName,
+      'Locations Count': item.locations.length,
+      'Qty SOH': item.qtySoh,
+      'Qty On SO': item.qtyOnSo,
+      'Count SO': item.countSo,
+      'Qty On LDP': item.qtyOnLdp,
+      'Stock Age (Days)': item.stockAge,
+      'Action Suggestion': item.actionSuggestion
+    }));
+  }
+
+  function getLocationDetailsExportData() {
+    const data = [];
+    lastAggregatedList.forEach(item => {
+      item.locations.forEach(loc => {
+        data.push({
+          'SKU Code': item.skuCode,
+          'Product Name': item.productName,
+          'Type': item.foodOrNonFood,
+          'L0 Category': item.l0CategoryName,
+          'L1 Category': item.l1CategoryName,
+          'L2 Category': item.l2CategoryName,
+          'Rack Location': loc.rackLocation,
+          'Qty SOH': loc.qtySoh,
+          'Stock Age (Days)': loc.stockAge,
+          'Last Updated': loc.updatedAt ? new Date(loc.updatedAt).toLocaleString() : 'N/A',
+          'Action Suggestion': item.actionSuggestion
+        });
+      });
+    });
+    return data;
+  }
+
+  const exportDropdown = container.querySelector('#dropdown-soh-export');
+  const exportBtn = container.querySelector('#sohExportBtn');
+  const exportMenu = container.querySelector('#menu-soh-export');
+
+  if (exportDropdown && exportBtn && exportMenu) {
+    exportBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = exportDropdown.classList.contains('open');
+      // Close other dropdowns
+      container.querySelectorAll('.custom-dropdown-container').forEach(c => {
+        if (c !== exportDropdown) c.classList.remove('open');
+      });
+      if (isOpen) {
+        exportDropdown.classList.remove('open');
+      } else {
+        exportDropdown.classList.add('open');
+      }
+    });
+
+    exportMenu.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const value = opt.dataset.value;
+        exportDropdown.classList.remove('open');
+
+        if (lastAggregatedList.length === 0) {
+          alert('No SOH data matches your filters to export.');
+          return;
+        }
+
+        const timestamp = getExportTimestamp();
+        if (value === 'sku-csv') {
+          const exportData = getSkuSummaryExportData();
+          downloadCsv(exportData, `SOH_Summary_${timestamp}.csv`);
+        } else if (value === 'sku-xlsx') {
+          const exportData = getSkuSummaryExportData();
+          downloadXlsx(exportData, 'SOH Summary', `SOH_Summary_${timestamp}.xlsx`);
+        } else if (value === 'loc-csv') {
+          const exportData = getLocationDetailsExportData();
+          downloadCsv(exportData, `SOH_Location_Details_${timestamp}.csv`);
+        } else if (value === 'loc-xlsx') {
+          const exportData = getLocationDetailsExportData();
+          downloadXlsx(exportData, 'Location Details', `SOH_Location_Details_${timestamp}.xlsx`);
+        }
+      });
+    });
+  }
 
   // Capture the root element this component just rendered
   const ownRoot = container.firstElementChild;
