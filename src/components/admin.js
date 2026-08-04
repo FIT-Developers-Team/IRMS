@@ -94,8 +94,28 @@ export function renderAdmin(container, currentUser) {
 // USERS TAB
 // ═══════════════════════════════════════════════════════════════════════════
 
+let userSearchQuery = '';
+let userSearchField = 'all';
+
 function renderUsersTab(container) {
   const users = db.getUsers();
+
+  // Filter users list
+  let filteredUsers = [...users];
+  if (userSearchQuery) {
+    const q = userSearchQuery.toLowerCase();
+    filteredUsers = filteredUsers.filter(u => {
+      const staffId = String(u.staffId || '').toLowerCase();
+      const name = String(u.name || '').toLowerCase();
+      if (userSearchField === 'staffId') {
+        return staffId.includes(q);
+      } else if (userSearchField === 'name') {
+        return name.includes(q);
+      } else {
+        return staffId.includes(q) || name.includes(q);
+      }
+    });
+  }
 
   container.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -103,12 +123,34 @@ function renderUsersTab(container) {
       <!-- Toolbar -->
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
         <div style="font-size: 13px; color: var(--text-secondary);">
-          <strong style="color: var(--text-primary);">${users.length}</strong> users registered
+          <strong style="color: var(--text-primary);">${filteredUsers.length}</strong> users shown (${users.length} total)
         </div>
         <button id="addUserBtn" class="btn-primary" style="gap: 6px;">
           <span class="material-icons-round" style="font-size: 16px;">person_add</span>
           Register New User
         </button>
+      </div>
+
+      <!-- Search & Filter Bar -->
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px;">
+        <div class="search-box-wrapper" style="flex: 1; min-width: 200px; position: relative;">
+          <input 
+            type="text" 
+            id="userSearchInput" 
+            class="text-control" 
+            placeholder="Search users..." 
+            value="${escHtml(userSearchQuery)}"
+            style="padding-left: 36px; height: 38px; font-size: 13px; width: 100%; border-radius: 10px;"
+          />
+          <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px;">search</span>
+        </div>
+        <div style="width: 140px; position: relative;">
+          <select id="userSearchField" class="text-control" style="height: 38px; font-size: 13px; border-radius: 10px; cursor: pointer; padding-right: 24px;">
+            <option value="all" ${userSearchField === 'all' ? 'selected' : ''}>All Fields</option>
+            <option value="staffId" ${userSearchField === 'staffId' ? 'selected' : ''}>Staff ID</option>
+            <option value="name" ${userSearchField === 'name' ? 'selected' : ''}>Name</option>
+          </select>
+        </div>
       </div>
 
       <!-- Desktop Table -->
@@ -125,19 +167,33 @@ function renderUsersTab(container) {
             </tr>
           </thead>
           <tbody id="usersTableBody">
-            ${users.length === 0 ? `<tr><td colspan="6"><div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found. Add one to get started.</p></div></td></tr>` :
-              users.map(u => renderUserRow(u)).join('')}
+            ${filteredUsers.length === 0 ? `<tr><td colspan="6"><div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found matching search criteria.</p></div></td></tr>` :
+              filteredUsers.map(u => renderUserRow(u)).join('')}
           </tbody>
         </table>
       </div>
 
       <!-- Mobile Cards -->
       <div class="mobile-card-list" id="usersMobileList">
-        ${users.length === 0 ? `<div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found.</p></div>` :
-          users.map(u => renderUserCard(u)).join('')}
+        ${filteredUsers.length === 0 ? `<div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found matching search criteria.</p></div>` :
+          filteredUsers.map(u => renderUserCard(u)).join('')}
       </div>
     </div>
   `;
+
+  // Wire search inputs
+  const searchInput = container.querySelector('#userSearchInput');
+  const searchField = container.querySelector('#userSearchField');
+
+  searchInput.addEventListener('input', (e) => {
+    userSearchQuery = e.target.value;
+    renderUsersTab(container);
+  });
+
+  searchField.addEventListener('change', (e) => {
+    userSearchField = e.target.value;
+    renderUsersTab(container);
+  });
 
   // Wire add button
   container.querySelector('#addUserBtn').addEventListener('click', () => openUserModal(null));
