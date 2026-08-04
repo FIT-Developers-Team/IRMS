@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'IRMS_IndexedDB_Cache';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 class CacheManager {
   constructor() {
@@ -41,6 +41,7 @@ class CacheManager {
             { name: 'putaway', keyPath: 'ticketId' },
             { name: 'soData', keyPath: 'id' },
             { name: 'stockActivity', keyPath: 'activityId' },
+            { name: 'sohwh', keyPath: 'id' },
             { name: 'syncMetadata', keyPath: 'storeName' }
           ];
 

@@ -12,6 +12,7 @@ export const ALL_PAGES = [
   { key: 'pickingTask', label: 'Picking Task', icon: 'fact_check' },
   { key: 'lostAndFound', label: 'Lost & Found', icon: 'travel_explore' },
   { key: 'soh', label: 'Stock On Hand', icon: 'inventory_2' },
+  { key: 'sohwh', label: 'WH - Stock Inquery', icon: 'warehouse' },
   { key: 'stockMovement', label: 'Stock Movement', icon: 'swap_horiz' },
   { key: 'admin', label: 'Admin Panel', icon: 'admin_panel_settings' }
 ];
@@ -35,6 +36,7 @@ export function hasUserAccess(user, pageKey) {
     pickingTask: ['pickingtask', 'picking task', 'picking'],
     lostAndFound: ['lostandfound', 'lost & found', 'lost and found'],
     soh: ['soh', 'stock on hand', 'stockonhand'],
+    sohwh: ['sohwh', 'wh - stock inquery', 'wh - stock inquiry', 'stock inquery', 'stock inquiry', 'inquery', 'inquiry'],
     stockMovement: ['stockmovement', 'stock movement', 'stock movement & deduction', 'movement', 'deduction'],
     admin: ['admin', 'admin panel']
   };

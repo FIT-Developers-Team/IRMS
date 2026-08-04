@@ -15,6 +15,7 @@ export const GOOGLE_SHEETS_CONFIG = {
     skusDb: 'SKUs_DB',
     soh: 'SOH',
     stockMovement: 'Stock_Movement',
-    stockActivity: 'Stock_Activity'
+    stockActivity: 'Stock_Activity',
+    sohwh: 'SOHWH'
   }
 };

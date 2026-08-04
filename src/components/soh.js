@@ -1,6 +1,7 @@
 import { db } from '../data/db.js';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import { openCameraScanner } from '../utils/scanner.js';
 
 export function renderSoh(container, currentUser) {
   let skuQuery = '';
@@ -121,9 +122,12 @@ export function renderSoh(container, currentUser) {
               id="mobileSohSearchInput" 
               class="text-control" 
               placeholder="Search SKU, Product..." 
-              style="padding-left: 36px;"
+              style="padding-left: 36px; padding-right: 36px;"
             />
             <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px;">search</span>
+            <button id="mobileSohScannerBtn" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;" title="Scan Barcode">
+              <span class="material-icons-round" style="font-size: 18px;">qr_code_scanner</span>
+            </button>
           </div>
           <button id="mobileFilterToggleBtn" class="btn-secondary" style="height: 40px; padding: 0 12px; display: flex; align-items: center; gap: 6px; border-radius: 10px; font-size: 13px; font-weight: 700;">
             <span class="material-icons-round" style="font-size: 18px;">filter_alt</span>
@@ -207,8 +211,11 @@ export function renderSoh(container, currentUser) {
               <th style="min-width: 150px; text-align: center;">Action</th>
             </tr>
             <tr class="header-filter-row">
-              <th>
-                <input type="text" id="headerSkuFilter" class="text-control header-filter-input" placeholder="Filter SKU..." style="padding: 4px 8px; font-size: 11px; height: 28px; width: 100%; box-sizing: border-box;" />
+              <th style="position: relative;">
+                <input type="text" id="headerSkuFilter" class="text-control header-filter-input" placeholder="Filter SKU..." style="padding: 4px 26px 4px 8px; font-size: 11px; height: 28px; width: 100%; box-sizing: border-box;" />
+                <button id="desktopSohSkuScannerBtn" type="button" style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;" title="Scan Barcode">
+                  <span class="material-icons-round" style="font-size: 14px;">qr_code_scanner</span>
+                </button>
               </th>
               <th>
                 <input type="text" id="headerNameFilter" class="text-control header-filter-input" placeholder="Filter Product..." style="padding: 4px 8px; font-size: 11px; height: 28px; width: 100%; box-sizing: border-box;" />
@@ -1103,6 +1110,28 @@ export function renderSoh(container, currentUser) {
           const exportData = getLocationDetailsExportData();
           downloadXlsx(exportData, 'Location Details', `SOH_Location_Details_${timestamp}.xlsx`);
         }
+      });
+    });
+  }
+
+  // --- Barcode Scanner Event Bindings ---
+  const mobileScannerBtn = container.querySelector('#mobileSohScannerBtn');
+  const desktopScannerBtn = container.querySelector('#desktopSohSkuScannerBtn');
+
+  if (mobileScannerBtn) {
+    mobileScannerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCameraScanner((scannedValue) => {
+        updateFilters({ mobileSearchQuery: scannedValue });
+      });
+    });
+  }
+
+  if (desktopScannerBtn) {
+    desktopScannerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCameraScanner((scannedValue) => {
+        updateFilters({ skuQuery: scannedValue });
       });
     });
   }

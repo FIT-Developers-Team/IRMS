@@ -150,5 +150,15 @@ this dataset is used to store user data that is used for IRMS process, it will b
 |Environment|System generated|
 
 
+# SOHWH
 
-
+## Data Structure
+|Column|Behaviour|
+|------|---------|
+|product_id|System generated|
+|sku_number|System generated|
+|product_name|System generated|
+|rack_name|System generated|
+|Qty Stock|System generated|
+|Reserve Stock|System generated|
+|Final Virtual SOH|System generated|

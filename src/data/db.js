@@ -19,6 +19,7 @@ class DatabaseService {
     this.stockActivities = this.loadSavedStockActivities();
     this.skus = [];
     this.soh = [];
+    this.sohwh = [];
     this.spreadsheetId = GOOGLE_SHEETS_CONFIG.spreadsheetId;
     this.webAppUrl = GOOGLE_SHEETS_CONFIG.webAppUrl;
     this.isSyncing = false;
@@ -44,7 +45,7 @@ class DatabaseService {
   async initCache() {
     try {
       await cacheManager.init();
-      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines] = await Promise.all([
+      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines, cSohwh] = await Promise.all([
         cacheManager.getStore('requests'),
         cacheManager.getStore('pickingTasks'),
         cacheManager.getStore('lostAndFound'),
@@ -54,7 +55,8 @@ class DatabaseService {
         cacheManager.getStore('skusDb'),
         cacheManager.getStore('racks'),
         cacheManager.getStore('zones'),
-        cacheManager.getStore('checkerLines')
+        cacheManager.getStore('checkerLines'),
+        cacheManager.getStore('sohwh')
       ]);
 
       if (cReqs && cReqs.length) this.requests = cReqs;
@@ -67,6 +69,7 @@ class DatabaseService {
       if (cRacks && cRacks.length) this.racks = cRacks;
       if (cZones && cZones.length) this.zones = cZones;
       if (cLines && cLines.length) this.checkerLines = cLines;
+      if (cSohwh && cSohwh.length) this.sohwh = cSohwh;
 
       this.isLoaded = true;
       this.notifyListeners();
@@ -279,6 +282,7 @@ class DatabaseService {
     const sohTab = GOOGLE_SHEETS_CONFIG.tabs.soh || 'SOH';
     const stockMovementTab = GOOGLE_SHEETS_CONFIG.tabs.stockMovement || 'Stock_Movement';
     const stockActivityTab = GOOGLE_SHEETS_CONFIG.tabs.stockActivity || 'Stock_Activity';
+    const sohwhTab = GOOGLE_SHEETS_CONFIG.tabs.sohwh || 'SOHWH';
     const cacheBuster = `_t=${Date.now()}`;
 
     let normalizedTabSet = null;
@@ -358,6 +362,9 @@ class DatabaseService {
     if (shouldSync('stockActivity')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(stockActivityTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'stockActivity', res: r })).catch(() => null));
     }
+    if (shouldSync('sohwh')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sohwhTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'sohwh', res: r })).catch(() => null));
+    }
 
     try {
       const results = await Promise.all(fetches);
@@ -382,6 +389,10 @@ class DatabaseService {
         if (item.key === 'soh') this.parseSoh(text);
         if (item.key === 'stockMovement') this.parseStockMovement(text);
         if (item.key === 'stockActivity') this.parseStockActivity(text);
+        if (item.key === 'sohwh') {
+          this.parseSohwh(text);
+          cacheManager.setStore('sohwh', this.sohwh);
+        }
       }
 
       // If fetches were attempted but ALL failed, treat as network error
@@ -425,6 +436,7 @@ class DatabaseService {
     this.stockMovements = [];
     this.stockActivities = [];
     this.soh = [];
+    this.sohwh = [];
     this.racks = [];
     this.zones = [];
     this.checkerLines = [];
@@ -476,7 +488,8 @@ class DatabaseService {
       lostAndFound:  ['lostAndFound'],
       soh:           ['soh'],
       stockMovement: ['stockMovement', 'stockActivity', 'soh'],
-      admin:         ['userDb']
+      admin:         ['userDb'],
+      sohwh:         ['sohwh']
     };
     const tabsToSync = tabMap[tabId];
     if (!tabsToSync || tabsToSync.length === 0) return true;
@@ -1644,6 +1657,45 @@ class DatabaseService {
         foodOrNonFood: skuDetails.foodOrNonFood || 'N/A'
       };
     });
+  }
+
+  parseSohwh(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    if (result.data && result.data.length > 0) {
+      this.sohwh = result.data.map(row => {
+        const productId = this.findRowValue(row, ['product_id', 'product id', 'productid']);
+        const skuNumber = this.findRowValue(row, ['sku_number', 'sku number', 'sku code', 'sku_code', 'sku']);
+        const productName = this.findRowValue(row, ['product_name', 'product name', 'product']);
+        const rackName = this.findRowValue(row, ['rack_name', 'rack name', 'rack', 'location']);
+        const qtyStock = this.findRowValue(row, ['qty stock', 'qty_stock', 'quantity stock', 'qty']);
+        const reserveStock = this.findRowValue(row, ['reserve stock', 'reserve_stock', 'reserve']);
+        const finalVirtualSoh = this.findRowValue(row, ['final virtual soh', 'final_virtual_soh', 'virtual soh', 'virtual_soh']);
+
+        const sku = String(skuNumber).trim();
+        const rack = String(rackName).trim();
+
+        return {
+          id: `${sku}_${rack}`,
+          productId: String(productId).trim(),
+          skuNumber: sku,
+          productName: String(productName).trim(),
+          rackName: rack,
+          qtyStock: parseInt(String(qtyStock).trim() || '0', 10),
+          reserveStock: parseInt(String(reserveStock).trim() || '0', 10),
+          finalVirtualSoh: parseInt(String(finalVirtualSoh).trim() || '0', 10)
+        };
+      }).filter(s => s.skuNumber);
+    }
+  }
+
+  getSohwhList() {
+    return [...this.sohwh];
   }
 
   parseStockMovement(csvText) {

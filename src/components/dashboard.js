@@ -2,6 +2,7 @@ import { renderRequestPickup } from './requestPickup.js';
 import { renderPickingTask } from './pickingTask.js';
 import { renderLostAndFound } from './lostAndFound.js';
 import { renderSoh } from './soh.js';
+import { renderSohwh } from './sohwh.js';
 import { renderHome } from './home.js';
 import { renderAdmin } from './admin.js';
 import { renderStockMovement } from './stockMovement.js';
@@ -428,6 +429,7 @@ export function renderDashboard(container, currentUser, onLogout) {
       else if (tabId === 'pickingTask') renderPickingTask(targetArea, currentUser);
       else if (tabId === 'lostAndFound') renderLostAndFound(targetArea, currentUser);
       else if (tabId === 'soh') renderSoh(targetArea, currentUser);
+      else if (tabId === 'sohwh') renderSohwh(targetArea, currentUser);
       else if (tabId === 'requestPickup') renderRequestPickup(targetArea, currentUser);
       else if (tabId === 'stockMovement') renderStockMovement(targetArea, currentUser);
       else if (tabId === 'admin') renderAdmin(targetArea, currentUser);
