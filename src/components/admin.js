@@ -1,11 +1,12 @@
 import { db } from '../data/db.js';
 
-const AVAILABLE_MENUS = ['requestPickup', 'pickingTask', 'lostAndFound', 'soh', 'stockMovement', 'admin'];
+const AVAILABLE_MENUS = ['requestPickup', 'pickingTask', 'lostAndFound', 'soh', 'sohwh', 'stockMovement', 'admin'];
 const MENU_LABELS = {
   requestPickup: 'Request Pickup',
   pickingTask:   'Picking Task',
   lostAndFound:  'Lost & Found',
   soh:           'Stock On Hand',
+  sohwh:         'WH - Stock Inquery',
   stockMovement: 'Stock Movement & Deduction',
   admin:         'Admin Panel'
 };
