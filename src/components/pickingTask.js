@@ -146,7 +146,8 @@ export function renderPickingTask(container, currentUser) {
   function updateWaitingBadge() {
     const pRc = db.getPendingRequests ? db.getPendingRequests() : [];
     const pLf = db.getPendingLostAndFound ? db.getPendingLostAndFound() : [];
-    const count = pRc.length + pLf.length;
+    const pSm = db.getPendingStockMovements ? db.getPendingStockMovements() : [];
+    const count = pRc.length + pLf.length + pSm.length;
     const badgeContainer = container.querySelector('.filter-tab[data-filter="Waiting"] > div');
     if (badgeContainer) {
       let badgeEl = badgeContainer.querySelector('.filter-tab-badge');
@@ -231,10 +232,24 @@ export function renderPickingTask(container, currentUser) {
       const statusClass = (task.status || '').toLowerCase();
       const isPicking = task.status === 'Picking';
       const remainingQty = db.getPickingTaskRemainingQty(task.pickingId);
+      const sourceInfo = db.getPickingTaskSourceInfo(task);
+
+      let sourceChip = '';
+      if (sourceInfo.sourceProcess === 'Request_Checker') {
+        sourceChip = `<div style="font-size: 11px; margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; background: #e0f2fe; color: #0369a1; font-weight: 600;"><span class="material-icons-round" style="font-size: 12px;">view_stream</span> ${escapeHtml(sourceInfo.checkerLine || 'Request')}</div>`;
+      } else if (sourceInfo.sourceProcess === 'Lost_And_Found') {
+        sourceChip = `<div style="font-size: 11px; margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #b45309; font-weight: 600;"><span class="material-icons-round" style="font-size: 12px;">place</span> ${escapeHtml(sourceInfo.sourceLocation || 'Lost & Found')}</div>`;
+      } else if (sourceInfo.sourceProcess === 'Stock_Movement') {
+        sourceChip = `<div style="font-size: 11px; margin-top: 3px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; background: #f3e8ff; color: #6b21a8; font-weight: 600;"><span class="material-icons-round" style="font-size: 12px;">swap_horiz</span> ${escapeHtml(sourceInfo.sourceLocation || 'Stock Movement')}</div>`;
+      }
+
       return `
         <tr data-picking-id="${task.pickingId}" class="picking-task-row" style="cursor: pointer;">
           <td><strong style="color: var(--primary-700); font-family: monospace;">#${task.pickingId}</strong></td>
-          <td><span style="font-family: monospace; font-weight: 600;">#${task.ticketId || 'N/A'}</span></td>
+          <td>
+            <span style="font-family: monospace; font-weight: 600; display: block;">#${task.ticketId || 'N/A'}</span>
+            ${sourceChip}
+          </td>
           <td><strong>${escapeHtml(task.pickedBy)}</strong></td>
           <td>
             <span style="font-weight: 700; color: var(--primary-600); font-size: 12px; display: block;">SKU: ${escapeHtml(task.skuCode)}</span>
@@ -266,7 +281,17 @@ export function renderPickingTask(container, currentUser) {
       const statusClass = (task.status || '').toLowerCase();
       const isPicking = task.status === 'Picking';
       const remainingQty = db.getPickingTaskRemainingQty(task.pickingId);
-      
+      const sourceInfo = db.getPickingTaskSourceInfo(task);
+
+      let mobileSourceBadge = '';
+      if (sourceInfo.sourceProcess === 'Request_Checker') {
+        mobileSourceBadge = `<div style="font-size: 11px; margin-top: 4px; display: flex; align-items: center; gap: 4px; color: #0369a1; font-weight: 600;"><span class="material-icons-round" style="font-size: 13px;">view_stream</span> Checker Line: ${escapeHtml(sourceInfo.checkerLine || 'N/A')}</div>`;
+      } else if (sourceInfo.sourceProcess === 'Lost_And_Found') {
+        mobileSourceBadge = `<div style="font-size: 11px; margin-top: 4px; display: flex; align-items: center; gap: 4px; color: #b45309; font-weight: 600;"><span class="material-icons-round" style="font-size: 13px;">place</span> Found At: ${escapeHtml(sourceInfo.sourceLocation || 'N/A')}</div>`;
+      } else if (sourceInfo.sourceProcess === 'Stock_Movement') {
+        mobileSourceBadge = `<div style="font-size: 11px; margin-top: 4px; display: flex; align-items: center; gap: 4px; color: #6b21a8; font-weight: 600;"><span class="material-icons-round" style="font-size: 13px;">swap_horiz</span> From: ${escapeHtml(sourceInfo.sourceLocation || 'N/A')}</div>`;
+      }
+
       return `
         <div class="mobile-task-card" data-picking-id="${task.pickingId}">
           <div class="card-header-row">
@@ -274,8 +299,10 @@ export function renderPickingTask(container, currentUser) {
             <span class="ticket-id-label">Ticket: #${task.ticketId || 'N/A'}</span>
             <span class="status-badge ${statusClass}">${task.status}</span>
           </div>
+
+          ${mobileSourceBadge}
           
-          <div class="card-body-content">
+          <div class="card-body-content" style="margin-top: 6px;">
             <div class="product-sku">SKU: <strong>${escapeHtml(task.skuCode)}</strong></div>
             <div class="product-name">${escapeHtml(task.productName)}</div>
           </div>
@@ -339,8 +366,9 @@ export function renderPickingTask(container, currentUser) {
   }
 
   function renderWaitingList() {
-    const pendingRc = db.getPendingRequests();
-    const pendingLf = db.getPendingLostAndFound();
+    const pendingRc = db.getPendingRequests ? db.getPendingRequests() : [];
+    const pendingLf = db.getPendingLostAndFound ? db.getPendingLostAndFound() : [];
+    const pendingSm = db.getPendingStockMovements ? db.getPendingStockMovements() : [];
 
     let waitingItems = [
       ...pendingRc.map(r => ({
@@ -350,6 +378,8 @@ export function renderPickingTask(container, currentUser) {
         qty: r.qty || 1,
         requestedBy: r.checkerName || 'N/A',
         sourceProcess: 'Request_Checker',
+        checkerLine: r.checkerLine || '',
+        sourceLocation: '',
         timestamp: r.timestamp
       })),
       ...pendingLf.map(r => ({
@@ -359,6 +389,19 @@ export function renderPickingTask(container, currentUser) {
         qty: r.qty || 1,
         requestedBy: r.btiStaff || 'N/A',
         sourceProcess: 'Lost_And_Found',
+        checkerLine: '',
+        sourceLocation: r.foundAt || r.location || '',
+        timestamp: r.timestamp
+      })),
+      ...pendingSm.map(r => ({
+        id: String(r.movementId || r.ticketId || r.uniqueid || r.id),
+        sku: r.skuCode || r.skuNumber || '',
+        productName: r.productName || 'Stock Movement',
+        qty: r.qty || 1,
+        requestedBy: r.staffName || r.assignedBy || 'N/A',
+        sourceProcess: 'Stock_Movement',
+        checkerLine: '',
+        sourceLocation: r.fromLocation ? (r.toLocation ? `${r.fromLocation} → ${r.toLocation}` : r.fromLocation) : (r.location || ''),
         timestamp: r.timestamp
       }))
     ];
@@ -373,7 +416,9 @@ export function renderPickingTask(container, currentUser) {
         item.id.toLowerCase().includes(q) ||
         item.sku.toLowerCase().includes(q) ||
         item.productName.toLowerCase().includes(q) ||
-        item.requestedBy.toLowerCase().includes(q)
+        item.requestedBy.toLowerCase().includes(q) ||
+        item.checkerLine.toLowerCase().includes(q) ||
+        item.sourceLocation.toLowerCase().includes(q)
       );
     }
 
@@ -420,8 +465,30 @@ export function renderPickingTask(container, currentUser) {
     // Populate desktop table
     pickingTableBody.innerHTML = waitingItems.map(item => {
       const isSelected = selectedWaitingTicketIds.has(item.id);
-      const sourceLabel = item.sourceProcess === 'Request_Checker' ? 'Request' : 'Lost & Found';
-      const sourceClass = item.sourceProcess === 'Request_Checker' ? 'request' : 'lost-found';
+      
+      let sourceBadgeHtml = '';
+      if (item.sourceProcess === 'Request_Checker') {
+        sourceBadgeHtml = `
+          <span class="waiting-source-badge request">Request Checker</span>
+          <div style="font-size: 11px; margin-top: 3px; font-weight: 600; color: #0369a1; display: flex; align-items: center; gap: 3px;">
+            <span class="material-icons-round" style="font-size: 12px;">view_stream</span> ${escapeHtml(item.checkerLine || 'Line N/A')}
+          </div>
+        `;
+      } else if (item.sourceProcess === 'Lost_And_Found') {
+        sourceBadgeHtml = `
+          <span class="waiting-source-badge lost-found">Lost & Found</span>
+          <div style="font-size: 11px; margin-top: 3px; font-weight: 600; color: #b45309; display: flex; align-items: center; gap: 3px;">
+            <span class="material-icons-round" style="font-size: 12px;">place</span> ${escapeHtml(item.sourceLocation || 'Loc N/A')}
+          </div>
+        `;
+      } else if (item.sourceProcess === 'Stock_Movement') {
+        sourceBadgeHtml = `
+          <span class="waiting-source-badge" style="background: #f3e8ff; color: #6b21a8; font-weight: 700;">Stock Movement</span>
+          <div style="font-size: 11px; margin-top: 3px; font-weight: 600; color: #6b21a8; display: flex; align-items: center; gap: 3px;">
+            <span class="material-icons-round" style="font-size: 12px;">swap_horiz</span> ${escapeHtml(item.sourceLocation || 'Loc N/A')}
+          </div>
+        `;
+      }
       
       return `
         <tr class="waiting-item-row ${isSelected ? 'selected-row' : ''}" data-id="${item.id}" style="cursor: pointer;">
@@ -431,7 +498,7 @@ export function renderPickingTask(container, currentUser) {
             </label>
           </td>
           <td><strong style="font-family: monospace;">#${item.id}</strong></td>
-          <td><span class="waiting-source-badge ${sourceClass}">${sourceLabel}</span></td>
+          <td>${sourceBadgeHtml}</td>
           <td>
             <span style="font-weight: 700; color: var(--primary-600); font-size: 12px; display: block;">SKU: ${escapeHtml(item.sku)}</span>
             <span style="font-size: 12px; color: var(--text-secondary);">${escapeHtml(item.productName)}</span>
@@ -598,8 +665,12 @@ export function renderPickingTask(container, currentUser) {
         const id = btn.dataset.id;
         const source = btn.dataset.source;
 
-        const pendingList = source === 'Request_Checker' ? db.getPendingRequests() : db.getPendingLostAndFound();
-        const req = pendingList.find(r => String(r.ticketId || r.uniqueid) === id);
+        let pendingList = [];
+        if (source === 'Request_Checker') pendingList = db.getPendingRequests();
+        else if (source === 'Lost_And_Found') pendingList = db.getPendingLostAndFound();
+        else if (source === 'Stock_Movement') pendingList = db.getPendingStockMovements ? db.getPendingStockMovements() : [];
+
+        const req = pendingList.find(r => String(r.ticketId || r.uniqueid || r.movementId || r.id) === id);
         if (!req) return;
 
         showBlockerLock('Assigning picking task to you...');
@@ -698,10 +769,12 @@ export function renderPickingTask(container, currentUser) {
 
     const pendingRc = db.getPendingRequests();
     const pendingLf = db.getPendingLostAndFound();
+    const pendingSm = db.getPendingStockMovements ? db.getPendingStockMovements() : [];
     
     const selectedReqsRc = pendingRc.filter(r => selectedWaitingTicketIds.has(String(r.ticketId || r.uniqueid)));
     const selectedReqsLf = pendingLf.filter(r => selectedWaitingTicketIds.has(String(r.ticketId || r.uniqueid)));
-    const allSelected = [...selectedReqsRc, ...selectedReqsLf];
+    const selectedReqsSm = pendingSm.filter(r => selectedWaitingTicketIds.has(String(r.movementId || r.ticketId || r.uniqueid || r.id)));
+    const allSelected = [...selectedReqsRc, ...selectedReqsLf, ...selectedReqsSm];
 
     const modal = document.createElement('div');
     modal.id = 'mobileConfirmModalOverlay';
@@ -832,6 +905,10 @@ export function renderPickingTask(container, currentUser) {
         if (selectedReqsLf.length > 0) {
           const createdLf = await db.createPickingTasks(selectedReqsLf, currentUser.name, 'Lost_And_Found');
           totalCreated += createdLf.length;
+        }
+        if (selectedReqsSm.length > 0) {
+          const createdSm = await db.createPickingTasks(selectedReqsSm, currentUser.name, 'Stock_Movement');
+          totalCreated += createdSm.length;
         }
 
         showToast(`Successfully assigned ${totalCreated} picking task(s) to you!`);
@@ -1111,56 +1188,81 @@ export function renderPickingTask(container, currentUser) {
       return;
     }
 
-    const isLostAndFound = task.ticketId && task.ticketId.startsWith('LF-');
-    const sourceProcess = isLostAndFound ? 'Lost & Found' : 'Request Checker';
-    const sourceBadgeColor = isLostAndFound ? 'background: #fef3c7; color: #d97706;' : 'background: #dbeafe; color: #1e40af;';
+    const sourceInfo = db.getPickingTaskSourceInfo(task);
+    const sourceProcess = sourceInfo.sourceProcess === 'Lost_And_Found'
+      ? 'Lost & Found'
+      : sourceInfo.sourceProcess === 'Stock_Movement'
+        ? 'Stock Movement'
+        : 'Request Checker';
+
+    let sourceBadgeColor = 'background: #dbeafe; color: #1e40af;';
+    if (sourceInfo.sourceProcess === 'Lost_And_Found') {
+      sourceBadgeColor = 'background: #fef3c7; color: #d97706;';
+    } else if (sourceInfo.sourceProcess === 'Stock_Movement') {
+      sourceBadgeColor = 'background: #f3e8ff; color: #6b21a8;';
+    }
 
     // Build matching ticket info
     let sourceDetailsHtml = '';
-    if (isLostAndFound) {
+    if (sourceInfo.sourceProcess === 'Lost_And_Found' || (task.ticketId && task.ticketId.startsWith('LF-'))) {
       const entry = db.lostAndFound.find(e => String(e.ticketId).trim() === String(task.ticketId).trim());
-      if (entry) {
-        sourceDetailsHtml = `
-          <div style="background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 12px;">
-            <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
-              <span class="material-icons-round" style="font-size: 14px; color: var(--primary-600);">travel_explore</span>
-              <span>Lost & Found Ticket Info</span>
-            </div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>BTI Staff:</strong> ${escapeHtml(entry.btiStaff)}</div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Found At Location:</strong> <span class="location-badge" style="font-family: monospace; font-size: 11px; padding: 2px 6px; font-weight: 700; color: var(--primary-800); background: var(--primary-50); border-radius: 6px;">${escapeHtml(entry.foundAt)}</span></div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Reason:</strong> ${escapeHtml(entry.reason || '-')}</div>
-            <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${entry.qty}</div>
+      const foundAtLoc = entry ? (entry.foundAt || entry.location) : (sourceInfo.sourceLocation || 'N/A');
+      const btiStaff = entry ? entry.btiStaff : 'N/A';
+      const reason = entry ? (entry.reason || '-') : '-';
+      const ticketQty = entry ? entry.qty : task.qty;
+
+      sourceDetailsHtml = `
+        <div style="background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+            <span class="material-icons-round" style="font-size: 14px; color: #d97706;">travel_explore</span>
+            <span>Lost & Found Ticket Info</span>
           </div>
-        `;
-      } else {
-        sourceDetailsHtml = `
-          <div style="background: #fff5f5; padding: 12px 14px; border-radius: 12px; border: 1.5px dashed #fca5a5; margin-top: 12px; color: #c53030; font-size: 12px; font-weight: 600;">
-            Source Lost & Found entry details not found locally.
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>BTI Staff:</strong> ${escapeHtml(btiStaff)}</div>
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>Source Data Location:</strong> <span class="location-badge" style="font-family: monospace; font-size: 11px; padding: 2px 6px; font-weight: 700; color: #b45309; background: #fef3c7; border-radius: 6px;">${escapeHtml(foundAtLoc)}</span></div>
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>Reason:</strong> ${escapeHtml(reason)}</div>
+          <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${ticketQty}</div>
+        </div>
+      `;
+    } else if (sourceInfo.sourceProcess === 'Stock_Movement' || (task.ticketId && task.ticketId.startsWith('SM-'))) {
+      const entry = db.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === String(task.ticketId).trim());
+      const fromLoc = entry ? entry.fromLocation : (sourceInfo.sourceLocation || 'N/A');
+      const toLoc = entry ? entry.toLocation : '-';
+      const staff = entry ? (entry.staffName || entry.assignedBy) : 'N/A';
+      const type = entry ? entry.type : 'Movement';
+      const ticketQty = entry ? entry.qty : task.qty;
+
+      sourceDetailsHtml = `
+        <div style="background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+            <span class="material-icons-round" style="font-size: 14px; color: #6b21a8;">swap_horiz</span>
+            <span>Stock Movement Activity Info</span>
           </div>
-        `;
-      }
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>Type:</strong> ${escapeHtml(type)}</div>
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>Assigned / Staff:</strong> ${escapeHtml(staff)}</div>
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>Source Data Location (From):</strong> <span class="location-badge" style="font-family: monospace; font-size: 11px; padding: 2px 6px; font-weight: 700; color: #6b21a8; background: #f3e8ff; border-radius: 6px;">${escapeHtml(fromLoc)}</span></div>
+          ${toLoc && toLoc !== '-' ? `<div style="font-size: 13px; margin-bottom: 4px;"><strong>Target Location (To):</strong> <span style="font-family: monospace; font-size: 11px; padding: 2px 6px; font-weight: 700; color: var(--primary-800); background: var(--primary-50); border-radius: 6px;">${escapeHtml(toLoc)}</span></div>` : ''}
+          <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${ticketQty}</div>
+        </div>
+      `;
     } else {
       const entry = db.requests.find(r => String(r.ticketId || r.uniqueid).trim() === String(task.ticketId).trim());
-      if (entry) {
-        sourceDetailsHtml = `
-          <div style="background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 12px;">
-            <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
-              <span class="material-icons-round" style="font-size: 14px; color: var(--primary-600);">outbox</span>
-              <span>Request Checker Ticket Info</span>
-            </div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Line:</strong> ${escapeHtml(entry.checkerLine)}</div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Name:</strong> ${escapeHtml(entry.checkerName)}</div>
-            <div style="font-size: 13px; margin-bottom: 4px;"><strong>SO Number:</strong> ${escapeHtml(entry.soNumber)}</div>
-            <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${entry.qty}</div>
+      const chkLine = entry ? entry.checkerLine : (sourceInfo.checkerLine || 'N/A');
+      const chkName = entry ? entry.checkerName : 'N/A';
+      const soNum = entry ? entry.soNumber : 'N/A';
+      const ticketQty = entry ? entry.qty : task.qty;
+
+      sourceDetailsHtml = `
+        <div style="background: #f8fafc; padding: 14px; border-radius: 12px; border: 1px solid var(--border-light); margin-top: 12px;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px; margin-bottom: 8px;">
+            <span class="material-icons-round" style="font-size: 14px; color: #0369a1;">outbox</span>
+            <span>Request Checker Ticket Info</span>
           </div>
-        `;
-      } else {
-        sourceDetailsHtml = `
-          <div style="background: #fff5f5; padding: 12px 14px; border-radius: 12px; border: 1.5px dashed #fca5a5; margin-top: 12px; color: #c53030; font-size: 12px; font-weight: 600;">
-            Source pickup request details not found locally.
-          </div>
-        `;
-      }
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Line:</strong> <span style="font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 6px; border-radius: 6px; font-size: 11px;">${escapeHtml(chkLine)}</span></div>
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Name:</strong> ${escapeHtml(chkName)}</div>
+          <div style="font-size: 13px; margin-bottom: 4px;"><strong>SO Number:</strong> ${escapeHtml(soNum)}</div>
+          <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${ticketQty}</div>
+        </div>
+      `;
     }
 
     // Build putaway list

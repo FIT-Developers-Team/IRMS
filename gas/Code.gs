@@ -66,6 +66,61 @@ function doPost(e) {
   }
 }
 
+/**
+ * doGet — handles GET requests to the Web App URL.
+ * Supports: ?action=getUsers  → returns User_DB as JSON (bypasses GViz CSV text-cell bug)
+ */
+function doGet(e) {
+  try {
+    var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    if (action === 'getUsers') {
+      var sheet = ss.getSheetByName('User_DB');
+      if (!sheet) {
+        return ContentService
+          .createTextOutput(JSON.stringify({ result: 'error', message: 'User_DB sheet not found' }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      var values = sheet.getDataRange().getDisplayValues(); // DisplayValues returns text as-is, including text-formatted cells
+      if (values.length < 2) {
+        return ContentService
+          .createTextOutput(JSON.stringify({ result: 'success', users: [] }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      var headers = values[0].map(function(h) { return String(h).trim(); });
+      var users = [];
+      for (var i = 1; i < values.length; i++) {
+        var row = values[i];
+        var user = {};
+        headers.forEach(function(h, idx) {
+          user[h] = String(row[idx] || '').trim();
+        });
+        // Only include rows that have a non-empty Staff ID column
+        var staffId = user['Staff ID'] || user['staff_id'] || user['staffid'] || user['id'] || '';
+        if (staffId && staffId.length > 0) {
+          users.push(user);
+        }
+      }
+
+      return ContentService
+        .createTextOutput(JSON.stringify({ result: 'success', users: users }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: 'error', message: 'Unknown action: ' + action }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: 'error', message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
 function getOrCreateSheet(ss, sheetName, defaultHeaders) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
@@ -386,23 +441,24 @@ function handleCreatePickingTasks(ss, data) {
   var pickingSheet = getOrCreateSheet(ss, "Picking_Task", defaultHeaders);
   var reqSheet = ss.getSheetByName("Request_Checker");
   var lfSheet = ss.getSheetByName("Lost_And_Found");
+  var smSheet = ss.getSheetByName("Stock_Movement");
 
   var tasks = data.tasks || (data.pickingId ? [data] : []);
 
   tasks.forEach(function(t) {
     var ticketIdVal = String(t.ticketId || t.uniqueid || t.ticket_id || '').trim();
     var isLf = (data.sourceProcess === 'Lost_And_Found' || t.sourceProcess === 'Lost_And_Found' || ticketIdVal.indexOf('LF-') === 0);
+    var isSm = (data.sourceProcess === 'Stock_Movement' || t.sourceProcess === 'Stock_Movement' || ticketIdVal.indexOf('SM-') === 0);
 
     // 1. Append row to Picking_Task sheet by header matching
     appendRowByHeader(pickingSheet, t, defaultHeaders);
 
-    // 2. Update status on Lost_And_Found sheet
+    // 2. Update status on source sheet
     if (isLf && lfSheet) {
       updateStatusByHeader(lfSheet, "Ticket ID", ticketIdVal, "Picking");
-    }
-
-    // 3. Update status on Request_Checker sheet
-    if (!isLf && reqSheet) {
+    } else if (isSm && smSheet) {
+      updateStatusByHeader(smSheet, "Movement ID", ticketIdVal, "Picking");
+    } else if (!isLf && !isSm && reqSheet) {
       updateStatusByHeader(reqSheet, "Ticket ID", ticketIdVal, "Picking");
     }
   });
@@ -960,7 +1016,31 @@ function handleCancelStockMovement(ss, data) {
 function handleAddUser(ss, data) {
   var defaultHeaders = ["Staff ID", "Name", "Role", "Acess", "Password"];
   var sheet = getOrCreateSheet(ss, "User_DB", defaultHeaders);
+
+  if (data && data.staffId !== undefined) {
+    var sId = String(data.staffId).trim();
+    // Always store as plain string — do NOT prefix with ' here since
+    // we will explicitly set the cell format to text (@) after appending
+    data.staffId = sId;
+  }
+
   appendRowByHeader(sheet, data, defaultHeaders);
+
+  // Set the Staff ID column cell of the newly added row to Text format
+  // so GViz CSV won't silently drop it or convert it to a number
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var idColIdx = -1;
+    for (var h = 0; h < headers.length; h++) {
+      var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanH === 'staffid' || cleanH === 'id') { idColIdx = h + 1; break; }
+    }
+    if (idColIdx > 0) {
+      sheet.getRange(lastRow, idColIdx).setNumberFormat('@'); // '@' = plain text format
+    }
+  }
+
   return ContentService
     .createTextOutput(JSON.stringify({ result: "success", staffId: data.staffId }))
     .setMimeType(ContentService.MimeType.JSON);
@@ -969,6 +1049,7 @@ function handleAddUser(ss, data) {
 function handleUpdateUser(ss, data) {
   var sheet = ss.getSheetByName("User_DB");
   if (sheet && data.staffId) {
+    var targetId = String(data.staffId).replace(/^'/, '').trim().toLowerCase();
     var values = sheet.getDataRange().getValues();
     if (values.length > 1) {
       var headers = values[0];
@@ -984,7 +1065,8 @@ function handleUpdateUser(ss, data) {
 
       if (idCol !== -1) {
         for (var i = 1; i < values.length; i++) {
-          if (String(values[i][idCol]).trim() === String(data.staffId).trim()) {
+          var rowId = String(values[i][idCol]).replace(/^'/, '').trim().toLowerCase();
+          if (rowId === targetId) {
             if (nameCol !== -1 && data.name !== undefined) sheet.getRange(i + 1, nameCol + 1).setValue(data.name);
             if (roleCol !== -1 && data.role !== undefined) sheet.getRange(i + 1, roleCol + 1).setValue(data.role);
             if (accessCol !== -1 && data.access !== undefined) sheet.getRange(i + 1, accessCol + 1).setValue(data.access);
@@ -1003,6 +1085,7 @@ function handleUpdateUser(ss, data) {
 function handleDeleteUser(ss, data) {
   var sheet = ss.getSheetByName("User_DB");
   if (sheet && data.staffId) {
+    var targetId = String(data.staffId).replace(/^'/, '').trim().toLowerCase();
     var values = sheet.getDataRange().getValues();
     if (values.length > 1) {
       var headers = values[0];
@@ -1013,7 +1096,8 @@ function handleDeleteUser(ss, data) {
       }
       if (idCol !== -1) {
         for (var i = 1; i < values.length; i++) {
-          if (String(values[i][idCol]).trim() === String(data.staffId).trim()) {
+          var rowId = String(values[i][idCol]).replace(/^'/, '').trim().toLowerCase();
+          if (rowId === targetId) {
             sheet.deleteRow(i + 1);
             break;
           }

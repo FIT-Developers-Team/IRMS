@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'IRMS_IndexedDB_Cache';
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 
 class CacheManager {
   constructor() {
@@ -35,6 +35,7 @@ class CacheManager {
             { name: 'soh', keyPath: 'id' },
             { name: 'stockMovements', keyPath: 'movementId' },
             { name: 'skusDb', keyPath: 'sku_number' },
+            { name: 'userDb', keyPath: 'staffId' },
             { name: 'racks', keyPath: 'locationName' },
             { name: 'zones', keyPath: 'zone' },
             { name: 'checkerLines', keyPath: 'lineName' },
@@ -102,8 +103,11 @@ class CacheManager {
         const tx = this.db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
         store.clear();
+        const kp = store.keyPath;
         records.forEach(item => {
-          if (item) store.put(item);
+          if (item && item[kp] !== undefined && item[kp] !== null && String(item[kp]).trim() !== '') {
+            store.put(item);
+          }
         });
         tx.oncomplete = () => resolve(true);
         tx.onerror = () => resolve(false);
@@ -122,8 +126,11 @@ class CacheManager {
       try {
         const tx = this.db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
+        const kp = store.keyPath;
         records.forEach(item => {
-          if (item) store.put(item);
+          if (item && item[kp] !== undefined && item[kp] !== null && String(item[kp]).trim() !== '') {
+            store.put(item);
+          }
         });
         tx.oncomplete = () => resolve(true);
         tx.onerror = () => resolve(false);

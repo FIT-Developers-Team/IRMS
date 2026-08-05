@@ -101,21 +101,49 @@ class DatabaseService {
 
     if (result.data && result.data.length > 0) {
       this.users = result.data.map(row => {
-        const staffId = this.findRowValue(row, ['staff id', 'staff_id', 'staffid', 'id']);
-        const name = this.findRowValue(row, ['name', 'staff name']);
-        const role = this.findRowValue(row, ['role']);
-        const access = this.findRowValue(row, ['acess', 'access']);
-        const password = this.findRowValue(row, ['password', 'pwd', 'pass']);
+        const staffIdRaw = this.findRowValue(row, ['staff id', 'staff_id', 'staffid', 'user id', 'user_id', 'userid', 'id', 'staff', 'npp', 'nik', 'code']);
+        const name = this.findRowValue(row, ['name', 'staff name', 'user name', 'fullname', 'nama']);
+        const role = this.findRowValue(row, ['role', 'user role', 'jabatan']);
+        const access = this.findRowValue(row, ['acess', 'access', 'menu access', 'akses']);
+        const password = this.findRowValue(row, ['password', 'pwd', 'pass', 'pin']);
+
+        // Strip leading single-quote (Google Sheets text-force prefix) and whitespace
+        const staffId = String(staffIdRaw !== undefined && staffIdRaw !== null ? staffIdRaw : '')
+          .replace(/^'/, '')
+          .trim();
 
         return {
-          staffId: String(staffId).trim(),
-          name: String(name).trim(),
-          role: String(role).trim(),
-          access: String(access).trim(),
-          password: String(password).trim()
+          staffId: staffId,
+          name: String(name || '').trim(),
+          role: String(role || '').trim(),
+          access: String(access || '').trim(),
+          password: String(password || '').trim()
         };
-      }).filter(u => u.staffId);
+      }).filter(u => u.staffId && u.staffId.length > 0); // Require a non-empty staffId
     }
+  }
+
+  /**
+   * Parse User_DB from GAS JSON response (doGet?action=getUsers).
+   * Uses getDisplayValues() in GAS — returns actual text cell values,
+   * bypassing the GViz CSV bug that drops text-formatted cells (apostrophe-prefixed).
+   */
+  parseUsersJson(usersArray) {
+    if (!Array.isArray(usersArray)) return;
+    this.users = usersArray.map(row => {
+      // Normalize keys — GAS returns headers exactly as in Sheets ("Staff ID", "Name", etc.)
+      const staffId = String(
+        row['Staff ID'] || row['staff_id'] || row['staffid'] || row['User ID'] ||
+        row['user_id'] || row['id'] || ''
+      ).replace(/^'/, '').trim();
+
+      const name     = String(row['Name'] || row['name'] || row['staff name'] || '').trim();
+      const role     = String(row['Role'] || row['role'] || '').trim();
+      const access   = String(row['Acess'] || row['Access'] || row['acess'] || row['access'] || '').trim();
+      const password = String(row['Password'] || row['password'] || row['pwd'] || '').trim();
+
+      return { staffId, name, role, access, password };
+    }).filter(u => u.staffId && u.staffId.length > 0);
   }
 
   parseSoData(csvText) {
@@ -248,10 +276,12 @@ class DatabaseService {
         if (val) return val;
       }
     }
-    // Fallback to first column for ID if possibleKeys includes 'ticket id'
-    if (keys.length > 0 && possibleKeys.includes('ticket id')) {
+    // Fallback to first column for ID if possibleKeys includes an ID key
+    const hasIdKey = possibleKeys.some(k => ['ticket id', 'staff id', 'staff_id', 'staffid', 'user id', 'id'].includes(k));
+    if (keys.length > 0 && hasIdKey) {
       const firstVal = String(row[keys[0]] || '').trim();
-      if (firstVal && firstVal !== 'Ticket ID' && firstVal !== 'uniqueid') {
+      const lowerFirst = firstVal.toLowerCase();
+      if (firstVal && !['ticket id', 'staff id', 'uniqueid', 'user id', 'id'].includes(lowerFirst)) {
         return firstVal;
       }
     }
@@ -324,7 +354,9 @@ class DatabaseService {
 
     const fetches = [];
     if (shouldSync('userDb')) {
-      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(userDbTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'userDb', res: r })));
+      // Use GAS web app JSON endpoint for User_DB — GViz CSV silently drops text-formatted cells (e.g. AST-01033)
+      const userDbUrl = `${this.webAppUrl}?action=getUsers&${cacheBuster}`;
+      fetches.push(fetch(userDbUrl, { cache: 'no-store' }).then(r => ({ key: 'userDb', res: r })).catch(() => null));
     }
     if (shouldSync('soData')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'soData', res: r })));
@@ -376,7 +408,22 @@ class DatabaseService {
         if (text.includes('<!DOCTYPE html>')) continue;
 
         successCount++;
-        if (item.key === 'userDb') this.parseUsers(text);
+        if (item.key === 'userDb') {
+          // userDb comes back as JSON from GAS web app
+          try {
+            const json = JSON.parse(text);
+            if (json.result === 'success' && Array.isArray(json.users)) {
+              this.parseUsersJson(json.users);
+            } else {
+              // Fallback: if JSON parse fails or error, try treating as CSV
+              this.parseUsers(text);
+            }
+          } catch (e) {
+            // Fallback to CSV parse if JSON parsing fails
+            this.parseUsers(text);
+          }
+          cacheManager.setStore('userDb', this.users);
+        }
         if (item.key === 'soData') this.parseSoData(text);
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
@@ -501,9 +548,31 @@ class DatabaseService {
   }
 
   lookupStaffId(staffId) {
-    const trimmed = String(staffId).trim();
-    if (!trimmed) return null;
-    return this.users.find(u => u.staffId === trimmed) || null;
+    if (staffId === undefined || staffId === null) return null;
+    const raw = String(staffId).replace(/^'/, '').trim();
+    if (!raw) return null;
+
+    const lower = raw.toLowerCase();
+    
+    // 1. Direct or case-insensitive string match
+    let found = this.users.find(u => {
+      const uId = String(u.staffId || '').replace(/^'/, '').trim().toLowerCase();
+      return uId === lower;
+    });
+    if (found) return found;
+
+    // 2. Numeric-equivalent match (e.g. "01005" matches "1005" if Sheets converted to numeric)
+    const num = parseInt(raw, 10);
+    if (!isNaN(num) && /^\d+$/.test(raw)) {
+      found = this.users.find(u => {
+        const uRaw = String(u.staffId || '').replace(/^'/, '').trim();
+        const uNum = parseInt(uRaw, 10);
+        return !isNaN(uNum) && /^\d+$/.test(uRaw) && uNum === num;
+      });
+      if (found) return found;
+    }
+
+    return null;
   }
 
   // ── Admin: Users ──────────────────────────────────────────────────────────
@@ -514,20 +583,22 @@ class DatabaseService {
 
   async addUser(userData) {
     const { staffId, name, role, access, password } = userData;
-    if (!staffId || !name) throw new Error('Staff ID and Name are required');
-    if (this.users.find(u => u.staffId === String(staffId).trim())) {
-      throw new Error(`Staff ID "${staffId}" already exists`);
+    const cleanStaffId = String(staffId || '').replace(/^'/, '').trim();
+    if (!cleanStaffId || !name) throw new Error('Staff ID and Name are required');
+    if (this.users.find(u => String(u.staffId).replace(/^'/, '').trim().toLowerCase() === cleanStaffId.toLowerCase())) {
+      throw new Error(`Staff ID "${cleanStaffId}" already exists`);
     }
 
     const newUser = {
-      staffId: String(staffId).trim(),
-      name: String(name).trim(),
+      staffId: cleanStaffId,
+      name: String(name || '').trim(),
       role: String(role || 'Staff').trim(),
       access: String(access || '').trim(),
       password: String(password || '').trim()
     };
 
     this.users.push(newUser);
+    cacheManager.setStore('userDb', this.users);
     this.notifyListeners();
 
     if (this.webAppUrl) {
@@ -547,10 +618,16 @@ class DatabaseService {
   }
 
   async updateUser(staffId, updates) {
-    const idx = this.users.findIndex(u => u.staffId === String(staffId).trim());
+    const targetId = String(staffId || '').replace(/^'/, '').trim().toLowerCase();
+    const idx = this.users.findIndex(u => String(u.staffId).replace(/^'/, '').trim().toLowerCase() === targetId);
     if (idx === -1) throw new Error(`User "${staffId}" not found`);
 
+    if (updates.staffId) {
+      updates.staffId = String(updates.staffId).replace(/^'/, '').trim();
+    }
+
     this.users[idx] = { ...this.users[idx], ...updates };
+    cacheManager.setStore('userDb', this.users);
     this.notifyListeners();
 
     if (this.webAppUrl) {
@@ -570,10 +647,12 @@ class DatabaseService {
   }
 
   async deleteUser(staffId) {
-    const idx = this.users.findIndex(u => u.staffId === String(staffId).trim());
+    const targetId = String(staffId || '').replace(/^'/, '').trim().toLowerCase();
+    const idx = this.users.findIndex(u => String(u.staffId).replace(/^'/, '').trim().toLowerCase() === targetId);
     if (idx === -1) throw new Error(`User "${staffId}" not found`);
 
     this.users.splice(idx, 1);
+    cacheManager.setStore('userDb', this.users);
     this.notifyListeners();
 
     if (this.webAppUrl) {
@@ -990,6 +1069,50 @@ class DatabaseService {
     return this.lostAndFound.filter(entry => (entry.status || '').trim().toLowerCase() === 'pending');
   }
 
+  getPendingStockMovements() {
+    return (this.stockMovements || []).filter(m => (m.status || '').trim().toLowerCase() === 'pending');
+  }
+
+  getPickingTaskSourceInfo(task) {
+    if (!task) return { sourceProcess: 'Request_Checker', checkerLine: '', sourceLocation: '' };
+
+    const tId = String(task.ticketId || '').trim();
+    let sourceProcess = task.sourceProcess || '';
+    let checkerLine = task.checkerLine || '';
+    let sourceLocation = task.sourceLocation || task.fromLocation || task.foundAt || task.location || '';
+
+    if (!sourceProcess) {
+      if (tId.startsWith('LF-')) sourceProcess = 'Lost_And_Found';
+      else if (tId.startsWith('SM-')) sourceProcess = 'Stock_Movement';
+      else sourceProcess = 'Request_Checker';
+    }
+
+    if (sourceProcess === 'Request_Checker' || tId.startsWith('RC-')) {
+      if (!checkerLine) {
+        const req = this.requests.find(r => String(r.ticketId || r.uniqueid).trim() === tId);
+        if (req && req.checkerLine) checkerLine = req.checkerLine;
+      }
+    } else if (sourceProcess === 'Lost_And_Found' || tId.startsWith('LF-')) {
+      if (!sourceLocation) {
+        const lf = this.lostAndFound.find(l => String(l.ticketId || l.uniqueid).trim() === tId);
+        if (lf && (lf.foundAt || lf.location)) sourceLocation = lf.foundAt || lf.location;
+      }
+    } else if (sourceProcess === 'Stock_Movement' || tId.startsWith('SM-')) {
+      if (!sourceLocation) {
+        const sm = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === tId);
+        if (sm) {
+          sourceLocation = sm.fromLocation ? (sm.toLocation ? `${sm.fromLocation} → ${sm.toLocation}` : sm.fromLocation) : (sm.location || '');
+        }
+      }
+    }
+
+    return {
+      sourceProcess: sourceProcess || 'Request_Checker',
+      checkerLine: checkerLine,
+      sourceLocation: sourceLocation
+    };
+  }
+
   loadSavedPickingTasks() {
     try {
       const saved = localStorage.getItem('irms_picking_tasks');
@@ -1008,13 +1131,16 @@ class DatabaseService {
     }
   }
 
-  async createPickingTasks(selectedRequests, pickedByName, sourceProcess = 'Request_Checker') {
+  async createPickingTasks(selectedRequests, pickedByName, defaultSourceProcess = 'Request_Checker') {
     const newTasks = [];
     const now = new Date().toISOString();
 
     for (const req of selectedRequests) {
       const pickingId = 'PK-' + this.generate6DigitId();
-      const ticketId = String(req.ticketId || req.uniqueid || req.id || '').trim();
+      const ticketId = String(req.ticketId || req.uniqueid || req.movementId || req.id || '').trim();
+      const sourceProc = req.sourceProcess || defaultSourceProcess;
+      const checkerLine = req.checkerLine || '';
+      const sourceLoc = req.sourceLocation || req.fromLocation || req.foundAt || req.location || '';
 
       const task = {
         pickingId: pickingId,
@@ -1025,20 +1151,21 @@ class DatabaseService {
         qty: req.qty || 1,
         status: 'Picking',
         timestamp: now,
-        sourceProcess: sourceProcess
+        sourceProcess: sourceProc,
+        checkerLine: checkerLine,
+        sourceLocation: sourceLoc
       };
       newTasks.push(task);
 
-      if (sourceProcess === 'Lost_And_Found' || (ticketId && ticketId.startsWith('LF-'))) {
+      if (sourceProc === 'Lost_And_Found' || (ticketId && ticketId.startsWith('LF-'))) {
         const matchingEntry = this.lostAndFound.find(e => String(e.ticketId).trim() === ticketId);
-        if (matchingEntry) {
-          matchingEntry.status = 'Picking';
-        }
+        if (matchingEntry) matchingEntry.status = 'Picking';
+      } else if (sourceProc === 'Stock_Movement' || (ticketId && ticketId.startsWith('SM-'))) {
+        const matchingSm = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === ticketId);
+        if (matchingSm) matchingSm.status = 'Picking';
       } else {
         const matchingReq = this.requests.find(r => String(r.ticketId || r.uniqueid).trim() === ticketId);
-        if (matchingReq) {
-          matchingReq.status = 'Picking';
-        }
+        if (matchingReq) matchingReq.status = 'Picking';
       }
     }
 
@@ -1055,7 +1182,7 @@ class DatabaseService {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'createPickingTasks', tasks: newTasks, sourceProcess })
+          body: JSON.stringify({ action: 'createPickingTasks', tasks: newTasks, sourceProcess: defaultSourceProcess })
         });
         setTimeout(() => this.syncGoogleSheets(), 2500);
       } catch (err) {

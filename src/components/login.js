@@ -106,7 +106,7 @@ export function renderLogin(container, onLoginSuccess) {
           <!-- Staff ID Input Group -->
           <div class="inputGroup">
             <label for="staffIdInput">Staff ID</label>
-            <input type="text" id="staffIdInput" required placeholder="Enter Staff ID (e.g. 1, 2, 41678)" />
+            <input type="text" id="staffIdInput" required placeholder="Enter Staff ID (e.g. 01005, AST-231)" />
             <div id="staffIdFeedback"></div>
           </div>
 

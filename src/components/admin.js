@@ -98,24 +98,7 @@ let userSearchQuery = '';
 let userSearchField = 'all';
 
 function renderUsersTab(container) {
-  const users = db.getUsers();
-
-  // Filter users list
-  let filteredUsers = [...users];
-  if (userSearchQuery) {
-    const q = userSearchQuery.toLowerCase();
-    filteredUsers = filteredUsers.filter(u => {
-      const staffId = String(u.staffId || '').toLowerCase();
-      const name = String(u.name || '').toLowerCase();
-      if (userSearchField === 'staffId') {
-        return staffId.includes(q);
-      } else if (userSearchField === 'name') {
-        return name.includes(q);
-      } else {
-        return staffId.includes(q) || name.includes(q);
-      }
-    });
-  }
+  const initialUsers = db.getUsers();
 
   container.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -123,7 +106,7 @@ function renderUsersTab(container) {
       <!-- Toolbar -->
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
         <div style="font-size: 13px; color: var(--text-secondary);">
-          <strong style="color: var(--text-primary);">${filteredUsers.length}</strong> users shown (${users.length} total)
+          <strong id="usersCountShown" style="color: var(--text-primary);">0</strong> users shown (<span id="usersCountTotal">${initialUsers.length}</span> total)
         </div>
         <button id="addUserBtn" class="btn-primary" style="gap: 6px;">
           <span class="material-icons-round" style="font-size: 16px;">person_add</span>
@@ -172,29 +155,102 @@ function renderUsersTab(container) {
               <th style="width: 110px; text-align: center;">Actions</th>
             </tr>
           </thead>
-          <tbody id="usersTableBody">
-            ${filteredUsers.length === 0 ? `<tr><td colspan="6"><div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found matching search criteria.</p></div></td></tr>` :
-              filteredUsers.map(u => renderUserRow(u)).join('')}
-          </tbody>
+          <tbody id="usersTableBody"></tbody>
         </table>
       </div>
 
       <!-- Mobile Cards -->
-      <div class="mobile-card-list" id="usersMobileList">
-        ${filteredUsers.length === 0 ? `<div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found matching search criteria.</p></div>` :
-          filteredUsers.map(u => renderUserCard(u)).join('')}
-      </div>
+      <div class="mobile-card-list" id="usersMobileList"></div>
     </div>
   `;
 
-  // Wire search inputs
   const searchInput = container.querySelector('#userSearchInput');
   const dropdownContainer = container.querySelector('#dropdown-user-search-field');
   const dropdownTrigger = dropdownContainer.querySelector('.custom-dropdown-trigger');
 
+  function updateUsersList() {
+    const users = db.getUsers();
+    let filteredUsers = [...users];
+    if (userSearchQuery) {
+      const q = userSearchQuery.toLowerCase();
+      filteredUsers = filteredUsers.filter(u => {
+        const staffId = String(u.staffId || '').toLowerCase();
+        const name = String(u.name || '').toLowerCase();
+        if (userSearchField === 'staffId') {
+          return staffId.includes(q);
+        } else if (userSearchField === 'name') {
+          return name.includes(q);
+        } else {
+          return staffId.includes(q) || name.includes(q);
+        }
+      });
+    }
+
+    const countShown = container.querySelector('#usersCountShown');
+    const countTotal = container.querySelector('#usersCountTotal');
+    if (countShown) countShown.textContent = filteredUsers.length;
+    if (countTotal) countTotal.textContent = users.length;
+
+    const tbody = container.querySelector('#usersTableBody');
+    if (tbody) {
+      tbody.innerHTML = filteredUsers.length === 0
+        ? `<tr><td colspan="6"><div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found matching search criteria.</p></div></td></tr>`
+        : filteredUsers.map(u => renderUserRow(u)).join('');
+    }
+
+    const mobileList = container.querySelector('#usersMobileList');
+    if (mobileList) {
+      mobileList.innerHTML = filteredUsers.length === 0
+        ? `<div class="empty-state"><span class="material-icons-round">group_off</span><p>No users found matching search criteria.</p></div>`
+        : filteredUsers.map(u => renderUserCard(u)).join('');
+    }
+
+    // Wire row edit/delete buttons
+    container.querySelectorAll('.edit-user-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const staffId = btn.dataset.staffid;
+        const user = db.lookupStaffId(staffId);
+        if (user) openUserModal(user);
+      });
+    });
+
+    container.querySelectorAll('.delete-user-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const staffId = btn.dataset.staffid;
+        const user = db.lookupStaffId(staffId);
+        if (!user) return;
+        if (!confirm(`Delete user "${user.name}" (${staffId})? This cannot be undone.`)) return;
+        try {
+          await db.deleteUser(staffId);
+          showAdminToast(`User "${user.name}" deleted.`, 'success');
+        } catch (err) {
+          showAdminToast(err.message, 'error');
+        }
+      });
+    });
+
+    // Wire password toggle buttons
+    container.querySelectorAll('.toggle-pwd-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pwdSpan = btn.previousElementSibling;
+        if (pwdSpan) {
+          const raw = pwdSpan.dataset.pwd;
+          const isHidden = pwdSpan.textContent === '••••';
+          pwdSpan.textContent = isHidden ? (raw || '••••') : '••••';
+          const icon = btn.querySelector('.material-icons-round');
+          if (icon) icon.textContent = isHidden ? 'visibility_off' : 'visibility';
+        }
+      });
+    });
+  }
+
+  // Wire search inputs
   searchInput.addEventListener('input', (e) => {
     userSearchQuery = e.target.value;
-    renderUsersTab(container);
+    updateUsersList();
   });
 
   const onDocClick = (e) => {
@@ -220,55 +276,24 @@ function renderUsersTab(container) {
     opt.addEventListener('click', (e) => {
       e.stopPropagation();
       userSearchField = opt.dataset.value;
+      const labelEl = dropdownTrigger.querySelector('.trigger-label');
+      if (labelEl) {
+        labelEl.textContent = userSearchField === 'all' ? 'All Fields' : userSearchField === 'staffId' ? 'Staff ID' : 'Name';
+      }
+      dropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(o => {
+        o.classList.toggle('active', o.dataset.value === userSearchField);
+      });
       dropdownContainer.classList.remove('open');
       document.removeEventListener('click', onDocClick);
-      renderUsersTab(container);
+      updateUsersList();
     });
   });
 
   // Wire add button
   container.querySelector('#addUserBtn').addEventListener('click', () => openUserModal(null));
 
-  // Wire row edit/delete buttons
-  container.querySelectorAll('.edit-user-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const staffId = btn.dataset.staffid;
-      const user = db.getUsers().find(u => u.staffId === staffId);
-      if (user) openUserModal(user);
-    });
-  });
-
-  container.querySelectorAll('.delete-user-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const staffId = btn.dataset.staffid;
-      const user = db.getUsers().find(u => u.staffId === staffId);
-      if (!user) return;
-      if (!confirm(`Delete user "${user.name}" (${staffId})? This cannot be undone.`)) return;
-      try {
-        await db.deleteUser(staffId);
-        showAdminToast(`User "${user.name}" deleted.`, 'success');
-      } catch (err) {
-        showAdminToast(err.message, 'error');
-      }
-    });
-  });
-
-  // Wire password toggle buttons
-  container.querySelectorAll('.toggle-pwd-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const pwdSpan = btn.previousElementSibling;
-      if (pwdSpan) {
-        const raw = pwdSpan.dataset.pwd;
-        const isHidden = pwdSpan.textContent === '••••';
-        pwdSpan.textContent = isHidden ? (raw || '••••') : '••••';
-        const icon = btn.querySelector('.material-icons-round');
-        if (icon) icon.textContent = isHidden ? 'visibility_off' : 'visibility';
-      }
-    });
-  });
+  // Initial list population
+  updateUsersList();
 }
 
 function renderUserRow(u) {
@@ -367,7 +392,7 @@ function openUserModal(existingUser) {
 
         <div class="form-field-group">
           <label class="form-label">Staff ID <span style="color:var(--danger);">*</span></label>
-          <input type="text" id="userStaffId" class="text-control" placeholder="e.g. 1005" value="${isEdit ? escHtml(existingUser.staffId) : ''}" ${isEdit ? 'readonly style="opacity:0.6;cursor:not-allowed;"' : ''}>
+          <input type="text" id="userStaffId" class="text-control" placeholder="e.g. 01005, AST-231" value="${isEdit ? escHtml(existingUser.staffId) : ''}" ${isEdit ? 'readonly style="opacity:0.6;cursor:not-allowed;"' : ''}>
         </div>
 
         <div class="form-field-group">
@@ -690,9 +715,55 @@ function openZoneModal(existingZone) {
 
 function renderRacksTab(container) {
   let searchQ = '';
-  let racks = db.getRacks ? db.getRacks() : [];
+  const initialRacks = db.getRacks ? db.getRacks() : [];
 
-  function draw() {
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+
+      <!-- Toolbar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+        <div style="font-size: 13px; color: var(--text-secondary);">
+          <strong id="racksCountShown" style="color: var(--text-primary);">${initialRacks.length}</strong> rack storage locations
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+          <div style="position: relative; width: 220px;">
+            <input type="text" id="rackSearchInput" class="text-control" value="${escHtml(searchQ)}" placeholder="Search rack location..." style="padding-left: 32px; height: 36px; font-size: 12px;" />
+            <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
+          </div>
+          <button id="addRackBtn" class="btn-primary" style="gap: 6px;">
+            <span class="material-icons-round" style="font-size: 16px;">add_location</span>
+            Add New Rack
+          </button>
+        </div>
+      </div>
+
+      <!-- Desktop Table -->
+      <div class="data-table-wrapper admin-table-wrapper">
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th style="min-width: 160px;">Location Name</th>
+              <th style="min-width: 90px;">Zone</th>
+              <th style="min-width: 90px;">Facility</th>
+              <th style="min-width: 70px;">Aisle</th>
+              <th style="min-width: 70px;">Bay</th>
+              <th style="min-width: 70px;">Level</th>
+              <th style="min-width: 80px;">Capacity</th>
+              <th style="width: 100px; text-align: center;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="racksTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Mobile Card List -->
+      <div class="mobile-card-list" id="racksMobileList"></div>
+
+    </div>
+  `;
+
+  function updateRacksList() {
+    const racks = db.getRacks ? db.getRacks() : [];
     let filtered = racks;
     if (searchQ) {
       const q = searchQ.toLowerCase();
@@ -703,78 +774,32 @@ function renderRacksTab(container) {
       );
     }
 
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 10px;">
+    const countEl = container.querySelector('#racksCountShown');
+    if (countEl) countEl.textContent = filtered.length;
 
-        <!-- Toolbar -->
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-          <div style="font-size: 13px; color: var(--text-secondary);">
-            <strong style="color: var(--text-primary);">${racks.length}</strong> rack storage locations
-          </div>
-          <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-            <div style="position: relative; width: 220px;">
-              <input type="text" id="rackSearchInput" class="text-control" value="${escHtml(searchQ)}" placeholder="Search rack location..." style="padding-left: 32px; height: 36px; font-size: 12px;" />
-              <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
-            </div>
-            <button id="addRackBtn" class="btn-primary" style="gap: 6px;">
-              <span class="material-icons-round" style="font-size: 16px;">add_location</span>
-              Add New Rack
-            </button>
-          </div>
-        </div>
-
-        <!-- Desktop Table -->
-        <div class="data-table-wrapper admin-table-wrapper">
-          <table class="custom-table">
-            <thead>
-              <tr>
-                <th style="min-width: 160px;">Location Name</th>
-                <th style="min-width: 90px;">Zone</th>
-                <th style="min-width: 90px;">Facility</th>
-                <th style="min-width: 70px;">Aisle</th>
-                <th style="min-width: 70px;">Bay</th>
-                <th style="min-width: 70px;">Level</th>
-                <th style="min-width: 80px;">Capacity</th>
-                <th style="width: 100px; text-align: center;">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filtered.length === 0 ? `
-                <tr>
-                  <td colspan="8">
-                    <div class="empty-state">
-                      <span class="material-icons-round">shelves</span>
-                      <p>No rack locations found. Add one to get started.</p>
-                    </div>
-                  </td>
-                </tr>
-              ` : filtered.map(r => renderRackRow(r)).join('')}
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Mobile Card List -->
-        <div class="mobile-card-list" id="racksMobileList">
-          ${filtered.length === 0 ? `
+    const tbody = container.querySelector('#racksTableBody');
+    if (tbody) {
+      tbody.innerHTML = filtered.length === 0 ? `
+        <tr>
+          <td colspan="8">
             <div class="empty-state">
               <span class="material-icons-round">shelves</span>
-              <p>No rack locations found.</p>
+              <p>No rack locations found. Add one to get started.</p>
             </div>
-          ` : filtered.map(r => renderRackCard(r)).join('')}
-        </div>
-
-      </div>
-    `;
-
-    const searchInput = container.querySelector('#rackSearchInput');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        searchQ = e.target.value;
-        draw();
-      });
+          </td>
+        </tr>
+      ` : filtered.map(r => renderRackRow(r)).join('');
     }
 
-    container.querySelector('#addRackBtn').addEventListener('click', () => openRackModal(null));
+    const mobileList = container.querySelector('#racksMobileList');
+    if (mobileList) {
+      mobileList.innerHTML = filtered.length === 0 ? `
+        <div class="empty-state">
+          <span class="material-icons-round">shelves</span>
+          <p>No rack locations found.</p>
+        </div>
+      ` : filtered.map(r => renderRackCard(r)).join('');
+    }
 
     container.querySelectorAll('.edit-rack-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -800,7 +825,17 @@ function renderRacksTab(container) {
     });
   }
 
-  draw();
+  const searchInput = container.querySelector('#rackSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      searchQ = e.target.value;
+      updateRacksList();
+    });
+  }
+
+  container.querySelector('#addRackBtn').addEventListener('click', () => openRackModal(null));
+
+  updateRacksList();
 }
 
 function renderRackRow(r) {
@@ -985,60 +1020,57 @@ function openRackModal(existingRack = null) {
 
 function renderCheckerLinesTab(container) {
   let searchQ = '';
-  let lines = db.getCheckerLines ? db.getCheckerLines() : [];
+  const initialLines = db.getCheckerLines ? db.getCheckerLines() : [];
 
-  function draw() {
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+
+      <!-- Toolbar -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div style="font-size: 13px; color: var(--text-secondary);">
+          <strong id="checkerLinesCountShown" style="color: var(--text-primary);">${initialLines.length}</strong> checker lines configured
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+          <div style="position: relative; width: 220px;">
+            <input type="text" id="checkerSearchInput" class="text-control" value="${escHtml(searchQ)}" placeholder="Search checker line..." style="padding-left: 32px; height: 36px; font-size: 12px;" />
+            <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
+          </div>
+          <button id="addCheckerLineBtn" class="btn-primary" style="gap: 6px;">
+            <span class="material-icons-round" style="font-size: 16px;">add</span>
+            Add Checker Line
+          </button>
+        </div>
+      </div>
+
+      <!-- Checker Line Grid (Matches Zone View) -->
+      <div class="admin-zone-grid" id="checkerLinesGrid"></div>
+
+    </div>
+  `;
+
+  function updateLinesList() {
+    const lines = db.getCheckerLines ? db.getCheckerLines() : [];
     let filtered = lines;
     if (searchQ) {
       const q = searchQ.toLowerCase();
       filtered = filtered.filter(l => 
         (l.lineName || '').toLowerCase().includes(q) ||
-        (l.id || '').toLowerCase().includes(q)
+        String(l.id || '').toLowerCase().includes(q)
       );
     }
 
-    container.innerHTML = `
-      <div style="display: flex; flex-direction: column; gap: 14px;">
+    const countEl = container.querySelector('#checkerLinesCountShown');
+    if (countEl) countEl.textContent = filtered.length;
 
-        <!-- Toolbar -->
-        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-          <div style="font-size: 13px; color: var(--text-secondary);">
-            <strong style="color: var(--text-primary);">${lines.length}</strong> checker lines configured
-          </div>
-          <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-            <div style="position: relative; width: 220px;">
-              <input type="text" id="checkerSearchInput" class="text-control" value="${escHtml(searchQ)}" placeholder="Search checker line..." style="padding-left: 32px; height: 36px; font-size: 12px;" />
-              <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
-            </div>
-            <button id="addCheckerLineBtn" class="btn-primary" style="gap: 6px;">
-              <span class="material-icons-round" style="font-size: 16px;">add</span>
-              Add Checker Line
-            </button>
-          </div>
+    const grid = container.querySelector('#checkerLinesGrid');
+    if (grid) {
+      grid.innerHTML = filtered.length === 0 ? `
+        <div class="empty-state">
+          <span class="material-icons-round">rule</span>
+          <p>No checker lines configured. Add one to get started.</p>
         </div>
-
-        <!-- Checker Line Grid (Matches Zone View) -->
-        <div class="admin-zone-grid" id="checkerLinesGrid">
-          ${filtered.length === 0 ? `
-            <div class="empty-state">
-              <span class="material-icons-round">rule</span>
-              <p>No checker lines configured. Add one to get started.</p>
-            </div>
-          ` : filtered.map(l => renderCheckerLineCard(l)).join('')}
-        </div>
-
-      </div>
-    `;
-
-    const searchInput = container.querySelector('#checkerSearchInput');
-    if (searchInput) {
-      searchInput.addEventListener('input', (e) => {
-        searchQ = e.target.value;
-        draw();
-      });
+      ` : filtered.map(l => renderCheckerLineCard(l)).join('');
     }
-
-    container.querySelector('#addCheckerLineBtn').addEventListener('click', () => openCheckerLineModal(null));
 
     container.querySelectorAll('.edit-line-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -1066,7 +1098,17 @@ function renderCheckerLinesTab(container) {
     });
   }
 
-  draw();
+  const searchInput = container.querySelector('#checkerSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('input', (e) => {
+      searchQ = e.target.value;
+      updateLinesList();
+    });
+  }
+
+  container.querySelector('#addCheckerLineBtn').addEventListener('click', () => openCheckerLineModal(null));
+
+  updateLinesList();
 }
 
 function renderCheckerLineCard(l) {
