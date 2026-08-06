@@ -1613,7 +1613,7 @@ class DatabaseService {
           } else if (isSm) {
             const smEntry = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === ticketId);
             if (smEntry) {
-              if (smEntry.type === 'Transfer location') {
+              if (smEntry.type === 'Transfer location' || smEntry.type === 'Stock deduction') {
                 const fromLoc = smEntry.fromLocation;
                 const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
                 if (sourceSohIdx !== -1) {
@@ -1621,7 +1621,8 @@ class DatabaseService {
                   this.soh[sourceSohIdx].updatedAt = now;
                   cacheManager.setStore('soh', this.soh).catch(err => console.error('Failed to cache SOH:', err));
                 }
-              } else if (smEntry.type === 'Stock deduction') {
+              }
+              if (smEntry.type === 'Stock deduction') {
                 smEntry.toLocation = String(entryData.location || '').trim();
               }
               smEntry.status = 'Done';
@@ -1635,13 +1636,13 @@ class DatabaseService {
           }
         }
       } else {
-        // Even if not fully completed, if it's a Stock Movement transfer location, we deduct the quantity moved this time
+        // Even if not fully completed, if it's a Stock Movement transfer location or stock deduction, we deduct the quantity moved this time
         const ticketId = String(task.ticketId || '').trim();
         const isSm = ticketId.startsWith('SM-') || ticketId.startsWith('SM');
         if (isSm) {
           const smEntry = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === ticketId);
           if (smEntry) {
-            if (smEntry.type === 'Transfer location') {
+            if (smEntry.type === 'Transfer location' || smEntry.type === 'Stock deduction') {
               const fromLoc = smEntry.fromLocation;
               const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
               if (sourceSohIdx !== -1) {
@@ -1649,7 +1650,8 @@ class DatabaseService {
                 this.soh[sourceSohIdx].updatedAt = now;
                 cacheManager.setStore('soh', this.soh).catch(err => console.error('Failed to cache SOH:', err));
               }
-            } else if (smEntry.type === 'Stock deduction') {
+            }
+            if (smEntry.type === 'Stock deduction') {
               smEntry.toLocation = String(entryData.location || '').trim();
               this.persistStockMovements();
             }

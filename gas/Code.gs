@@ -519,6 +519,46 @@ function handleCreatePutaway(ss, data) {
   // 1. Append row to Putaway sheet
   appendRowByHeader(putawaySheet, data, defaultHeaders);
 
+  var ticketIdVal = String(data.ticketId || '').trim();
+  var isSm = (ticketIdVal.indexOf('SM-') === 0 || ticketIdVal.indexOf('SM') === 0);
+  var isSmDeduction = false;
+  var smFromLocation = '';
+  
+  if (isSm) {
+    try {
+      var smSheet = ss.getSheetByName("Stock_Movement");
+      if (smSheet) {
+        var smValues = smSheet.getDataRange().getValues();
+        var smHeaders = smValues[0];
+        var smIdCol = -1, smTypeCol = -1, smFromCol = -1;
+        
+        for (var col = 0; col < smHeaders.length; col++) {
+          var cleanH = String(smHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (cleanH === 'movementid' || cleanH === 'ticketid' || cleanH === 'id') smIdCol = col;
+          if (cleanH === 'type') smTypeCol = col;
+          if (cleanH === 'fromlocation' || cleanH === 'from') smFromCol = col;
+        }
+        
+        if (smIdCol !== -1) {
+          for (var r = 1; r < smValues.length; r++) {
+            if (String(smValues[r][smIdCol]).trim() === ticketIdVal) {
+              var smType = smTypeCol !== -1 ? String(smValues[r][smTypeCol]).trim() : '';
+              if (smType === 'Stock deduction') {
+                isSmDeduction = true;
+              }
+              if (smFromCol !== -1) {
+                smFromLocation = String(smValues[r][smFromCol]).trim();
+              }
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      Logger.log("Pre-lookup SM error: " + e.toString());
+    }
+  }
+
   // 1b. Create Stock Activity log
   try {
     var saHeaders = [
@@ -534,7 +574,6 @@ function handleCreatePutaway(ss, data) {
     ];
     var saSheet = getOrCreateSheet(ss, "Stock_Activity", saHeaders);
     
-    var ticketIdVal = String(data.ticketId || '').trim();
     var fromLocation = '';
     
     if (ticketIdVal) {
@@ -544,6 +583,8 @@ function handleCreatePutaway(ss, data) {
         if (lfSheet) {
           fromLocation = getCellValueByHeader(lfSheet, "Ticket ID", ticketIdVal, "Found At");
         }
+      } else if (isSm) {
+        fromLocation = smFromLocation;
       } else {
         var reqSheet = ss.getSheetByName("Request_Checker");
         if (reqSheet) {
@@ -558,7 +599,7 @@ function handleCreatePutaway(ss, data) {
       skuCode: data.skuCode || '',
       productName: data.productName || '',
       qty: data.qtyPut || 0,
-      operator: '[+]',
+      operator: isSmDeduction ? '[-]' : '[+]',
       fromLocation: fromLocation || 'N/A',
       toLocation: data.location || '',
       timestamp: new Date().toISOString()
@@ -570,93 +611,95 @@ function handleCreatePutaway(ss, data) {
   }
 
   // 1c. Update Stock On Hand (SOH) sheet
-  try {
-    var sohHeaders = [
-      "Updated At",
-      "Product ID",
-      "Product Name",
-      "Sku Number",
-      "L0 Category Name",
-      "L1 Category Name",
-      "L2 Category Name",
-      "Food or Non Food",
-      "Rack Location",
-      "Qty SOH",
-      "Qty On SO",
-      "Count SO",
-      "Qty On LDP",
-      "Stock Age"
-    ];
-    var sohSheet = getOrCreateSheet(ss, "SOH", sohHeaders);
-    var sohValues = sohSheet.getDataRange().getValues();
-    var sHeaders = sohValues[0];
-    
-    var sUpdatedAtCol = -1;
-    var sSkuCol = -1;
-    var sLocCol = -1;
-    var sQtySohCol = -1;
-    
-    for (var col = 0; col < sHeaders.length; col++) {
-      var cleanH = String(sHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
-      if (cleanH === 'updatedat') sUpdatedAtCol = col;
-      if (cleanH === 'skunumber' || cleanH === 'skucode' || cleanH === 'sku') sSkuCol = col;
-      if (cleanH === 'racklocation' || cleanH === 'location') sLocCol = col;
-      if (cleanH === 'qtysoh' || cleanH === 'qty') sQtySohCol = col;
-    }
-    
-    var skuCodeVal = String(data.skuCode || '').trim();
-    var targetLocation = String(data.location || '').trim();
-    var qtyPutVal = parseInt(data.qtyPut || 0, 10);
-    
-    var existingRowIdx = -1;
-    if (sSkuCol !== -1 && sLocCol !== -1) {
-      for (var r = 1; r < sohValues.length; r++) {
-        var rowSku = String(sohValues[r][sSkuCol]).trim();
-        var rowLoc = String(sohValues[r][sLocCol]).trim();
-        if (rowSku === skuCodeVal && rowLoc === targetLocation) {
-          existingRowIdx = r;
-          break;
+  if (!isSmDeduction) {
+    try {
+      var sohHeaders = [
+        "Updated At",
+        "Product ID",
+        "Product Name",
+        "Sku Number",
+        "L0 Category Name",
+        "L1 Category Name",
+        "L2 Category Name",
+        "Food or Non Food",
+        "Rack Location",
+        "Qty SOH",
+        "Qty On SO",
+        "Count SO",
+        "Qty On LDP",
+        "Stock Age"
+      ];
+      var sohSheet = getOrCreateSheet(ss, "SOH", sohHeaders);
+      var sohValues = sohSheet.getDataRange().getValues();
+      var sHeaders = sohValues[0];
+      
+      var sUpdatedAtCol = -1;
+      var sSkuCol = -1;
+      var sLocCol = -1;
+      var sQtySohCol = -1;
+      
+      for (var col = 0; col < sHeaders.length; col++) {
+        var cleanH = String(sHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanH === 'updatedat') sUpdatedAtCol = col;
+        if (cleanH === 'skunumber' || cleanH === 'skucode' || cleanH === 'sku') sSkuCol = col;
+        if (cleanH === 'racklocation' || cleanH === 'location') sLocCol = col;
+        if (cleanH === 'qtysoh' || cleanH === 'qty') sQtySohCol = col;
+      }
+      
+      var skuCodeVal = String(data.skuCode || '').trim();
+      var targetLocation = String(data.location || '').trim();
+      var qtyPutVal = parseInt(data.qtyPut || 0, 10);
+      
+      var existingRowIdx = -1;
+      if (sSkuCol !== -1 && sLocCol !== -1) {
+        for (var r = 1; r < sohValues.length; r++) {
+          var rowSku = String(sohValues[r][sSkuCol]).trim();
+          var rowLoc = String(sohValues[r][sLocCol]).trim();
+          if (rowSku === skuCodeVal && rowLoc === targetLocation) {
+            existingRowIdx = r;
+            break;
+          }
         }
       }
-    }
-    
-    var formattedNowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
-    
-    if (existingRowIdx !== -1) {
-      // Update existing row
-      var currentQty = sQtySohCol !== -1 ? parseInt(sohValues[existingRowIdx][sQtySohCol], 10) : 0;
-      if (isNaN(currentQty)) currentQty = 0;
-      var newQty = currentQty + qtyPutVal;
       
-      if (sQtySohCol !== -1) {
-        sohSheet.getRange(existingRowIdx + 1, sQtySohCol + 1).setValue(newQty);
-      }
-      if (sUpdatedAtCol !== -1) {
-        sohSheet.getRange(existingRowIdx + 1, sUpdatedAtCol + 1).setValue(formattedNowStr);
-      }
-    } else {
-      // Insert new row using pre-filled payload fields passed from the frontend
-      var sohPayload = {
-        updatedAt: formattedNowStr,
-        productId: data.productId || '',
-        productName: data.productName || '',
-        skuNumber: skuCodeVal,
-        l0CategoryName: data.l0CategoryName || '',
-        l1CategoryName: data.l1CategoryName || '',
-        l2CategoryName: data.l2CategoryName || '',
-        foodOrNonFood: data.foodOrNonFood || '',
-        rackLocation: targetLocation,
-        qtySoh: qtyPutVal,
-        qtyOnSo: 0,
-        countSo: 0,
-        qtyOnLdp: 0,
-        stockAge: ''
-      };
+      var formattedNowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
       
-      appendRowByHeader(sohSheet, sohPayload, sohHeaders);
+      if (existingRowIdx !== -1) {
+        // Update existing row
+        var currentQty = sQtySohCol !== -1 ? parseInt(sohValues[existingRowIdx][sQtySohCol], 10) : 0;
+        if (isNaN(currentQty)) currentQty = 0;
+        var newQty = currentQty + qtyPutVal;
+        
+        if (sQtySohCol !== -1) {
+          sohSheet.getRange(existingRowIdx + 1, sQtySohCol + 1).setValue(newQty);
+        }
+        if (sUpdatedAtCol !== -1) {
+          sohSheet.getRange(existingRowIdx + 1, sUpdatedAtCol + 1).setValue(formattedNowStr);
+        }
+      } else {
+        // Insert new row using pre-filled payload fields passed from the frontend
+        var sohPayload = {
+          updatedAt: formattedNowStr,
+          productId: data.productId || '',
+          productName: data.productName || '',
+          skuNumber: skuCodeVal,
+          l0CategoryName: data.l0CategoryName || '',
+          l1CategoryName: data.l1CategoryName || '',
+          l2CategoryName: data.l2CategoryName || '',
+          foodOrNonFood: data.foodOrNonFood || '',
+          rackLocation: targetLocation,
+          qtySoh: qtyPutVal,
+          qtyOnSo: 0,
+          countSo: 0,
+          qtyOnLdp: 0,
+          stockAge: ''
+        };
+        
+        appendRowByHeader(sohSheet, sohPayload, sohHeaders);
+      }
+    } catch(sohErr) {
+      Logger.log("SOH update error: " + sohErr.toString());
     }
-  } catch(sohErr) {
-    Logger.log("SOH update error: " + sohErr.toString());
   }
   
   // 2. Perform status updates if completed (passed from frontend as data.isCompleted)
@@ -687,7 +730,7 @@ function handleCreatePutaway(ss, data) {
               var smType = smTypeCol !== -1 ? String(smValues[r][smTypeCol]).trim() : '';
               var smFromLoc = smFromCol !== -1 ? String(smValues[r][smFromCol]).trim() : '';
               
-              if (smType === 'Transfer location' && smFromLoc !== '') {
+              if ((smType === 'Transfer location' || smType === 'Stock deduction') && smFromLoc !== '') {
                 // Deduct from SOH sheet for smFromLoc
                 var sohSheet = ss.getSheetByName("SOH");
                 if (sohSheet) {
