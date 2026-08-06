@@ -60,15 +60,15 @@ export function renderPickingTask(container, currentUser) {
       </div>
 
       <!-- Sub-filter bar for source type and location -->
-      <div id="sourceSubFilterBar" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid var(--border-light);">
-        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+      <div id="sourceSubFilterBar" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid var(--border-light); width: 100%; box-sizing: border-box;">
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; width: 100%; max-width: 100%; box-sizing: border-box;">
           <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
             <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">filter_alt</span>
             <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Source:</span>
           </div>
           <div id="sourceTypeChips" class="source-type-chips-container" style="display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; flex: 1; min-width: 0; padding-bottom: 2px;"></div>
         </div>
-        <div id="sourceLocationDropdownWrapper" style="min-width: 200px; max-width: 300px; position: relative;">
+        <div id="sourceLocationDropdownWrapper" style="min-width: 200px; max-width: 300px; position: relative; box-sizing: border-box;">
           <div class="custom-dropdown-container" id="sourceLocationDropdown" style="position: relative; width: 100%;">
             <div class="custom-dropdown-trigger text-control" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; height: 34px; font-size: 12px; font-weight: 600; border-radius: 8px; padding: 0 10px;">
               <span class="trigger-label" style="color: var(--text-secondary); font-size: 12px;">All Locations</span>
