@@ -211,11 +211,13 @@ export function renderSoh(container, currentUser) {
               <th style="min-width: 150px; text-align: center;">Action</th>
             </tr>
             <tr class="header-filter-row">
-              <th style="position: relative;">
-                <input type="text" id="headerSkuFilter" class="text-control header-filter-input" placeholder="Filter SKU..." style="padding: 4px 26px 4px 8px; font-size: 11px; height: 28px; width: 100%; box-sizing: border-box;" />
-                <button id="desktopSohSkuScannerBtn" type="button" style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;" title="Scan Barcode">
-                  <span class="material-icons-round" style="font-size: 14px;">qr_code_scanner</span>
-                </button>
+              <th>
+                <div style="position: relative; width: 100%;">
+                  <input type="text" id="headerSkuFilter" class="text-control header-filter-input" placeholder="Filter SKU..." style="padding: 4px 26px 4px 8px; font-size: 11px; height: 28px; width: 100%; box-sizing: border-box;" />
+                  <button id="desktopSohSkuScannerBtn" type="button" style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 10;" title="Scan Barcode">
+                    <span class="material-icons-round" style="font-size: 14px;">qr_code_scanner</span>
+                  </button>
+                </div>
               </th>
               <th>
                 <input type="text" id="headerNameFilter" class="text-control header-filter-input" placeholder="Filter Product..." style="padding: 4px 8px; font-size: 11px; height: 28px; width: 100%; box-sizing: border-box;" />
@@ -851,12 +853,12 @@ export function renderSoh(container, currentUser) {
               <tbody>
                 ${skuItem.locations.map(loc => `
                   <tr>
-                    <td style="padding: 8px 12px;"><span class="location-badge" style="font-family: monospace; font-size: 11px; font-weight: 700; color: var(--primary-800); background: var(--primary-50); padding: 4px 8px; border-radius: 6px;">${escapeHtml(loc.rackLocation)}</span></td>
+                    <td style="padding: 8px 12px;"><span class="location-badge" style="font-family: monospace; font-size: 11px; font-weight: 700; color: var(--primary-800); background: var(--primary-50); padding: 4px 8px; border-radius: 6px;">${escapeHtml(loc.rackLocation || 'N/A')}</span></td>
                     <td style="padding: 8px 12px;"><strong style="font-size: 13px;">${loc.qtySoh}</strong></td>
                     <td style="padding: 8px 12px;"><strong style="font-size: 12px; color: ${loc.stockAge > 30 ? 'var(--danger)' : 'var(--text-secondary)'};">${loc.stockAge} days</strong></td>
                     <td style="padding: 8px 12px; color: var(--text-muted); font-size: 11px;">${loc.updatedAt ? new Date(loc.updatedAt).toLocaleString() : 'N/A'}</td>
                     <td style="padding: 8px 12px; text-align: center;">
-                      <button type="button" class="btn-primary assign-loc-btn" data-rack="${escapeHtml(loc.rackLocation)}" style="padding: 4px 8px; font-size: 11px; height: 26px; gap: 4px; border-radius: 6px; width: 100%;">
+                      <button type="button" class="btn-primary assign-loc-btn" data-rack="${escapeHtml(loc.rackLocation || '')}" style="padding: 4px 8px; font-size: 11px; height: 26px; gap: 4px; border-radius: 6px; width: 100%;">
                         <span class="material-icons-round" style="font-size: 13px;">swap_horiz</span>
                         <span>Assign</span>
                       </button>

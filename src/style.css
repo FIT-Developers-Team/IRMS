@@ -748,6 +748,7 @@ body {
   z-index: 151;
   background: #f8fafc !important;
   border-bottom: 1.5px solid var(--border-light) !important;
+  padding: 6px 8px !important;
 }
 
 .custom-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
