@@ -609,8 +609,11 @@ function handleCreatePutaway(ss, data) {
   } catch(saErr) {
     Logger.log("Stock Activity error: " + saErr.toString());
   }
+  // Common variables needed by both SOH increment and source deduction logic
+  var skuCodeVal = String(data.skuCode || '').trim();
+  var qtyPutVal = parseInt(data.qtyPut || 0, 10);
 
-  // 1c. Update Stock On Hand (SOH) sheet
+  // 1c. Update Stock On Hand (SOH) sheet — skip for stock deductions (no target record created)
   if (!isSmDeduction) {
     try {
       var sohHeaders = [
