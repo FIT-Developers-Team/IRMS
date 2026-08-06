@@ -114,6 +114,18 @@ class IRMSApp {
   }
 
   async init() {
+    // Force browser to start downloading custom fonts immediately before DOM renders them
+    try {
+      if (document.fonts && typeof document.fonts.load === 'function') {
+        document.fonts.load("20px 'Material Icons Round'");
+        document.fonts.load("20px 'Material Symbols Rounded'");
+        document.fonts.load("20px 'Material Symbols Outlined'");
+        document.fonts.load("20px 'Plus Jakarta Sans'");
+      }
+    } catch (e) {
+      console.warn("Dynamic font preload error:", e);
+    }
+
     // Wait for Google Sheets sync to complete, browser fonts to be ready, and ensure splash is visible for a minimum transition duration
     await Promise.all([
       db.initPromise,
