@@ -1437,9 +1437,17 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
       if (typeDropdown.getValue() === 'Transfer location') {
         const len = newLoc.length;
         targetLocationHelper.textContent = `Selected location length: ${len}`;
-        if (len >= 10 && len <= 30) {
+        if (newLoc.trim().toLowerCase() === String(locationItem.rackLocation || '').trim().toLowerCase()) {
+          errorEl.textContent = 'To Location cannot be the same as From Location.';
+          errorEl.style.display = 'block';
+          targetLocationHelper.style.color = 'var(--danger)';
+        } else if (len >= 10 && len <= 30) {
+          errorEl.textContent = '';
+          errorEl.style.display = 'none';
           targetLocationHelper.style.color = 'var(--success)';
         } else {
+          errorEl.textContent = '';
+          errorEl.style.display = 'none';
           targetLocationHelper.style.color = '';
         }
       }
@@ -1554,7 +1562,7 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
         errorEl.style.display = 'block';
         return;
       }
-      if (toLocation === locationItem.rackLocation) {
+      if (toLocation.trim().toLowerCase() === String(locationItem.rackLocation || '').trim().toLowerCase()) {
         errorEl.textContent = 'To Location cannot be the same as From Location.';
         errorEl.style.display = 'block';
         return;
