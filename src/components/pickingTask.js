@@ -60,16 +60,28 @@ export function renderPickingTask(container, currentUser) {
       </div>
 
       <!-- Sub-filter bar for source type and location -->
-      <div id="sourceSubFilterBar" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid var(--border-light);">
-        <div style="display: flex; align-items: center; gap: 6px; margin-right: 4px;">
-          <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">filter_alt</span>
-          <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Source:</span>
+      <div id="sourceSubFilterBar" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid var(--border-light);">
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+          <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+            <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">filter_alt</span>
+            <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Source:</span>
+          </div>
+          <div id="sourceTypeChips" class="source-type-chips-container" style="display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; flex: 1; min-width: 0; padding-bottom: 2px;"></div>
         </div>
-        <div id="sourceTypeChips" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
-        <div id="sourceLocationDropdownWrapper" style="margin-left: auto; min-width: 180px; max-width: 280px; position: relative;">
-          <select id="sourceLocationSelect" class="text-control" style="height: 34px; font-size: 12px; font-weight: 600; padding-left: 10px; padding-right: 28px; border-radius: 8px; cursor: pointer;">
-            <option value="">All Locations</option>
-          </select>
+        <div id="sourceLocationDropdownWrapper" style="min-width: 200px; max-width: 300px; position: relative;">
+          <div class="custom-dropdown-container" id="sourceLocationDropdown" style="position: relative; width: 100%;">
+            <div class="custom-dropdown-trigger text-control" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; height: 34px; font-size: 12px; font-weight: 600; border-radius: 8px; padding: 0 10px;">
+              <span class="trigger-label" style="color: var(--text-secondary); font-size: 12px;">All Locations</span>
+              <span class="material-icons-round" style="font-size: 16px; color: var(--text-muted);">unfold_more</span>
+            </div>
+            <div class="custom-dropdown-menu" style="display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1.5px solid var(--border-light); border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); z-index: 5000; padding: 8px;">
+              <div style="margin-bottom: 6px; position: relative;">
+                <input type="text" id="sourceLocSearchInput" class="text-control" placeholder="Search location..." style="width: 100%; height: 32px; font-size: 11px; padding-left: 28px;" />
+                <span class="material-icons-round" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 14px; color: var(--text-muted);">search</span>
+              </div>
+              <div id="sourceLocOptionsList" style="display: flex; flex-direction: column; gap: 2px; max-height: 200px; overflow-y: auto;"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -126,7 +138,12 @@ export function renderPickingTask(container, currentUser) {
   const taskSearchInput = container.querySelector('#taskSearchInput');
   const filterTabs = container.querySelectorAll('.filter-tab');
   const sourceTypeChipsContainer = container.querySelector('#sourceTypeChips');
-  const sourceLocationSelect = container.querySelector('#sourceLocationSelect');
+  const sourceLocDropdownContainer = container.querySelector('#sourceLocationDropdown');
+  const sourceLocTrigger = sourceLocDropdownContainer.querySelector('.custom-dropdown-trigger');
+  const sourceLocTriggerLabel = sourceLocTrigger.querySelector('.trigger-label');
+  const sourceLocMenu = sourceLocDropdownContainer.querySelector('.custom-dropdown-menu');
+  const sourceLocSearchInput = sourceLocDropdownContainer.querySelector('#sourceLocSearchInput');
+  const sourceLocOptionsList = sourceLocDropdownContainer.querySelector('#sourceLocOptionsList');
   const sourceSubFilterBar = container.querySelector('#sourceSubFilterBar');
   const pickingTableHead = container.querySelector('#pickingTableHead');
   const pickingTableBody = container.querySelector('#pickingTableBody');
@@ -240,6 +257,12 @@ export function renderPickingTask(container, currentUser) {
       tasks = tasks.filter(t => {
         const si = db.getPickingTaskSourceInfo(t);
         const loc = si.checkerLine || si.sourceLocation || '';
+        if (sourceTypeFilter === 'Lost_And_Found' || (sourceTypeFilter === 'all' && si.sourceProcess === 'Lost_And_Found')) {
+          // For Lost & Found, match by zone segment (index 1 from "-" delimited)
+          const parts = loc.split('-');
+          const zone = parts.length > 1 ? parts[1].trim() : loc.trim();
+          return zone.toLowerCase() === sourceLocationFilter.toLowerCase().trim();
+        }
         return loc.toLowerCase().trim() === sourceLocationFilter.toLowerCase().trim();
       });
     }
@@ -421,7 +444,14 @@ export function renderPickingTask(container, currentUser) {
       if (loc.trim()) {
         // Only collect locations matching the current source type filter
         if (sourceTypeFilter === 'all' || sp === sourceTypeFilter) {
-          locationSet.add(loc.trim());
+          if (sp === 'Lost_And_Found') {
+            // Extract zone segment (index 1 from "-" delimited)
+            const parts = loc.split('-');
+            const zone = parts.length > 1 ? parts[1].trim() : loc.trim();
+            if (zone) locationSet.add(zone);
+          } else {
+            locationSet.add(loc.trim());
+          }
         }
       }
     });
@@ -436,7 +466,7 @@ export function renderPickingTask(container, currentUser) {
 
     sourceTypeChipsContainer.innerHTML = chipData.map(c => `
       <button class="source-type-chip ${sourceTypeFilter === c.key ? 'active' : ''}" data-source-type="${c.key}" 
-        style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; border: 1.5px solid ${sourceTypeFilter === c.key ? c.color : 'var(--border-light)'}; background: ${sourceTypeFilter === c.key ? c.bg : '#fff'}; color: ${sourceTypeFilter === c.key ? c.color : 'var(--text-muted)'}; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; white-space: nowrap;">
+        style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; border: 1.5px solid ${sourceTypeFilter === c.key ? c.color : 'var(--border-light)'}; background: ${sourceTypeFilter === c.key ? c.bg : '#fff'}; color: ${sourceTypeFilter === c.key ? c.color : 'var(--text-muted)'}; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; white-space: nowrap; flex-shrink: 0;">
         <span class="material-icons-round" style="font-size: 14px;">${c.icon}</span>
         <span>${c.label}</span>
         <span style="font-size: 10px; font-weight: 800; background: ${sourceTypeFilter === c.key ? c.color : '#e2e8f0'}; color: ${sourceTypeFilter === c.key ? '#fff' : 'var(--text-secondary)'}; padding: 1px 5px; border-radius: 10px; min-width: 18px; text-align: center;">${c.count}</span>
@@ -452,16 +482,83 @@ export function renderPickingTask(container, currentUser) {
       });
     });
 
-    // Populate location dropdown
+    // Populate custom location dropdown options
     const sortedLocations = Array.from(locationSet).sort((a, b) => a.localeCompare(b));
-    sourceLocationSelect.innerHTML = '<option value="">All Locations</option>' + 
-      sortedLocations.map(loc => `<option value="${escapeHtml(loc)}" ${sourceLocationFilter === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('');
+    renderSourceLocOptions(sortedLocations, '');
+
+    // Update trigger label
+    if (sourceLocationFilter) {
+      sourceLocTriggerLabel.textContent = sourceLocationFilter;
+      sourceLocTriggerLabel.style.color = 'var(--text-primary)';
+      sourceLocTriggerLabel.style.fontWeight = '700';
+    } else {
+      sourceLocTriggerLabel.textContent = 'All Locations';
+      sourceLocTriggerLabel.style.color = 'var(--text-secondary)';
+      sourceLocTriggerLabel.style.fontWeight = '600';
+    }
   }
 
-  // Wire up location dropdown change
-  sourceLocationSelect.addEventListener('change', () => {
-    sourceLocationFilter = sourceLocationSelect.value;
-    renderTasks();
+  let _sourceLocAllOptions = [];
+
+  function renderSourceLocOptions(locations, filter) {
+    _sourceLocAllOptions = locations;
+    const q = filter.toLowerCase().trim();
+    const filtered = q ? locations.filter(l => l.toLowerCase().includes(q)) : locations;
+
+    let html = `
+      <div class="custom-dropdown-option ${!sourceLocationFilter ? 'active' : ''}" data-value="" 
+        style="padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--text-secondary);">
+        All Locations
+      </div>
+    `;
+
+    if (filtered.length === 0 && q) {
+      html += `<div style="padding: 8px; font-size: 11px; color: var(--text-muted); text-align: center;">No matching locations</div>`;
+    } else {
+      html += filtered.map(loc => `
+        <div class="custom-dropdown-option ${sourceLocationFilter === loc ? 'active' : ''}" data-value="${escapeHtml(loc)}" 
+          style="padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px;">
+          <span style="font-weight: 700; color: var(--text-primary);">${escapeHtml(loc)}</span>
+        </div>
+      `).join('');
+    }
+
+    sourceLocOptionsList.innerHTML = html;
+
+    // Attach option click listeners
+    sourceLocOptionsList.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sourceLocationFilter = opt.dataset.value;
+        sourceLocMenu.style.display = 'none';
+        sourceLocSearchInput.value = '';
+        renderTasks();
+      });
+    });
+  }
+
+  // Custom dropdown trigger toggle
+  sourceLocTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isVisible = sourceLocMenu.style.display === 'block';
+    sourceLocMenu.style.display = isVisible ? 'none' : 'block';
+    if (!isVisible) {
+      sourceLocSearchInput.value = '';
+      sourceLocSearchInput.focus();
+      renderSourceLocOptions(_sourceLocAllOptions, '');
+    }
+  });
+
+  // Search input inside dropdown
+  sourceLocSearchInput.addEventListener('input', (e) => {
+    renderSourceLocOptions(_sourceLocAllOptions, e.target.value);
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!sourceLocDropdownContainer.contains(e.target)) {
+      sourceLocMenu.style.display = 'none';
+    }
   });
 
   function renderWaitingList() {

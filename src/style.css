@@ -2974,3 +2974,31 @@ body {
     flex: 0 0 auto !important;
   }
 }
+
+/* Sub-filter chips horizontal scroll and hide scrollbars */
+.source-type-chips-container {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+.source-type-chips-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Mobile responsive layout for source sub-filter bar */
+@media (max-width: 768px) {
+  #sourceSubFilterBar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  #sourceLocationDropdownWrapper {
+    margin-left: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+}
