@@ -1081,6 +1081,7 @@ export function renderPickingTask(container, currentUser) {
           e.stopPropagation();
           selectedRackVal = opt.dataset.value;
           putawayLocationInput.value = selectedRackVal;
+          rackSearchInput.value = selectedRackVal;
           rackTriggerLabel.textContent = selectedRackVal;
           rackTriggerLabel.style.color = 'var(--text-primary)';
           rackTriggerLabel.style.fontWeight = '700';
@@ -1103,7 +1104,21 @@ export function renderPickingTask(container, currentUser) {
     });
 
     rackSearchInput.addEventListener('input', (e) => {
-      renderRackOptions(e.target.value);
+      const val = e.target.value.trim();
+      putawayLocationInput.value = val;
+      if (val) {
+        rackTriggerLabel.textContent = val;
+        rackTriggerLabel.style.color = 'var(--text-primary)';
+        rackTriggerLabel.style.fontWeight = '700';
+        putawayLocationHelper.textContent = `Location parameter: ${val}`;
+        putawayLocationHelper.style.color = 'var(--primary-600)';
+      } else {
+        rackTriggerLabel.textContent = 'Select or type storage location...';
+        rackTriggerLabel.style.color = 'var(--text-secondary)';
+        putawayLocationHelper.textContent = 'Type or select target rack location for putaway';
+        putawayLocationHelper.style.color = 'var(--text-muted)';
+      }
+      renderRackOptions(val);
     });
 
     const rackScannerBtn = rackDropdownContainer.querySelector('#putawayLocationScannerBtn');
@@ -1113,19 +1128,14 @@ export function renderPickingTask(container, currentUser) {
         openCameraScanner((scannedValue) => {
           const val = String(scannedValue).trim();
           rackSearchInput.value = val;
+          putawayLocationInput.value = val;
+          rackTriggerLabel.textContent = val;
+          rackTriggerLabel.style.color = 'var(--text-primary)';
+          rackTriggerLabel.style.fontWeight = '700';
+          putawayLocationHelper.textContent = `Scanned location: ${val}`;
+          putawayLocationHelper.style.color = 'var(--success)';
           renderRackOptions(val);
-          
-          const match = allRacks.find(r => r.name.toLowerCase() === val.toLowerCase());
-          if (match) {
-            selectedRackVal = match.name;
-            putawayLocationInput.value = selectedRackVal;
-            rackTriggerLabel.textContent = selectedRackVal;
-            rackTriggerLabel.style.color = 'var(--text-primary)';
-            rackTriggerLabel.style.fontWeight = '700';
-            putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
-            putawayLocationHelper.style.color = 'var(--success)';
-            rackMenuEl.style.display = 'none';
-          }
+          rackMenuEl.style.display = 'none';
         });
       });
     }

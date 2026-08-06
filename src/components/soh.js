@@ -1418,16 +1418,13 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
       { value: 'Stock deduction', label: 'Stock deduction (Shrinkage / Recovery)' }
     ],
     (newType) => {
-      toLocGroup.style.display = 'block';
       if (newType === 'Stock deduction') {
+        toLocGroup.style.display = 'none';
         reasonDropdown.updateOptions(deductionReasons, 'Bad/Damaged/Expired');
         otherGroup.style.display = 'none';
-        toLocLabel.innerHTML = 'To Location (Stock Deduction)';
-        targetLocationInput.disabled = true;
         targetLocationInput.value = `Deduction - ${reasonDropdown.getValue()}`;
-        targetLocationHelper.textContent = 'Destination outside system — assigned user will specify To Location upon task execution.';
-        targetLocationHelper.style.color = 'var(--primary-600)';
       } else {
+        toLocGroup.style.display = 'block';
         reasonDropdown.updateOptions(transferReasons, 'Rack changes');
         toLocLabel.innerHTML = 'Storage Location (10–30 chars) <span style="color: var(--danger);">*</span>';
         targetLocationInput.disabled = false;
@@ -1510,14 +1507,16 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
       return;
     }
 
-    const locVal = targetLocationInput.value.trim();
-    if (!locVal) {
-      errorEl.textContent = 'Please enter a target To Location parameter.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
-    if (type === 'Transfer location') {
+    let toLocation = '';
+    if (type === 'Stock deduction') {
+      toLocation = `Deduction - ${reason}`;
+    } else {
+      const locVal = targetLocationInput.value.trim();
+      if (!locVal) {
+        errorEl.textContent = 'Please enter a target To Location parameter.';
+        errorEl.style.display = 'block';
+        return;
+      }
       if (locVal.length < 10 || locVal.length > 30) {
         errorEl.textContent = `Storage Location must contain 10 to 30 characters (current length: ${locVal.length}).`;
         errorEl.style.display = 'block';
@@ -1528,9 +1527,8 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
         errorEl.style.display = 'block';
         return;
       }
+      toLocation = locVal;
     }
-
-    const toLocation = locVal;
 
     const staffName = staffDropdown.getValue();
     if (!staffName) {

@@ -1126,6 +1126,10 @@ export function renderStockMovement(container, currentUser) {
     const editToLocHelper = modalOverlay.querySelector('#editToLocHelper');
 
     // Setup Edit Dropdowns
+    if (task.type === 'Stock deduction') {
+      editToLocGroup.style.display = 'none';
+    }
+
     setupDropdown(
       modalOverlay.querySelector('#dropdown-edit-type'),
       task.type,
@@ -1135,15 +1139,14 @@ export function renderStockMovement(container, currentUser) {
       ],
       (newType) => {
         if (newType === 'Stock deduction') {
-          editToLocLabel.textContent = 'To Location (Deduction Parameter / Bin)';
+          editToLocGroup.style.display = 'none';
           editToLocInput.removeAttribute('minlength');
           editToLocInput.removeAttribute('maxlength');
           if (!editToLocInput.value || !editToLocInput.value.startsWith('Deduction')) {
             editToLocInput.value = 'Deduction';
           }
-          editToLocHelper.textContent = 'Enter target deduction location parameter or bin.';
-          editToLocHelper.style.color = 'var(--text-muted)';
         } else {
+          editToLocGroup.style.display = 'block';
           editToLocLabel.textContent = 'Storage Location (10–30 chars)';
           editToLocInput.setAttribute('minlength', '10');
           editToLocInput.setAttribute('maxlength', '30');

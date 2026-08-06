@@ -1,48 +1,11 @@
-# BUGS and to do list CBT IRMS 29/07/2026
+1. On stock activity movement , when stock deduction/rack to rack, the to location is not wireup properly  -> currently deduction/ movement (rack to rack)
+    We need to include the TO location on stock activity tab, follows the source data TO location
 
+2. Suggestions movement location when deduction to wh zone and aisle -> need planogram db
 
-# BUGS:
+3. Report summary productivity, temporary, provide data extraction to csv or xlsx , need  joined output data
 
-# Picking Task BUG
-1. remove bulkAssignBtn picking button on desktop view (redundant) keep the button that has slide to start (mobileStartPickBtn)
-2. on task view on sub tab waiting list add select all function on mobile view
-3. on desktop view when selecting each individual data, the start picking doesn't show up
-4. on picking tasks , all task sub tab doesn't show all data, only show completed tasks
+4. Add sub filter for all view on picking task
+we need to add sub filter on picking task dashboard for the source location (checker line if the soruce from checker)
 
-
-# SOH
-on when pushing data to SOH , the data is writed at be bottom of row, it seems the backend scans all rows that has value, some cell are using array formula
-
-
-
-
-# Improvement:
-
-## UI/UX
-freeze bottom navigation on mobile view
-when navigating to different page, use the web launching animation to wait the data loading, instead of do nothing on interface
-fix dropdown rack location at putaway, use custom dropdown
-fix number count on checker request, there are number even tough the user does not have any data
-
-
-
-
-## Backend
-when refreshing, also refresh the cached data, so the old data on local storage is reflecting as backend data
-if role admin/spv/manager/super then show all data for each tab not limited to private condition rule
-add drop down reason for stock deduction for findings discrepancy
-
-
-
-
-# Feature changes and upgrade
-
-stock transfer reason damage is should be deduction stock
-on stock deduction
-
-on Assign Stock Movement / Deduction
-reason Bad/Damaged/Expired move to stock deduction Movement Type 
-
-
-
-when movement type is stock deduction, the to location input should be disabled when assignin, on assigned user, the user is required to input the location (not validation, free text becasue the rack is outside this system), but keep the matching validation if the movement type is transfer location rack to rack
+5. when assign stock movement and the movement type is deduction,the To Location (Stock Deduction) should be hiden, becasue the to location will be outside this IRMS, and when putaway, the user should input the target location , not dropdwon list from rack IRMS, and the stock acitivty TO location is also should be follow the user input 

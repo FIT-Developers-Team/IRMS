@@ -1981,7 +1981,7 @@ class DatabaseService {
       type: String(data.type || 'Transfer location').trim(),
       reason: String(data.reason || '').trim(),
       fromLocation: String(data.fromLocation || '').trim(),
-      toLocation: data.type === 'Stock deduction' ? 'Deduction' : String(data.toLocation || '').trim(),
+      toLocation: data.type === 'Stock deduction' ? (data.toLocation || `Deduction - ${data.reason || ''}`) : String(data.toLocation || '').trim(),
       status: 'Pending'
     };
 
@@ -2019,8 +2019,8 @@ class DatabaseService {
       ...updates
     };
 
-    if (updates.type === 'Stock deduction') {
-      updated.toLocation = 'Deduction';
+    if (updates.type === 'Stock deduction' && !updates.toLocation) {
+      updated.toLocation = `Deduction - ${updated.reason || ''}`;
     }
 
     this.stockMovements[idx] = updated;
@@ -2076,7 +2076,7 @@ class DatabaseService {
     }
 
     // If Transfer Location, add to destination rack location
-    if (movement.type === 'Transfer location' && toLoc && toLoc !== 'Deduction') {
+    if (movement.type === 'Transfer location' && toLoc && !toLoc.startsWith('Deduction')) {
       const destSohIdx = this.soh.findIndex(s => s.skuCode === sku && s.rackLocation === toLoc);
       if (destSohIdx !== -1) {
         this.soh[destSohIdx].qtySoh += moveQty;
@@ -2103,7 +2103,7 @@ class DatabaseService {
       }
     }
 
-    // 3. Populate Stock Activity Log
+    // 3. Populate Stock Activity Log (uses user input toLoc for both transfer and deduction)
     const actTimestamp = new Date().toISOString();
     const act1 = {
       activityId: 'SA' + this.generate6DigitId(),
@@ -2113,7 +2113,7 @@ class DatabaseService {
       qty: moveQty,
       operator: '-',
       fromLocation: fromLoc,
-      toLocation: movement.type === 'Transfer location' ? toLoc : 'Deduction',
+      toLocation: toLoc || 'Deduction',
       timestamp: actTimestamp,
       assignedBy: movement.assignedBy,
       executedBy: movement.staffName || (operatorUser ? operatorUser.name : 'System'),
@@ -2122,7 +2122,7 @@ class DatabaseService {
     };
     this.stockActivities.unshift(act1);
 
-    if (movement.type === 'Transfer location' && toLoc && toLoc !== 'Deduction') {
+    if (movement.type === 'Transfer location' && toLoc && !toLoc.startsWith('Deduction')) {
       const act2 = {
         activityId: 'SA' + this.generate6DigitId(),
         ticketId: movement.movementId,
