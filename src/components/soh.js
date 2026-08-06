@@ -1224,7 +1224,7 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
             </label>
             <div class="custom-dropdown-container" id="dropdown-assign-reason">
               <button type="button" class="custom-dropdown-trigger" style="height: 38px; padding: 0 12px; font-size: 13px; font-weight: 600; width: 100%;">
-                <span class="trigger-label">Bad/Damaged/Expired</span>
+                <span class="trigger-label">-- Select Reason --</span>
                 <span class="material-icons-round trigger-icon">expand_more</span>
               </button>
               <div class="custom-dropdown-menu" style="width: 100%; z-index: 4000;"></div>
@@ -1251,23 +1251,29 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
           <!-- To Location (Storage Location rule / Deduction parameter) -->
           <div class="form-group" id="toLocationGroup">
             <label id="toLocationLabel" style="display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px;">
-              Storage Location (10–30 chars) <span style="color: var(--danger);">*</span>
+              Storage Location <span style="color: var(--danger);">*</span>
             </label>
+            
+            <!-- Custom Dropdown for Transfer Location (Rack to Rack) -->
+            <div class="custom-dropdown-container" id="dropdown-assign-location" style="position: relative; width: 100%;">
+              <button type="button" class="custom-dropdown-trigger" style="height: 38px; padding: 0 12px; font-size: 13px; font-weight: 600; width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                <span class="trigger-label">-- Select Location --</span>
+                <span class="material-icons-round trigger-icon">expand_more</span>
+              </button>
+              <div class="custom-dropdown-menu" style="width: 100%; z-index: 4000; max-height: 200px; overflow-y: auto;"></div>
+            </div>
+
+            <!-- Readonly input for Stock Deduction (Auto-computed) -->
             <input 
               type="text" 
               id="targetLocationInput" 
               class="text-control" 
-              placeholder="e.g. CBT-MZF3-35-03-L1-04" 
-              list="sohRacksDatalist"
-              minlength="10"
-              maxlength="30"
-              style="width: 100%; height: 38px; font-family: monospace; font-weight: 700; font-size: 13px;"
+              readonly
+              style="width: 100%; height: 38px; font-family: monospace; font-weight: 700; font-size: 13px; display: none;"
             />
-            <datalist id="sohRacksDatalist">
-              ${(db.getRacks ? db.getRacks() : []).map(r => `<option value="${escapeHtml(r.locationName || r.rackName)}">${escapeHtml(r.locationName || r.rackName)}${r.zone ? ` (${r.zone})` : ''}</option>`).join('')}
-            </datalist>
+            
             <span class="input-helper-text" id="targetLocationHelper" style="font-size: 11px; margin-top: 4px; display: block; color: var(--text-muted);">
-              Should contain 10 to 30 characters. Current length: 0
+              Select target rack location for transfer.
             </span>
           </div>
 
@@ -1372,11 +1378,13 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
 
   // Reason Options Mapping
   const transferReasons = [
+    { value: '', label: '-- Select Reason --' },
     { value: 'Rack changes', label: 'Rack changes' },
     { value: 'Buffer SO', label: 'Buffer SO' },
     { value: 'Other (explain)', label: 'Other (explain)' }
   ];
   const deductionReasons = [
+    { value: '', label: '-- Select Reason --' },
     { value: 'Bad/Damaged/Expired', label: 'Bad/Damaged/Expired' },
     { value: 'Recovery LDP', label: 'Recovery LDP' },
     { value: 'Recovery SO', label: 'Recovery SO' },
@@ -1397,7 +1405,7 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
   // Wire Reason Dropdown
   const reasonDropdown = setupCustomDropdown(
     modalOverlay.querySelector('#dropdown-assign-reason'),
-    'Rack changes',
+    '',
     transferReasons,
     (newReason) => {
       if (typeDropdown.getValue() === 'Transfer location' && newReason === 'Other (explain)') {
@@ -1406,7 +1414,34 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
         otherGroup.style.display = 'none';
       }
       if (typeDropdown.getValue() === 'Stock deduction') {
-        targetLocationInput.value = `Deduction - ${newReason}`;
+        targetLocationInput.value = newReason ? `Deduction - ${newReason}` : '';
+      }
+    }
+  );
+
+  // Wire Location Dropdown for Transfer Location
+  const rackOptions = (db.getRacks ? db.getRacks() : []).map(r => {
+    const name = String(r.locationName || r.rackName || '').trim();
+    return {
+      value: name,
+      label: `${name}${r.zone ? ` (${r.zone})` : ''}`
+    };
+  }).filter(o => o.value);
+  rackOptions.unshift({ value: '', label: '-- Select Location --' });
+
+  const locationDropdown = setupCustomDropdown(
+    modalOverlay.querySelector('#dropdown-assign-location'),
+    '',
+    rackOptions,
+    (newLoc) => {
+      if (typeDropdown.getValue() === 'Transfer location') {
+        const len = newLoc.length;
+        targetLocationHelper.textContent = `Selected location length: ${len}`;
+        if (len >= 10 && len <= 30) {
+          targetLocationHelper.style.color = 'var(--success)';
+        } else {
+          targetLocationHelper.style.color = '';
+        }
       }
     }
   );
@@ -1422,28 +1457,27 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
     (newType) => {
       toLocGroup.style.display = 'block';
       if (newType === 'Stock deduction') {
-        reasonDropdown.updateOptions(deductionReasons, 'Bad/Damaged/Expired');
+        reasonDropdown.updateOptions(deductionReasons, '');
         otherGroup.style.display = 'none';
         toLocLabel.innerHTML = 'To Location (Stock Deduction)';
-        targetLocationInput.disabled = true;
-        targetLocationInput.value = `Deduction - ${reasonDropdown.getValue()}`;
+        
+        // Toggle view
+        modalOverlay.querySelector('#dropdown-assign-location').style.display = 'none';
+        targetLocationInput.style.display = 'block';
+        targetLocationInput.value = '';
         targetLocationHelper.textContent = 'Destination outside system — assigned user will specify To Location upon task execution.';
         targetLocationHelper.style.color = 'var(--primary-600)';
       } else {
-        reasonDropdown.updateOptions(transferReasons, 'Rack changes');
-        toLocLabel.innerHTML = 'Storage Location (10–30 chars) <span style="color: var(--danger);">*</span>';
-        targetLocationInput.disabled = false;
-        targetLocationInput.setAttribute('minlength', '10');
-        targetLocationInput.setAttribute('maxlength', '30');
-        targetLocationInput.value = '';
-        const len = targetLocationInput.value.length;
-        targetLocationHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
+        reasonDropdown.updateOptions(transferReasons, '');
+        toLocLabel.innerHTML = 'Storage Location <span style="color: var(--danger);">*</span>';
+        
+        // Toggle view
+        modalOverlay.querySelector('#dropdown-assign-location').style.display = 'block';
+        targetLocationInput.style.display = 'none';
+        locationDropdown.updateOptions(rackOptions, '');
+        targetLocationHelper.textContent = 'Select target rack location for transfer.';
         targetLocationHelper.style.color = 'var(--text-muted)';
-        if (reasonDropdown.getValue() === 'Other (explain)') {
-          otherGroup.style.display = 'block';
-        } else {
-          otherGroup.style.display = 'none';
-        }
+        otherGroup.style.display = 'none';
       }
     }
   );
@@ -1464,19 +1498,6 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
     null
   );
 
-  // Storage Location Live Helper
-  targetLocationInput.addEventListener('input', () => {
-    if (typeDropdown.getValue() === 'Transfer location') {
-      const len = targetLocationInput.value.length;
-      targetLocationHelper.textContent = `Should contain 10 to 30 characters. Current length: ${len}`;
-      if (len >= 10 && len <= 30) {
-        targetLocationHelper.style.color = 'var(--success)';
-      } else {
-        targetLocationHelper.style.color = '';
-      }
-    }
-  });
-
   // Global document click handler to close open custom dropdowns
   const closeDropdownsOnClick = (e) => {
     if (!e.target.closest('.custom-dropdown-container')) {
@@ -1493,8 +1514,16 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
     e.preventDefault();
     errorEl.style.display = 'none';
 
+    const submitBtn = modalOverlay.querySelector('#submitAssignBtn');
+
     const type = typeDropdown.getValue();
     let reason = reasonDropdown.getValue();
+    if (!reason) {
+      errorEl.textContent = 'Please select a reason.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
     if (type === 'Transfer location' && reason === 'Other (explain)') {
       const explanation = otherInput.value.trim();
       if (!explanation) {
@@ -1512,27 +1541,32 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
       return;
     }
 
-    const locVal = targetLocationInput.value.trim();
-    if (!locVal) {
-      errorEl.textContent = 'Please enter a target To Location parameter.';
-      errorEl.style.display = 'block';
-      return;
-    }
-
+    let toLocation = '';
     if (type === 'Transfer location') {
-      if (locVal.length < 10 || locVal.length > 30) {
-        errorEl.textContent = `Storage Location must contain 10 to 30 characters (current length: ${locVal.length}).`;
+      toLocation = locationDropdown.getValue();
+      if (!toLocation) {
+        errorEl.textContent = 'Please select a Storage Location.';
         errorEl.style.display = 'block';
         return;
       }
-      if (locVal === locationItem.rackLocation) {
+      if (toLocation.length < 10 || toLocation.length > 30) {
+        errorEl.textContent = `Storage Location must contain 10 to 30 characters (current length: ${toLocation.length}).`;
+        errorEl.style.display = 'block';
+        return;
+      }
+      if (toLocation === locationItem.rackLocation) {
         errorEl.textContent = 'To Location cannot be the same as From Location.';
         errorEl.style.display = 'block';
         return;
       }
+    } else {
+      toLocation = targetLocationInput.value.trim();
+      if (!toLocation) {
+        errorEl.textContent = 'Please select a reason to populate the To Location parameter.';
+        errorEl.style.display = 'block';
+        return;
+      }
     }
-
-    const toLocation = locVal;
 
     const staffName = staffDropdown.getValue();
     if (!staffName) {
@@ -1541,7 +1575,6 @@ export function openAssignMovementModal(skuItem, locationItem, currentUser, onCo
       return;
     }
 
-    const submitBtn = modalOverlay.querySelector('#submitAssignBtn');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="material-icons-round" style="font-size: 16px; animation: spinIcon 1s linear infinite;">sync</span> Creating...';
 
