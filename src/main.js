@@ -114,17 +114,31 @@ class IRMSApp {
   }
 
   async init() {
-    this.renderShell();
-    this.renderLoadingState();
-    
-    // Wait for Google Sheets CSV sync to complete on app start
-    await db.initPromise;
+    // Wait for Google Sheets sync to complete, browser fonts to be ready, and ensure splash is visible for a minimum transition duration
+    await Promise.all([
+      db.initPromise,
+      document.fonts.ready,
+      new Promise(resolve => setTimeout(resolve, 800))
+    ]);
     
     this.renderShell();
     this.renderCurrentView();
+    this.fadeAndRemoveSplashScreen();
 
     if (this.currentUser) {
       this.startSessionExpiryCheck();
+    }
+  }
+
+  fadeAndRemoveSplashScreen() {
+    const splash = document.getElementById('app-splash-screen');
+    if (splash) {
+      splash.style.opacity = '0';
+      splash.style.visibility = 'hidden';
+      // Remove from DOM after transition completes (matching 0.5s CSS transition duration)
+      setTimeout(() => {
+        splash.remove();
+      }, 500);
     }
   }
 
@@ -225,11 +239,8 @@ class IRMSApp {
   }
 
   renderShell() {
-    document.body.innerHTML = `
-      <div id="app"></div>
-    `;
-
-    this.appRoot = document.getElementById('app');
+    // Clear app container instead of resetting document.body, to preserve splash screen container outside #app
+    this.appRoot.innerHTML = '';
   }
 
   renderCurrentView() {
