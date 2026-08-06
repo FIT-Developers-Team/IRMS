@@ -664,13 +664,95 @@ function handleCreatePutaway(ss, data) {
   var pickingId = String(data.pickingId || '').trim();
   var ticketId = String(data.ticketId || '').trim();
   
+  // Deduct source location SOH if this is a Stock Movement transfer
+  var isSm = (ticketId.indexOf('SM-') === 0 || ticketId.indexOf('SM') === 0);
+  if (isSm) {
+    try {
+      var smSheet = ss.getSheetByName("Stock_Movement");
+      if (smSheet) {
+        var smValues = smSheet.getDataRange().getValues();
+        var smHeaders = smValues[0];
+        var smIdCol = -1, smTypeCol = -1, smFromCol = -1;
+        
+        for (var col = 0; col < smHeaders.length; col++) {
+          var cleanH = String(smHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (cleanH === 'movementid' || cleanH === 'ticketid' || cleanH === 'id') smIdCol = col;
+          if (cleanH === 'type') smTypeCol = col;
+          if (cleanH === 'fromlocation' || cleanH === 'from') smFromCol = col;
+        }
+        
+        if (smIdCol !== -1) {
+          for (var r = 1; r < smValues.length; r++) {
+            if (String(smValues[r][smIdCol]).trim() === ticketId) {
+              var smType = smTypeCol !== -1 ? String(smValues[r][smTypeCol]).trim() : '';
+              var smFromLoc = smFromCol !== -1 ? String(smValues[r][smFromCol]).trim() : '';
+              
+              if (smType === 'Transfer location' && smFromLoc !== '') {
+                // Deduct from SOH sheet for smFromLoc
+                var sohSheet = ss.getSheetByName("SOH");
+                if (sohSheet) {
+                  var sohValues = sohSheet.getDataRange().getValues();
+                  var sHeaders = sohValues[0];
+                  var sSkuCol = -1, sLocCol = -1, sQtySohCol = -1;
+                  for (var col = 0; col < sHeaders.length; col++) {
+                    var cleanH = String(sHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+                    if (cleanH === 'skunumber' || cleanH === 'skucode' || cleanH === 'sku') sSkuCol = col;
+                    if (cleanH === 'racklocation' || cleanH === 'location') sLocCol = col;
+                    if (cleanH === 'qtysoh' || cleanH === 'qty') sQtySohCol = col;
+                  }
+                  
+                  if (sSkuCol !== -1 && sLocCol !== -1 && sQtySohCol !== -1) {
+                    for (var sr = 1; sr < sohValues.length; sr++) {
+                      var rowSku = String(sohValues[sr][sSkuCol]).trim();
+                      var rowLoc = String(sohValues[sr][sLocCol]).trim();
+                      if (rowSku === skuCodeVal && rowLoc === smFromLoc) {
+                        var currentQty = parseInt(sohValues[sr][sQtySohCol], 10) || 0;
+                        var newQty = Math.max(0, currentQty - qtyPutVal);
+                        sohSheet.getRange(sr + 1, sQtySohCol + 1).setValue(newQty);
+                        break;
+                      }
+                    }
+                  }
+                }
+              }
+              
+              // If task is completed, update Stock_Movement status to Done
+              if (isCompleted) {
+                var statusColIdx = -1, completedAtColIdx = -1, completedByColIdx = -1;
+                for (var col = 0; col < smHeaders.length; col++) {
+                  var cleanH = String(smHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+                  if (cleanH === 'status') statusColIdx = col;
+                  if (cleanH === 'completedat') completedAtColIdx = col;
+                  if (cleanH === 'completedby' || cleanH === 'staffname') completedByColIdx = col;
+                }
+                
+                if (statusColIdx !== -1) {
+                  smSheet.getRange(r + 1, statusColIdx + 1).setValue("Done");
+                }
+                if (completedAtColIdx !== -1) {
+                  smSheet.getRange(r + 1, completedAtColIdx + 1).setValue(new Date().toISOString());
+                }
+                if (completedByColIdx !== -1) {
+                  smSheet.getRange(r + 1, completedByColIdx + 1).setValue(data.staffName || "System");
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+    } catch (smErr) {
+      Logger.log("Stock Movement completion error: " + smErr.toString());
+    }
+  }
+  
   if (isCompleted) {
     var pickingSheet = ss.getSheetByName("Picking_Task");
     if (pickingSheet && pickingId) {
       updateStatusByHeader(pickingSheet, "picking_id", pickingId, "Completed");
     }
     
-    if (ticketId) {
+    if (ticketId && !isSm) {
       var isLf = (ticketId.indexOf('LF-') === 0);
       var reqSheet = ss.getSheetByName("Request_Checker");
       var lfSheet = ss.getSheetByName("Lost_And_Found");

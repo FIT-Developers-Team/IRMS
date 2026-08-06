@@ -1606,12 +1606,46 @@ class DatabaseService {
         const ticketId = String(task.ticketId || '').trim();
         if (ticketId) {
           const isLf = ticketId.startsWith('LF-');
+          const isSm = ticketId.startsWith('SM-') || ticketId.startsWith('SM');
           if (isLf) {
             const lfEntry = this.lostAndFound.find(e => String(e.ticketId).trim() === ticketId);
             if (lfEntry) lfEntry.status = 'Completed';
+          } else if (isSm) {
+            const smEntry = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === ticketId);
+            if (smEntry) {
+              if (smEntry.type === 'Transfer location') {
+                const fromLoc = smEntry.fromLocation;
+                const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
+                if (sourceSohIdx !== -1) {
+                  this.soh[sourceSohIdx].qtySoh = Math.max(0, this.soh[sourceSohIdx].qtySoh - qtyPutThisTime);
+                  this.soh[sourceSohIdx].updatedAt = now;
+                  cacheManager.setStore('soh', this.soh).catch(err => console.error('Failed to cache SOH:', err));
+                }
+              }
+              smEntry.status = 'Done';
+              smEntry.completedAt = now;
+              smEntry.completedBy = entryData.staffName || 'System';
+              this.persistStockMovements();
+            }
           } else {
             const reqEntry = this.requests.find(r => String(r.ticketId || r.uniqueid).trim() === ticketId);
             if (reqEntry) reqEntry.status = 'Completed';
+          }
+        }
+      } else {
+        // Even if not fully completed, if it's a Stock Movement transfer location, we deduct the quantity moved this time
+        const ticketId = String(task.ticketId || '').trim();
+        const isSm = ticketId.startsWith('SM-') || ticketId.startsWith('SM');
+        if (isSm) {
+          const smEntry = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === ticketId);
+          if (smEntry && smEntry.type === 'Transfer location') {
+            const fromLoc = smEntry.fromLocation;
+            const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
+            if (sourceSohIdx !== -1) {
+              this.soh[sourceSohIdx].qtySoh = Math.max(0, this.soh[sourceSohIdx].qtySoh - qtyPutThisTime);
+              this.soh[sourceSohIdx].updatedAt = now;
+              cacheManager.setStore('soh', this.soh).catch(err => console.error('Failed to cache SOH:', err));
+            }
           }
         }
       }
