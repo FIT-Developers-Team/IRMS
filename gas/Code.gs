@@ -746,9 +746,9 @@ function handleCreatePutaway(ss, data) {
                   
                   if (sSkuCol !== -1 && sLocCol !== -1 && sQtySohCol !== -1) {
                     for (var sr = 1; sr < sohValues.length; sr++) {
-                      var rowSku = String(sohValues[sr][sSkuCol]).trim();
-                      var rowLoc = String(sohValues[sr][sLocCol]).trim();
-                      if (rowSku === skuCodeVal && rowLoc === smFromLoc) {
+                      var rowSku = String(sohValues[sr][sSkuCol]).toLowerCase().trim();
+                      var rowLoc = String(sohValues[sr][sLocCol]).toLowerCase().trim();
+                      if (rowSku === skuCodeVal.toLowerCase().trim() && rowLoc === smFromLoc.toLowerCase().trim()) {
                         var currentQty = parseInt(sohValues[sr][sQtySohCol], 10) || 0;
                         var newQty = Math.max(0, currentQty - qtyPutVal);
                         sohSheet.getRange(sr + 1, sQtySohCol + 1).setValue(newQty);

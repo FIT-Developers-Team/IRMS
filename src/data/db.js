@@ -1615,7 +1615,10 @@ class DatabaseService {
             if (smEntry) {
               if (smEntry.type === 'Transfer location' || smEntry.type === 'Stock deduction') {
                 const fromLoc = smEntry.fromLocation;
-                const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
+                const sourceSohIdx = this.soh.findIndex(s => 
+                  String(s.skuCode).toLowerCase().trim() === String(entryData.skuCode).toLowerCase().trim() && 
+                  String(s.rackLocation).toLowerCase().trim() === String(fromLoc).toLowerCase().trim()
+                );
                 if (sourceSohIdx !== -1) {
                   this.soh[sourceSohIdx].qtySoh = Math.max(0, this.soh[sourceSohIdx].qtySoh - qtyPutThisTime);
                   this.soh[sourceSohIdx].updatedAt = now;
@@ -1644,7 +1647,10 @@ class DatabaseService {
           if (smEntry) {
             if (smEntry.type === 'Transfer location' || smEntry.type === 'Stock deduction') {
               const fromLoc = smEntry.fromLocation;
-              const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
+              const sourceSohIdx = this.soh.findIndex(s => 
+                String(s.skuCode).toLowerCase().trim() === String(entryData.skuCode).toLowerCase().trim() && 
+                String(s.rackLocation).toLowerCase().trim() === String(fromLoc).toLowerCase().trim()
+              );
               if (sourceSohIdx !== -1) {
                 this.soh[sourceSohIdx].qtySoh = Math.max(0, this.soh[sourceSohIdx].qtySoh - qtyPutThisTime);
                 this.soh[sourceSohIdx].updatedAt = now;
