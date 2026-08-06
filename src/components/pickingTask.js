@@ -7,6 +7,8 @@ export function renderPickingTask(container, currentUser) {
   let activeFilter = 'all';
   let searchQuery = '';
   let selectedSource = 'Request_Checker'; // 'Request_Checker' or 'Lost_And_Found'
+  let sourceTypeFilter = 'all'; // 'all', 'Request_Checker', 'Lost_And_Found', 'Stock_Movement'
+  let sourceLocationFilter = ''; // specific source location value
 
   container.innerHTML = `
     <div class="card-panel">
@@ -54,6 +56,20 @@ export function renderPickingTask(container, currentUser) {
             style="padding-left: 36px; height: 40px; font-size: 13px;"
           />
           <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px;">search</span>
+        </div>
+      </div>
+
+      <!-- Sub-filter bar for source type and location -->
+      <div id="sourceSubFilterBar" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; padding: 10px 14px; background: #f8fafc; border-radius: 12px; border: 1.5px solid var(--border-light);">
+        <div style="display: flex; align-items: center; gap: 6px; margin-right: 4px;">
+          <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">filter_alt</span>
+          <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Source:</span>
+        </div>
+        <div id="sourceTypeChips" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+        <div id="sourceLocationDropdownWrapper" style="margin-left: auto; min-width: 180px; max-width: 280px; position: relative;">
+          <select id="sourceLocationSelect" class="text-control" style="height: 34px; font-size: 12px; font-weight: 600; padding-left: 10px; padding-right: 28px; border-radius: 8px; cursor: pointer;">
+            <option value="">All Locations</option>
+          </select>
         </div>
       </div>
 
@@ -109,6 +125,9 @@ export function renderPickingTask(container, currentUser) {
 
   const taskSearchInput = container.querySelector('#taskSearchInput');
   const filterTabs = container.querySelectorAll('.filter-tab');
+  const sourceTypeChipsContainer = container.querySelector('#sourceTypeChips');
+  const sourceLocationSelect = container.querySelector('#sourceLocationSelect');
+  const sourceSubFilterBar = container.querySelector('#sourceSubFilterBar');
   const pickingTableHead = container.querySelector('#pickingTableHead');
   const pickingTableBody = container.querySelector('#pickingTableBody');
   const pickingMobileCardList = container.querySelector('#pickingMobileCardList');
@@ -172,9 +191,11 @@ export function renderPickingTask(container, currentUser) {
     if (mobileActionBar) mobileActionBar.style.display = 'none';
 
     if (activeFilter === 'Waiting') {
+      sourceSubFilterBar.style.display = 'none';
       renderWaitingList();
       return;
     }
+    sourceSubFilterBar.style.display = 'flex';
 
     // Default headers
     pickingTableHead.innerHTML = `
@@ -205,6 +226,26 @@ export function renderPickingTask(container, currentUser) {
         (t.pickedBy || '').toLowerCase().includes(q)
       );
     }
+
+    // Apply source type sub-filter
+    if (sourceTypeFilter !== 'all') {
+      tasks = tasks.filter(t => {
+        const si = db.getPickingTaskSourceInfo(t);
+        return si.sourceProcess === sourceTypeFilter;
+      });
+    }
+
+    // Apply source location sub-filter
+    if (sourceLocationFilter) {
+      tasks = tasks.filter(t => {
+        const si = db.getPickingTaskSourceInfo(t);
+        const loc = si.checkerLine || si.sourceLocation || '';
+        return loc.toLowerCase().trim() === sourceLocationFilter.toLowerCase().trim();
+      });
+    }
+
+    // Populate source sub-filter chips and location dropdown
+    populateSourceSubFilters(db.getPickingTasksForUser(currentUser).filter(t => activeFilter === 'all' || (t.status || '').toLowerCase() === activeFilter.toLowerCase()));
 
     if (!tasks.length) {
       const emptyHtml = `
@@ -364,6 +405,64 @@ export function renderPickingTask(container, currentUser) {
       });
     });
   }
+
+  function populateSourceSubFilters(allTasks) {
+    // Build source type counts
+    const sourceTypes = { all: 0, Request_Checker: 0, Lost_And_Found: 0, Stock_Movement: 0 };
+    const locationSet = new Set();
+
+    allTasks.forEach(t => {
+      const si = db.getPickingTaskSourceInfo(t);
+      const sp = si.sourceProcess || 'Request_Checker';
+      sourceTypes[sp] = (sourceTypes[sp] || 0) + 1;
+      sourceTypes.all++;
+
+      const loc = si.checkerLine || si.sourceLocation || '';
+      if (loc.trim()) {
+        // Only collect locations matching the current source type filter
+        if (sourceTypeFilter === 'all' || sp === sourceTypeFilter) {
+          locationSet.add(loc.trim());
+        }
+      }
+    });
+
+    // Render source type chips
+    const chipData = [
+      { key: 'all', label: 'All Sources', icon: 'apps', count: sourceTypes.all, color: '#475569', bg: '#f1f5f9' },
+      { key: 'Request_Checker', label: 'Request Checker', icon: 'view_stream', count: sourceTypes.Request_Checker, color: '#0369a1', bg: '#e0f2fe' },
+      { key: 'Lost_And_Found', label: 'Lost & Found', icon: 'place', count: sourceTypes.Lost_And_Found, color: '#b45309', bg: '#fef3c7' },
+      { key: 'Stock_Movement', label: 'Stock Movement', icon: 'swap_horiz', count: sourceTypes.Stock_Movement, color: '#6b21a8', bg: '#f3e8ff' }
+    ];
+
+    sourceTypeChipsContainer.innerHTML = chipData.map(c => `
+      <button class="source-type-chip ${sourceTypeFilter === c.key ? 'active' : ''}" data-source-type="${c.key}" 
+        style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; border: 1.5px solid ${sourceTypeFilter === c.key ? c.color : 'var(--border-light)'}; background: ${sourceTypeFilter === c.key ? c.bg : '#fff'}; color: ${sourceTypeFilter === c.key ? c.color : 'var(--text-muted)'}; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; white-space: nowrap;">
+        <span class="material-icons-round" style="font-size: 14px;">${c.icon}</span>
+        <span>${c.label}</span>
+        <span style="font-size: 10px; font-weight: 800; background: ${sourceTypeFilter === c.key ? c.color : '#e2e8f0'}; color: ${sourceTypeFilter === c.key ? '#fff' : 'var(--text-secondary)'}; padding: 1px 5px; border-radius: 10px; min-width: 18px; text-align: center;">${c.count}</span>
+      </button>
+    `).join('');
+
+    // Attach chip click listeners
+    sourceTypeChipsContainer.querySelectorAll('.source-type-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        sourceTypeFilter = chip.dataset.sourceType;
+        sourceLocationFilter = ''; // reset location when type changes
+        renderTasks();
+      });
+    });
+
+    // Populate location dropdown
+    const sortedLocations = Array.from(locationSet).sort((a, b) => a.localeCompare(b));
+    sourceLocationSelect.innerHTML = '<option value="">All Locations</option>' + 
+      sortedLocations.map(loc => `<option value="${escapeHtml(loc)}" ${sourceLocationFilter === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('');
+  }
+
+  // Wire up location dropdown change
+  sourceLocationSelect.addEventListener('change', () => {
+    sourceLocationFilter = sourceLocationSelect.value;
+    renderTasks();
+  });
 
   function renderWaitingList() {
     const pendingRc = db.getPendingRequests ? db.getPendingRequests() : [];
