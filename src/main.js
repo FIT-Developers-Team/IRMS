@@ -118,8 +118,6 @@ class IRMSApp {
     try {
       if (document.fonts && typeof document.fonts.load === 'function') {
         document.fonts.load("20px 'Material Icons Round'");
-        document.fonts.load("20px 'Material Symbols Rounded'");
-        document.fonts.load("20px 'Material Symbols Outlined'");
         document.fonts.load("20px 'Plus Jakarta Sans'");
       }
     } catch (e) {
