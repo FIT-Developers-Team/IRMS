@@ -954,12 +954,17 @@ export function renderPickingTask(container, currentUser) {
     const sourceInfo = task ? db.getPickingTaskSourceInfo(task) : {};
     let assignedToLocation = null;
     let isTransferLocation = false;
+    let isDeductionLocation = false;
 
     if (task && (sourceInfo.sourceProcess === 'Stock_Movement' || (task.ticketId && (task.ticketId.startsWith('SM-') || task.ticketId.startsWith('SM'))))) {
       const entry = db.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === String(task.ticketId).trim());
-      if (entry && entry.type === 'Transfer location') {
-        isTransferLocation = true;
-        assignedToLocation = String(entry.toLocation || '').trim();
+      if (entry) {
+        if (entry.type === 'Transfer location') {
+          isTransferLocation = true;
+          assignedToLocation = String(entry.toLocation || '').trim();
+        } else if (entry.type === 'Stock deduction') {
+          isDeductionLocation = true;
+        }
       }
     }
 
@@ -987,6 +992,7 @@ export function renderPickingTask(container, currentUser) {
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Product Name:</strong> ${productName}</div>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Remaining Qty to Putaway:</strong> ${maxQty}</div>
               ${isTransferLocation ? `<div style="font-size: 12px; color: var(--primary-700); margin-top: 4px; font-weight: 700;"><strong>Assigned Location:</strong> ${escapeHtml(assignedToLocation)} (Transfer Location)</div>` : ''}
+              ${isDeductionLocation ? `<div style="font-size: 12px; color: var(--danger); margin-top: 4px; font-weight: 700;"><strong>Movement Type:</strong> Stock Deduction (Outside System)</div>` : ''}
             </div>
 
             <div class="form-grid">
@@ -1015,31 +1021,46 @@ export function renderPickingTask(container, currentUser) {
                 />
               </div>
 
-              <!-- Location (Custom Dropdown) -->
+              <!-- Location (Custom Dropdown or Free Text) -->
               <div class="form-field-wrapper span-full">
                 <label class="form-label">Storage Location <span style="color: var(--danger);">*</span></label>
-                <div class="custom-dropdown-container" id="putawayRackDropdown" style="position: relative; width: 100%;">
-                  <div class="custom-dropdown-trigger text-control" style="display: flex; align-items: center; justify-content: space-between; cursor: ${isTransferLocation ? 'not-allowed' : 'pointer'}; height: 42px; ${isTransferLocation ? 'background: #f1f5f9; opacity: 0.8;' : ''}">
-                    <span class="trigger-label" style="color: ${isTransferLocation ? 'var(--text-primary)' : 'var(--text-secondary)'}; font-size: 13px; font-weight: ${isTransferLocation ? '700' : 'normal'};">
-                      ${isTransferLocation ? escapeHtml(assignedToLocation) : 'Select or search rack location...'}
-                    </span>
-                    <span class="material-icons-round" style="font-size: 20px; color: var(--text-muted);">${isTransferLocation ? 'lock' : 'unfold_more'}</span>
-                  </div>
-                  <div class="custom-dropdown-menu" style="display: none; position: absolute; bottom: calc(100% + 4px); top: auto; left: 0; right: 0; background: #fff; border: 1.5px solid var(--border-light); border-radius: 12px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15); z-index: 5000; padding: 8px;">
-                    <div style="margin-bottom: 8px; position: relative;">
-                      <input type="text" id="rackSearchFilterInput" class="text-control" placeholder="Search rack location or zone..." style="width: 100%; height: 36px; font-size: 12px; padding-left: 30px; padding-right: 30px;" />
-                      <span class="material-icons-round" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
-                      <button id="putawayLocationScannerBtn" type="button" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;" title="Scan Location Barcode">
-                        <span class="material-icons-round" style="font-size: 16px;">qr_code_scanner</span>
-                      </button>
+                
+                ${isDeductionLocation ? `
+                  <input 
+                    type="text" 
+                    id="putawayLocationTextInput" 
+                    class="text-control" 
+                    placeholder="Specify target location parameter outside system (e.g. Scrap Yard)..." 
+                    required 
+                    style="width: 100%; height: 42px; font-size: 13px; font-weight: 600;"
+                  />
+                  <span class="input-helper-text" id="putawayLocationHelper" style="color: var(--primary-600); font-weight: 600; display: block; margin-top: 4px;">
+                    Stock Deduction: Enter the destination location parameter outside IRMS.
+                  </span>
+                ` : `
+                  <div class="custom-dropdown-container" id="putawayRackDropdown" style="position: relative; width: 100%;">
+                    <div class="custom-dropdown-trigger text-control" style="display: flex; align-items: center; justify-content: space-between; cursor: ${isTransferLocation ? 'not-allowed' : 'pointer'}; height: 42px; ${isTransferLocation ? 'background: #f1f5f9; opacity: 0.8;' : ''}">
+                      <span class="trigger-label" style="color: ${isTransferLocation ? 'var(--text-primary)' : 'var(--text-secondary)'}; font-size: 13px; font-weight: ${isTransferLocation ? '700' : 'normal'};">
+                        ${isTransferLocation ? escapeHtml(assignedToLocation) : 'Select or search rack location...'}
+                      </span>
+                      <span class="material-icons-round" style="font-size: 20px; color: var(--text-muted);">${isTransferLocation ? 'lock' : 'unfold_more'}</span>
                     </div>
-                    <div id="rackOptionsList" style="display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto;"></div>
+                    <div class="custom-dropdown-menu" style="display: none; position: absolute; bottom: calc(100% + 4px); top: auto; left: 0; right: 0; background: #fff; border: 1.5px solid var(--border-light); border-radius: 12px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15); z-index: 5000; padding: 8px;">
+                      <div style="margin-bottom: 8px; position: relative;">
+                        <input type="text" id="rackSearchFilterInput" class="text-control" placeholder="Search rack location or zone..." style="width: 100%; height: 36px; font-size: 12px; padding-left: 30px; padding-right: 30px;" />
+                        <span class="material-icons-round" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-size: 16px; color: var(--text-muted);">search</span>
+                        <button id="putawayLocationScannerBtn" type="button" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none;" title="Scan Location Barcode">
+                          <span class="material-icons-round" style="font-size: 16px;">qr_code_scanner</span>
+                        </button>
+                      </div>
+                      <div id="rackOptionsList" style="display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto;"></div>
+                    </div>
                   </div>
-                </div>
-                <input type="hidden" id="putawayLocationInput" value="${isTransferLocation ? escapeHtml(assignedToLocation) : ''}" required />
-                <span class="input-helper-text" id="putawayLocationHelper" style="color: ${isTransferLocation ? 'var(--success)' : ''}; font-weight: ${isTransferLocation ? '600' : 'normal'};">
-                  ${isTransferLocation ? `Strictly assigned to Transfer Location: ${escapeHtml(assignedToLocation)}` : 'Select target rack location for putaway'}
-                </span>
+                  <input type="hidden" id="putawayLocationInput" value="${isTransferLocation ? escapeHtml(assignedToLocation) : ''}" required />
+                  <span class="input-helper-text" id="putawayLocationHelper" style="color: ${isTransferLocation ? 'var(--success)' : ''}; font-weight: ${isTransferLocation ? '600' : 'normal'}; display: block; margin-top: 4px;">
+                    ${isTransferLocation ? `Strictly assigned to Transfer Location: ${escapeHtml(assignedToLocation)}` : 'Select target rack location for putaway'}
+                  </span>
+                `}
               </div>
             </div>
 
@@ -1066,112 +1087,115 @@ export function renderPickingTask(container, currentUser) {
 
     // Custom Dropdown Logic for Rack Locations
     const rackDropdownContainer = modalOverlay.querySelector('#putawayRackDropdown');
-    const rackTriggerBtn = rackDropdownContainer.querySelector('.custom-dropdown-trigger');
-    const rackTriggerLabel = rackTriggerBtn.querySelector('.trigger-label');
-    const rackMenuEl = rackDropdownContainer.querySelector('.custom-dropdown-menu');
-    const rackSearchInput = rackDropdownContainer.querySelector('#rackSearchFilterInput');
-    const rackOptionsList = rackDropdownContainer.querySelector('#rackOptionsList');
+    
+    if (rackDropdownContainer) {
+      const rackTriggerBtn = rackDropdownContainer.querySelector('.custom-dropdown-trigger');
+      const rackTriggerLabel = rackTriggerBtn.querySelector('.trigger-label');
+      const rackMenuEl = rackDropdownContainer.querySelector('.custom-dropdown-menu');
+      const rackSearchInput = rackDropdownContainer.querySelector('#rackSearchFilterInput');
+      const rackOptionsList = rackDropdownContainer.querySelector('#rackOptionsList');
 
-    const allRacks = (db.getRacks ? db.getRacks() : []).map(r => ({
-      name: String(r.locationName || r.rackName || '').trim(),
-      zone: String(r.zone || '').trim()
-    })).filter(r => r.name);
+      const allRacks = (db.getRacks ? db.getRacks() : []).map(r => ({
+        name: String(r.locationName || r.rackName || '').trim(),
+        zone: String(r.zone || '').trim()
+      })).filter(r => r.name);
 
-    let selectedRackVal = isTransferLocation ? assignedToLocation : '';
+      let selectedRackVal = isTransferLocation ? assignedToLocation : '';
 
-    if (isTransferLocation && rackSearchInput) {
-      const searchWrapper = rackSearchInput.parentElement;
-      if (searchWrapper) searchWrapper.style.display = 'none';
-    }
-
-    function renderRackOptions(filter = '') {
-      if (isTransferLocation) return;
-      const q = filter.toLowerCase().trim();
-      const filtered = allRacks.filter(r => r.name.toLowerCase().includes(q) || r.zone.toLowerCase().includes(q));
-
-      if (filtered.length === 0) {
-        rackOptionsList.innerHTML = `<div style="padding: 10px; font-size: 12px; color: var(--text-muted); text-align: center;">No matching racks found</div>`;
-        return;
+      if (isTransferLocation && rackSearchInput) {
+        const searchWrapper = rackSearchInput.parentElement;
+        if (searchWrapper) searchWrapper.style.display = 'none';
       }
 
-      rackOptionsList.innerHTML = filtered.map(r => `
-        <div class="custom-dropdown-option ${r.name === selectedRackVal ? 'active' : ''}" data-value="${escapeHtml(r.name)}" style="padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-weight: 700; color: var(--text-primary);">${escapeHtml(r.name)}</span>
-          ${r.zone ? `<span style="font-size: 10px; font-weight: 600; color: var(--primary-700); background: var(--primary-50); padding: 2px 6px; border-radius: 4px;">${escapeHtml(r.zone)}</span>` : ''}
-        </div>
-      `).join('');
+      function renderRackOptions(filter = '') {
+        if (isTransferLocation) return;
+        const q = filter.toLowerCase().trim();
+        const filtered = allRacks.filter(r => r.name.toLowerCase().includes(q) || r.zone.toLowerCase().includes(q));
 
-      rackOptionsList.querySelectorAll('.custom-dropdown-option').forEach(opt => {
-        opt.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectedRackVal = opt.dataset.value;
-          putawayLocationInput.value = selectedRackVal;
-          rackTriggerLabel.textContent = selectedRackVal;
-          rackTriggerLabel.style.color = 'var(--text-primary)';
-          rackTriggerLabel.style.fontWeight = '700';
-          putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
-          putawayLocationHelper.style.color = 'var(--success)';
-          rackMenuEl.style.display = 'none';
-        });
-      });
-    }
+        if (filtered.length === 0) {
+          rackOptionsList.innerHTML = `<div style="padding: 10px; font-size: 12px; color: var(--text-muted); text-align: center;">No matching racks found</div>`;
+          return;
+        }
 
-    if (!isTransferLocation) {
-      renderRackOptions();
-    }
+        rackOptionsList.innerHTML = filtered.map(r => `
+          <div class="custom-dropdown-option ${r.name === selectedRackVal ? 'active' : ''}" data-value="${escapeHtml(r.name)}" style="padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-weight: 700; color: var(--text-primary);">${escapeHtml(r.name)}</span>
+            ${r.zone ? `<span style="font-size: 10px; font-weight: 600; color: var(--primary-700); background: var(--primary-50); padding: 2px 6px; border-radius: 4px;">${escapeHtml(r.zone)}</span>` : ''}
+          </div>
+        `).join('');
 
-    rackTriggerBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (isTransferLocation) {
-        showToast("This putaway location is fixed to the transfer's assigned To Location.");
-        return;
-      }
-      const isVisible = rackMenuEl.style.display === 'block';
-      rackMenuEl.style.display = isVisible ? 'none' : 'block';
-      if (!isVisible) {
-        rackSearchInput.focus();
-      }
-    });
-
-    if (!isTransferLocation) {
-      rackSearchInput.addEventListener('input', (e) => {
-        renderRackOptions(e.target.value);
-      });
-    }
-
-    const rackScannerBtn = rackDropdownContainer.querySelector('#putawayLocationScannerBtn');
-    if (rackScannerBtn) {
-      if (isTransferLocation) {
-        rackScannerBtn.style.display = 'none';
-      } else {
-        rackScannerBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          openCameraScanner((scannedValue) => {
-            const val = String(scannedValue).trim();
-            rackSearchInput.value = val;
-            renderRackOptions(val);
-            
-            const match = allRacks.find(r => r.name.toLowerCase() === val.toLowerCase());
-            if (match) {
-              selectedRackVal = match.name;
-              putawayLocationInput.value = selectedRackVal;
-              rackTriggerLabel.textContent = selectedRackVal;
-              rackTriggerLabel.style.color = 'var(--text-primary)';
-              rackTriggerLabel.style.fontWeight = '700';
-              putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
-              putawayLocationHelper.style.color = 'var(--success)';
-              rackMenuEl.style.display = 'none';
-            }
+        rackOptionsList.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+          opt.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectedRackVal = opt.dataset.value;
+            putawayLocationInput.value = selectedRackVal;
+            rackTriggerLabel.textContent = selectedRackVal;
+            rackTriggerLabel.style.color = 'var(--text-primary)';
+            rackTriggerLabel.style.fontWeight = '700';
+            putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
+            putawayLocationHelper.style.color = 'var(--success)';
+            rackMenuEl.style.display = 'none';
           });
         });
       }
-    }
 
-    document.addEventListener('click', (e) => {
-      if (!rackDropdownContainer.contains(e.target)) {
-        rackMenuEl.style.display = 'none';
+      if (!isTransferLocation) {
+        renderRackOptions();
       }
-    });
+
+      rackTriggerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (isTransferLocation) {
+          showToast("This putaway location is fixed to the transfer's assigned To Location.");
+          return;
+        }
+        const isVisible = rackMenuEl.style.display === 'block';
+        rackMenuEl.style.display = isVisible ? 'none' : 'block';
+        if (!isVisible) {
+          rackSearchInput.focus();
+        }
+      });
+
+      if (!isTransferLocation) {
+        rackSearchInput.addEventListener('input', (e) => {
+          renderRackOptions(e.target.value);
+        });
+      }
+
+      const rackScannerBtn = rackDropdownContainer.querySelector('#putawayLocationScannerBtn');
+      if (rackScannerBtn) {
+        if (isTransferLocation) {
+          rackScannerBtn.style.display = 'none';
+        } else {
+          rackScannerBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openCameraScanner((scannedValue) => {
+              const val = String(scannedValue).trim();
+              rackSearchInput.value = val;
+              renderRackOptions(val);
+              
+              const match = allRacks.find(r => r.name.toLowerCase() === val.toLowerCase());
+              if (match) {
+                selectedRackVal = match.name;
+                putawayLocationInput.value = selectedRackVal;
+                rackTriggerLabel.textContent = selectedRackVal;
+                rackTriggerLabel.style.color = 'var(--text-primary)';
+                rackTriggerLabel.style.fontWeight = '700';
+                putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
+                putawayLocationHelper.style.color = 'var(--success)';
+                rackMenuEl.style.display = 'none';
+              }
+            });
+          });
+        }
+      }
+
+      document.addEventListener('click', (e) => {
+        if (!rackDropdownContainer.contains(e.target)) {
+          rackMenuEl.style.display = 'none';
+        }
+      });
+    }
 
     const closeModal = () => modalOverlay.remove();
     closeBtn.addEventListener('click', closeModal);
@@ -1184,7 +1208,13 @@ export function renderPickingTask(container, currentUser) {
       e.preventDefault();
       
       const qty = parseInt(putawayQtyInput.value, 10);
-      const location = putawayLocationInput.value.trim();
+      let location = '';
+      if (isDeductionLocation) {
+        const textInput = modalOverlay.querySelector('#putawayLocationTextInput');
+        location = textInput ? textInput.value.trim() : '';
+      } else {
+        location = putawayLocationInput ? putawayLocationInput.value.trim() : '';
+      }
 
       if (isNaN(qty) || qty < 1 || qty > maxQty) {
         showAlertModal(`Invalid Quantity. Must be between 1 and ${maxQty}.`);
@@ -1194,6 +1224,11 @@ export function renderPickingTask(container, currentUser) {
       if (isTransferLocation) {
         if (location !== assignedToLocation) {
           showAlertModal(`Invalid Location. Putaway must be done strictly at the assigned To Location: ${assignedToLocation}`);
+          return;
+        }
+      } else if (isDeductionLocation) {
+        if (!location) {
+          showAlertModal('Please specify a deduction destination location.');
           return;
         }
       } else {
