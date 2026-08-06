@@ -1621,6 +1621,8 @@ class DatabaseService {
                   this.soh[sourceSohIdx].updatedAt = now;
                   cacheManager.setStore('soh', this.soh).catch(err => console.error('Failed to cache SOH:', err));
                 }
+              } else if (smEntry.type === 'Stock deduction') {
+                smEntry.toLocation = String(entryData.location || '').trim();
               }
               smEntry.status = 'Done';
               smEntry.completedAt = now;
@@ -1638,13 +1640,18 @@ class DatabaseService {
         const isSm = ticketId.startsWith('SM-') || ticketId.startsWith('SM');
         if (isSm) {
           const smEntry = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === ticketId);
-          if (smEntry && smEntry.type === 'Transfer location') {
-            const fromLoc = smEntry.fromLocation;
-            const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
-            if (sourceSohIdx !== -1) {
-              this.soh[sourceSohIdx].qtySoh = Math.max(0, this.soh[sourceSohIdx].qtySoh - qtyPutThisTime);
-              this.soh[sourceSohIdx].updatedAt = now;
-              cacheManager.setStore('soh', this.soh).catch(err => console.error('Failed to cache SOH:', err));
+          if (smEntry) {
+            if (smEntry.type === 'Transfer location') {
+              const fromLoc = smEntry.fromLocation;
+              const sourceSohIdx = this.soh.findIndex(s => s.skuCode === entryData.skuCode && s.rackLocation === fromLoc);
+              if (sourceSohIdx !== -1) {
+                this.soh[sourceSohIdx].qtySoh = Math.max(0, this.soh[sourceSohIdx].qtySoh - qtyPutThisTime);
+                this.soh[sourceSohIdx].updatedAt = now;
+                cacheManager.setStore('soh', this.soh).catch(err => console.error('Failed to cache SOH:', err));
+              }
+            } else if (smEntry.type === 'Stock deduction') {
+              smEntry.toLocation = String(entryData.location || '').trim();
+              this.persistStockMovements();
             }
           }
         }

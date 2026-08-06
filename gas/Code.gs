@@ -716,6 +716,17 @@ function handleCreatePutaway(ss, data) {
                 }
               }
               
+              if (smType === 'Stock deduction') {
+                var smToLocCol = -1;
+                for (var col = 0; col < smHeaders.length; col++) {
+                  var cleanH = String(smHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+                  if (cleanH === 'tolocation' || cleanH === 'to') smToLocCol = col;
+                }
+                if (smToLocCol !== -1) {
+                  smSheet.getRange(r + 1, smToLocCol + 1).setValue(data.location || "");
+                }
+              }
+              
               // If task is completed, update Stock_Movement status to Done
               if (isCompleted) {
                 var statusColIdx = -1, completedAtColIdx = -1, completedByColIdx = -1;
