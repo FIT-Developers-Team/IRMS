@@ -1082,22 +1082,22 @@ class DatabaseService {
     let sourceLocation = task.sourceLocation || task.fromLocation || task.foundAt || task.location || '';
 
     if (!sourceProcess) {
-      if (tId.startsWith('LF-')) sourceProcess = 'Lost_And_Found';
-      else if (tId.startsWith('SM-')) sourceProcess = 'Stock_Movement';
+      if (tId.startsWith('LF-') || tId.startsWith('LF')) sourceProcess = 'Lost_And_Found';
+      else if (tId.startsWith('SM-') || tId.startsWith('SM')) sourceProcess = 'Stock_Movement';
       else sourceProcess = 'Request_Checker';
     }
 
-    if (sourceProcess === 'Request_Checker' || tId.startsWith('RC-')) {
+    if (sourceProcess === 'Request_Checker' || tId.startsWith('RC-') || tId.startsWith('RC')) {
       if (!checkerLine) {
         const req = this.requests.find(r => String(r.ticketId || r.uniqueid).trim() === tId);
         if (req && req.checkerLine) checkerLine = req.checkerLine;
       }
-    } else if (sourceProcess === 'Lost_And_Found' || tId.startsWith('LF-')) {
+    } else if (sourceProcess === 'Lost_And_Found' || tId.startsWith('LF-') || tId.startsWith('LF')) {
       if (!sourceLocation) {
         const lf = this.lostAndFound.find(l => String(l.ticketId || l.uniqueid).trim() === tId);
         if (lf && (lf.foundAt || lf.location)) sourceLocation = lf.foundAt || lf.location;
       }
-    } else if (sourceProcess === 'Stock_Movement' || tId.startsWith('SM-')) {
+    } else if (sourceProcess === 'Stock_Movement' || tId.startsWith('SM-') || tId.startsWith('SM')) {
       if (!sourceLocation) {
         const sm = this.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === tId);
         if (sm) {

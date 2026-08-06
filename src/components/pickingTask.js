@@ -955,7 +955,7 @@ export function renderPickingTask(container, currentUser) {
     let assignedToLocation = null;
     let isTransferLocation = false;
 
-    if (task && (sourceInfo.sourceProcess === 'Stock_Movement' || (task.ticketId && task.ticketId.startsWith('SM-')))) {
+    if (task && (sourceInfo.sourceProcess === 'Stock_Movement' || (task.ticketId && (task.ticketId.startsWith('SM-') || task.ticketId.startsWith('SM'))))) {
       const entry = db.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === String(task.ticketId).trim());
       if (entry && entry.type === 'Transfer location') {
         isTransferLocation = true;
