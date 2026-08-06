@@ -949,6 +949,20 @@ export function renderPickingTask(container, currentUser) {
 
     const ptTempId = 'PT-' + Math.floor(100000 + Math.random() * 900000);
 
+    // Look up parent task and determine if it's a Transfer location Stock Movement
+    const task = db.pickingTasks.find(t => String(t.pickingId).trim() === String(pickingId).trim());
+    const sourceInfo = task ? db.getPickingTaskSourceInfo(task) : {};
+    let assignedToLocation = null;
+    let isTransferLocation = false;
+
+    if (task && (sourceInfo.sourceProcess === 'Stock_Movement' || (task.ticketId && task.ticketId.startsWith('SM-')))) {
+      const entry = db.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === String(task.ticketId).trim());
+      if (entry && entry.type === 'Transfer location') {
+        isTransferLocation = true;
+        assignedToLocation = String(entry.toLocation || '').trim();
+      }
+    }
+
     modalOverlay.innerHTML = `
       <div class="modal-card form-modal-card">
         <div class="form-modal-header">
@@ -972,6 +986,7 @@ export function renderPickingTask(container, currentUser) {
               <div style="font-size: 12px; color: var(--text-primary); margin-top: 2px;"><strong>SKU:</strong> ${sku}</div>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Product Name:</strong> ${productName}</div>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Remaining Qty to Putaway:</strong> ${maxQty}</div>
+              ${isTransferLocation ? `<div style="font-size: 12px; color: var(--primary-700); margin-top: 4px; font-weight: 700;"><strong>Assigned Location:</strong> ${escapeHtml(assignedToLocation)} (Transfer Location)</div>` : ''}
             </div>
 
             <div class="form-grid">
@@ -1004,9 +1019,11 @@ export function renderPickingTask(container, currentUser) {
               <div class="form-field-wrapper span-full">
                 <label class="form-label">Storage Location <span style="color: var(--danger);">*</span></label>
                 <div class="custom-dropdown-container" id="putawayRackDropdown" style="position: relative; width: 100%;">
-                  <div class="custom-dropdown-trigger text-control" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; height: 42px;">
-                    <span class="trigger-label" style="color: var(--text-secondary); font-size: 13px;">Select or search rack location...</span>
-                    <span class="material-icons-round" style="font-size: 20px; color: var(--text-muted);">unfold_more</span>
+                  <div class="custom-dropdown-trigger text-control" style="display: flex; align-items: center; justify-content: space-between; cursor: ${isTransferLocation ? 'not-allowed' : 'pointer'}; height: 42px; ${isTransferLocation ? 'background: #f1f5f9; opacity: 0.8;' : ''}">
+                    <span class="trigger-label" style="color: ${isTransferLocation ? 'var(--text-primary)' : 'var(--text-secondary)'}; font-size: 13px; font-weight: ${isTransferLocation ? '700' : 'normal'};">
+                      ${isTransferLocation ? escapeHtml(assignedToLocation) : 'Select or search rack location...'}
+                    </span>
+                    <span class="material-icons-round" style="font-size: 20px; color: var(--text-muted);">${isTransferLocation ? 'lock' : 'unfold_more'}</span>
                   </div>
                   <div class="custom-dropdown-menu" style="display: none; position: absolute; bottom: calc(100% + 4px); top: auto; left: 0; right: 0; background: #fff; border: 1.5px solid var(--border-light); border-radius: 12px; box-shadow: 0 -10px 25px rgba(0,0,0,0.15); z-index: 5000; padding: 8px;">
                     <div style="margin-bottom: 8px; position: relative;">
@@ -1019,8 +1036,10 @@ export function renderPickingTask(container, currentUser) {
                     <div id="rackOptionsList" style="display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow-y: auto;"></div>
                   </div>
                 </div>
-                <input type="hidden" id="putawayLocationInput" required />
-                <span class="input-helper-text" id="putawayLocationHelper">Select target rack location for putaway</span>
+                <input type="hidden" id="putawayLocationInput" value="${isTransferLocation ? escapeHtml(assignedToLocation) : ''}" required />
+                <span class="input-helper-text" id="putawayLocationHelper" style="color: ${isTransferLocation ? 'var(--success)' : ''}; font-weight: ${isTransferLocation ? '600' : 'normal'};">
+                  ${isTransferLocation ? `Strictly assigned to Transfer Location: ${escapeHtml(assignedToLocation)}` : 'Select target rack location for putaway'}
+                </span>
               </div>
             </div>
 
@@ -1058,9 +1077,15 @@ export function renderPickingTask(container, currentUser) {
       zone: String(r.zone || '').trim()
     })).filter(r => r.name);
 
-    let selectedRackVal = '';
+    let selectedRackVal = isTransferLocation ? assignedToLocation : '';
+
+    if (isTransferLocation && rackSearchInput) {
+      const searchWrapper = rackSearchInput.parentElement;
+      if (searchWrapper) searchWrapper.style.display = 'none';
+    }
 
     function renderRackOptions(filter = '') {
+      if (isTransferLocation) return;
       const q = filter.toLowerCase().trim();
       const filtered = allRacks.filter(r => r.name.toLowerCase().includes(q) || r.zone.toLowerCase().includes(q));
 
@@ -1091,10 +1116,16 @@ export function renderPickingTask(container, currentUser) {
       });
     }
 
-    renderRackOptions();
+    if (!isTransferLocation) {
+      renderRackOptions();
+    }
 
     rackTriggerBtn.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (isTransferLocation) {
+        showToast("This putaway location is fixed to the transfer's assigned To Location.");
+        return;
+      }
       const isVisible = rackMenuEl.style.display === 'block';
       rackMenuEl.style.display = isVisible ? 'none' : 'block';
       if (!isVisible) {
@@ -1102,32 +1133,38 @@ export function renderPickingTask(container, currentUser) {
       }
     });
 
-    rackSearchInput.addEventListener('input', (e) => {
-      renderRackOptions(e.target.value);
-    });
+    if (!isTransferLocation) {
+      rackSearchInput.addEventListener('input', (e) => {
+        renderRackOptions(e.target.value);
+      });
+    }
 
     const rackScannerBtn = rackDropdownContainer.querySelector('#putawayLocationScannerBtn');
     if (rackScannerBtn) {
-      rackScannerBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openCameraScanner((scannedValue) => {
-          const val = String(scannedValue).trim();
-          rackSearchInput.value = val;
-          renderRackOptions(val);
-          
-          const match = allRacks.find(r => r.name.toLowerCase() === val.toLowerCase());
-          if (match) {
-            selectedRackVal = match.name;
-            putawayLocationInput.value = selectedRackVal;
-            rackTriggerLabel.textContent = selectedRackVal;
-            rackTriggerLabel.style.color = 'var(--text-primary)';
-            rackTriggerLabel.style.fontWeight = '700';
-            putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
-            putawayLocationHelper.style.color = 'var(--success)';
-            rackMenuEl.style.display = 'none';
-          }
+      if (isTransferLocation) {
+        rackScannerBtn.style.display = 'none';
+      } else {
+        rackScannerBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openCameraScanner((scannedValue) => {
+            const val = String(scannedValue).trim();
+            rackSearchInput.value = val;
+            renderRackOptions(val);
+            
+            const match = allRacks.find(r => r.name.toLowerCase() === val.toLowerCase());
+            if (match) {
+              selectedRackVal = match.name;
+              putawayLocationInput.value = selectedRackVal;
+              rackTriggerLabel.textContent = selectedRackVal;
+              rackTriggerLabel.style.color = 'var(--text-primary)';
+              rackTriggerLabel.style.fontWeight = '700';
+              putawayLocationHelper.textContent = `Selected location: ${selectedRackVal}`;
+              putawayLocationHelper.style.color = 'var(--success)';
+              rackMenuEl.style.display = 'none';
+            }
+          });
         });
-      });
+      }
     }
 
     document.addEventListener('click', (e) => {
@@ -1154,14 +1191,20 @@ export function renderPickingTask(container, currentUser) {
         return;
       }
 
-      if (location.length < 10 || location.length > 30) {
-        showAlertModal(`Location must be between 10 and 30 characters long (e.g. CBT-MZF3-35-03-L1-04). Current length is ${location.length} characters.`);
-        return;
+      if (isTransferLocation) {
+        if (location !== assignedToLocation) {
+          showAlertModal(`Invalid Location. Putaway must be done strictly at the assigned To Location: ${assignedToLocation}`);
+          return;
+        }
+      } else {
+        if (location.length < 10 || location.length > 30) {
+          showAlertModal(`Location must be between 10 and 30 characters long (e.g. CBT-MZF3-35-03-L1-04). Current length is ${location.length} characters.`);
+          return;
+        }
       }
 
       closeModal();
       
-      const task = db.pickingTasks.find(t => String(t.pickingId).trim() === String(pickingId).trim());
       const ticketId = task ? task.ticketId : '';
       const payload = {
         pickingId: pickingId,
