@@ -288,6 +288,26 @@ class DatabaseService {
     return '';
   }
 
+  updateBlockerMessage(message) {
+    const overlay = document.getElementById('globalBlockerLock');
+    if (overlay) {
+      const p = overlay.querySelector('p');
+      if (p) p.textContent = message;
+    }
+  }
+
+  async fetchSupersetCookie() {
+    const cookieSpreadsheetId = GOOGLE_SHEETS_CONFIG.superset?.cookieSpreadsheetId || '1Clj9YvTa6zaFnuEZI0eSDFAIGSBIl7vjqaYcWLNIGtg';
+    const cookieTabName = GOOGLE_SHEETS_CONFIG.superset?.cookieTabName || 'Cookie';
+    const cookieUrl = `https://docs.google.com/spreadsheets/d/${cookieSpreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(cookieTabName)}&_t=${Date.now()}`;
+    
+    const res = await fetch(cookieUrl, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch Superset session cookie from Google Sheets');
+    const text = await res.text();
+    const match = text.match(/"([^"]+)"/);
+    return match ? match[1] : text.trim();
+  }
+
   async syncGoogleSheets(tabsToSync = null) {
     const id = this.spreadsheetId;
     if (!id) {
@@ -395,7 +415,133 @@ class DatabaseService {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(stockActivityTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'stockActivity', res: r })).catch(() => null));
     }
     if (shouldSync('sohwh')) {
-      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sohwhTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'sohwh', res: r })).catch(() => null));
+      const supersetFetch = (async () => {
+        try {
+          // 1. Get cached cookie from localStorage or fetch it
+          let cookie = localStorage.getItem('superset_session_cookie');
+          if (!cookie) {
+            cookie = await this.fetchSupersetCookie();
+            localStorage.setItem('superset_session_cookie', cookie);
+          }
+          
+          const baseUrl = GOOGLE_SHEETS_CONFIG.superset?.baseUrl || '/superset-api';
+          const datasourceId = GOOGLE_SHEETS_CONFIG.superset?.datasourceId || 348;
+          
+          const payload = {
+            datasource: { id: datasourceId, type: "table" },
+            force: true,
+            result_format: "csv",
+            result_type: "results",
+            queries: [
+              {
+                columns: [
+                  "product_id",
+                  "sku_number",
+                  "product_name",
+                  "rack_name"
+                ],
+                metrics: [
+                  {
+                    expressionType: "SIMPLE",
+                    aggregate: "SUM",
+                    column: { column_name: "stock" },
+                    label: "Qty Stock"
+                  }
+                ],
+                filters: [
+                  {
+                    col: "product_detail_created_at",
+                    op: "TEMPORAL_RANGE",
+                    val: "No filter"
+                  },
+                  {
+                    col: "location_id",
+                    op: "IN",
+                    val: ["819"]
+                  },
+                  {
+                    col: "stock",
+                    op: ">",
+                    val: "0"
+                  },
+                  {
+                    col: "inventory_status",
+                    op: "IN",
+                    val: ["available"]
+                  }
+                ],
+                row_limit: 100000
+              }
+            ]
+          };
+
+          const makeRequest = async (cookieVal) => {
+            return await fetch(`${baseUrl}/api/v1/chart/data`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Superset-Cookie': cookieVal
+              },
+              body: JSON.stringify(payload)
+            });
+          };
+
+          let res = await makeRequest(cookie);
+          
+          // 2. Auto-retry once on 401 / 403 (unauthorized/cookie expired)
+          if (res.status === 401 || res.status === 403) {
+            console.warn('Superset session cookie expired. Fetching fresh cookie from Google Sheets...');
+            cookie = await this.fetchSupersetCookie();
+            localStorage.setItem('superset_session_cookie', cookie);
+            res = await makeRequest(cookie);
+          }
+
+          if (!res.ok) {
+            return { key: 'sohwh', res: res };
+          }
+
+          // 3. Read stream chunk-by-chunk to stream downloaded size to UI
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let chunks = [];
+          let receivedLength = 0;
+
+          this.updateBlockerMessage('Downloading SOHWH: Starting stream...');
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            receivedLength += value.length;
+
+            const sizeStr = receivedLength >= 1024 * 1024
+              ? `${(receivedLength / (1024 * 1024)).toFixed(2)} MB`
+              : `${(receivedLength / 1024).toFixed(1)} KB`;
+            
+            this.updateBlockerMessage(`Downloading SOHWH: ${sizeStr} received...`);
+          }
+
+          let allChunks = new Uint8Array(receivedLength);
+          let position = 0;
+          for (let chunk of chunks) {
+            allChunks.set(chunk, position);
+            position += chunk.length;
+          }
+
+          const decodedText = decoder.decode(allChunks);
+          const mockResponse = {
+            ok: true,
+            status: 200,
+            text: async () => decodedText
+          };
+          
+          return { key: 'sohwh', res: mockResponse };
+        } catch (e) {
+          console.error('Superset fetch error:', e);
+          return null;
+        }
+      })();
+      fetches.push(supersetFetch);
     }
 
     try {
@@ -502,8 +648,9 @@ class DatabaseService {
   }
 
   async checkAndRefreshIfExpired() {
-    if (this.isDataExpired() && !this.isSyncing) {
-      const activeTab = window.irmsActiveTab || 'home';
+    const activeTab = window.irmsActiveTab || 'home';
+    const isExpired = activeTab === 'sohwh' ? this.isSectionDataExpired('sohwh') : this.isDataExpired();
+    if (isExpired && !this.isSyncing) {
       await this.syncSectionData(activeTab);
       return true;
     }
@@ -511,7 +658,7 @@ class DatabaseService {
   }
 
   /**
-   * Returns true if the given section's data is older than DATA_EXPIRY_DURATION_MS
+   * Returns true if the given section's data is older than DATA_EXPIRY_DURATION_MS (or 5 minutes for SOHWH)
    * or has never been synced.
    */
   isSectionDataExpired(tabId) {
@@ -519,7 +666,8 @@ class DatabaseService {
     if (!lastSync) return true;
     const lastSyncMs = new Date(lastSync).getTime();
     if (isNaN(lastSyncMs)) return true;
-    return (Date.now() - lastSyncMs) >= DATA_EXPIRY_DURATION_MS;
+    const expiry = tabId === 'sohwh' ? 5 * 60 * 1000 : DATA_EXPIRY_DURATION_MS;
+    return (Date.now() - lastSyncMs) >= expiry;
   }
 
   /**
@@ -536,7 +684,7 @@ class DatabaseService {
       soh:           ['soh'],
       stockMovement: ['stockMovement', 'stockActivity', 'soh'],
       admin:         ['userDb'],
-      sohwh:         ['sohwh']
+      sohwh:         ['sohwh', 'soData']
     };
     const tabsToSync = tabMap[tabId];
     if (!tabsToSync || tabsToSync.length === 0) return true;
@@ -1844,17 +1992,31 @@ class DatabaseService {
     });
 
     if (result.data && result.data.length > 0) {
+      // 1. Pre-aggregate SO_DATA by SKU for O(1) lookups and to avoid O(N * M) UI freeze
+      const reserveMap = new Map();
+      this.soList.forEach(so => {
+        const sku = String(so.skuNumber).trim();
+        if (sku) {
+          const current = reserveMap.get(sku) || 0;
+          reserveMap.set(sku, current + (so.requestQty || 0));
+        }
+      });
+
       this.sohwh = result.data.map(row => {
         const productId = this.findRowValue(row, ['product_id', 'product id', 'productid']);
         const skuNumber = this.findRowValue(row, ['sku_number', 'sku number', 'sku code', 'sku_code', 'sku']);
         const productName = this.findRowValue(row, ['product_name', 'product name', 'product']);
         const rackName = this.findRowValue(row, ['rack_name', 'rack name', 'rack', 'location']);
-        const qtyStock = this.findRowValue(row, ['qty stock', 'qty_stock', 'quantity stock', 'qty']);
-        const reserveStock = this.findRowValue(row, ['reserve stock', 'reserve_stock', 'reserve']);
-        const finalVirtualSoh = this.findRowValue(row, ['final virtual soh', 'final_virtual_soh', 'virtual soh', 'virtual_soh']);
+        const qtyStock = this.findRowValue(row, ['qty stock', 'qty_stock', 'quantity stock', 'qty', 'sum(stock)', 'sum_stock']);
 
         const sku = String(skuNumber).trim();
         const rack = String(rackName).trim();
+
+        // Constant time lookup: O(1)
+        const reserveStock = reserveMap.get(sku) || 0;
+
+        const qtyVal = parseInt(String(qtyStock).trim() || '0', 10);
+        const finalVirtualSoh = qtyVal - reserveStock;
 
         return {
           id: `${sku}_${rack}`,
@@ -1862,9 +2024,9 @@ class DatabaseService {
           skuNumber: sku,
           productName: String(productName).trim(),
           rackName: rack,
-          qtyStock: parseInt(String(qtyStock).trim() || '0', 10),
-          reserveStock: parseInt(String(reserveStock).trim() || '0', 10),
-          finalVirtualSoh: parseInt(String(finalVirtualSoh).trim() || '0', 10)
+          qtyStock: qtyVal,
+          reserveStock: reserveStock,
+          finalVirtualSoh: finalVirtualSoh
         };
       }).filter(s => s.skuNumber);
     }

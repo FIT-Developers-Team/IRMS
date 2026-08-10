@@ -17,5 +17,11 @@ export const GOOGLE_SHEETS_CONFIG = {
     stockMovement: 'Stock_Movement',
     stockActivity: 'Stock_Activity',
     sohwh: 'SOHWH'
+  },
+  superset: {
+    baseUrl: '/superset-api',
+    datasourceId: 348,
+    cookieSpreadsheetId: '1Clj9YvTa6zaFnuEZI0eSDFAIGSBIl7vjqaYcWLNIGtg',
+    cookieTabName: 'Cookie'
   }
 };

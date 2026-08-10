@@ -1,82 +1,86 @@
-# Backend Sync & Performance Improvement Plan (IRMS)
+# SOHWH
 
-This document details the strategy and implementation plan for scaling data fetching, caching, and synchronization in the **IRMS (Inventory & Warehouse Management System)** using Google Sheets as the backend data source.
+Current Write Limitations: There are currently no write, update, or delete endpoints for SOHWH in the Google Apps Script backend (Code.gs).
 
----
+Improvement:
 
-## 1. Core Architecture Decisions
+Currently i use google sheet as bridge data from superset that runs on clickhouse, im using appscript API to fetch the data , this make some latency time for the SOHWH page load, to avoid this we need to connect Superset directly uses session cookie authentication
 
-1. **100% GViz CSV Endpoint (`/gviz/tq?tqx=out:csv`) for Data Fetching**
-   - **Rationale**: Google Apps Script (`doGet`) web apps introduce high execution latency (1–3s+) and cold starts. The GViz CSV endpoint connects directly to Google Visualization services, responding in ~200–500ms.
-2. **Client-Side Persistent Caching via IndexedDB**
-   - **Rationale**: In-memory Javascript state is lost on page refresh. Using browser IndexedDB allows the application to render **instantly (0ms)** on startup using cached data before fetching updates in the background.
-3. **GViz `tq` Incremental Delta Sync**
-   - **Rationale**: Downloading full CSV files for 10,000+ row datasets consumes excessive bandwidth and CPU during PapaParse execution. By passing Google Visualization Query Language (`tq`) expressions, Google filters the spreadsheet server-side and returns only new or modified rows.
+the cookie is stored on google sheet:
+https://docs.google.com/spreadsheets/d/1Clj9YvTa6zaFnuEZI0eSDFAIGSBIl7vjqaYcWLNIGtg/edit?gid=0#gid=0
 
----
+Tab name : Cookie 
+Value Cookie location : A1
 
-## 2. Technical Data Flow
+heres some sample payload that im currently working on at google sheet trough Appscript 
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant UI as Web App Interface
-    participant Cache as IndexedDB (Browser Storage)
-    participant GViz as Google Sheets GViz CSV Endpoint
+function DataSOHWH(filterValue = null, rowLimit = 100000, resultFormat = "csv") {
+  return {
+    datasource:    { id: 348, type: "table" },
+    force:         true,
+    result_format: resultFormat,
+    result_type:   "results",
+    queries: [
+      {
+        columns: [
+          "product_id",
+          "sku_number",
+          "product_name",
+          "rack_name"
+        ]
+      ,
+        metrics: [
+          {
+            expressionType: "SIMPLE",
+            aggregate:      "SUM",
+            column:         { column_name: "stock" },
+            label:          "Qty Stock",
+          },
+        ],
 
-    UI->>Cache: 1. Read cached records on app launch
-    Cache-->>UI: 2. Immediate UI render (0ms latency)
-    UI->>Cache: 3. Retrieve highest local ID (maxLocalId) / lastSyncTime
-    Cache-->>UI: 4. Return sync metadata
-    UI->>GViz: 5. Fetch Delta: GET /gviz/tq?tqx=out:csv&tq=WHERE Col1 > {maxLocalId}
-    GViz-->>UI: 6. Return filtered Delta CSV rows (~200ms)
-    UI->>Cache: 7. Upsert delta records into IndexedDB
-    Cache-->>UI: 8. Trigger reactive UI re-render for changed records
-```
+        filters: [
+          {
+            col: "product_detail_created_at",
+            op:  "TEMPORAL_RANGE",
+            val: "No filter",
+          },
+          {
+            col: "location_id",
+            op:  "IN",
+            val: ["819"]
+          },
+          {
+            col: "stock",
+            op:  ">",
+            val: "0"
+          },
+          {
+            col: "inventory_status",
+            op:  "IN",
+            val: ["available"]
+          }
+        ],
+        row_limit: rowLimit,
+      },
+    ],
+  };
+}
 
----
 
-## 3. Data Classification & Sync Matrix
+Requierment improvemenet:
 
-To optimize bandwidth, sheets are categorized based on change frequency and lifecycle:
+First we need fetch the cookie provided above from google sheet uses csv endpoint for faster latency, then store the cookie on the client cache
 
-| Tier | Sheets / Tabs | Update Frequency | GViz `tq` Query Pattern | Local Cache TTL |
-| :--- | :--- | :--- | :--- | :--- |
-| **Tier 1: Master Data** | `SKUs DB`, `Racks`, `Zones`, `Users DB` | Low (Daily / Manual) | Fetch full CSV only on cache miss or manual sync. | 24 Hours |
-| **Tier 2: Append-Only Logs** | `Stock Movement`, `Stock Activity`, `Lost & Found` | High (Continuous) | `SELECT * WHERE Col1 > {maxLocalID}` | Persistent (Append Delta) |
-| **Tier 3: Active Tasks & State** | `Picking Task`, `Putaway`, `Request Checker`, `SOH` | High (Continuous) | `SELECT * WHERE ColStatus != 'Completed'` OR `WHERE ColUpdated > datetime '{lastSync}'` | Persistent (Upsert Delta) |
+we need to rely on client side for data sync, so no data is stored on server
 
----
+we need also to implement cache management specificly for SOHWH
 
-## 4. Phased Implementation Roadmap
+goals: on the interface spesificly on SOH the data directly wired up on superset endpoint uses session login, so the data should be fresh every time user hit refresh
 
-### Phase 1: Client-Side Storage Layer (`src/data/cacheManager.js`)
-- [ ] Create IndexedDB wrapper (`cacheManager.js`) using native IndexedDB or `Dexie.js`.
-- [ ] Define stores for each sheet (`soData`, `pickingTask`, `stockMovement`, `skusDb`, etc.).
-- [ ] Implement index keys (`id`, `sku`, `so_number`, `task_id`) for fast lookups and upserts.
-- [ ] Provide helper methods: `getStore(name)`, `upsertDelta(name, records)`, `getMaxId(name)`.
+we need to makesure the refresh button doesnt overlaping or interrupt the others function, becuse this will involve 2 diffrent source of data
 
-### Phase 2: GViz Delta Query Integration (`src/data/db.js`)
-- [ ] Upgrade fetch helper in `src/data/db.js` to build dynamic GViz `tq` queries.
-- [ ] **Delta Fetch logic**:
-  - Check `maxLocalId` or `lastSyncTime` from `cacheManager`.
-  - Construct query string: `tq=${encodeURIComponent("SELECT * WHERE Col1 > " + maxLocalId)}`.
-- [ ] Parse incoming delta CSV snippets via PapaParse and bulk-write to `cacheManager`.
+also for faster fetching, we use csv endpoint on from superset, do not use json
 
-### Phase 3: Cache-First UI Hydration
-- [ ] Update `main.js` and component entry points to load initial data synchronously from IndexedDB.
-- [ ] Render tables immediately from local cache.
-- [ ] Trigger background fetch and update UI reactively when new delta rows arrive.
+we also had to make sure the new backend logic is properly wired up on front end interface
 
-### Phase 4: Sheet Row Archiving Policy
-- [ ] Implement an archiving routine for `Picking Task` and `Putaway` sheets.
-- [ ] Periodically move completed tasks (>30 days old) to an archive sheet (e.g. `Picking_Task_Archive`).
-- [ ] Ensures active sheet remains lightweight (<1,000 rows) for maximum Google Sheets server-side evaluation speed.
 
----
-
-## 5. Verification & Testing Criteria
-
-1. **Payload Reduction Test**: Measure total network transfer during a sync operation. Benchmark target: **>80% reduction** compared to full CSV fetch.
-2. **Startup Speed Benchmark**: Measure initial UI render time on page load. Benchmark target: **<50ms** (hydrated from IndexedDB).
-3. **Data Integrity Test**: Test edge cases including browser cache clear, offline operation, and concurrent record updates across multiple tabs.

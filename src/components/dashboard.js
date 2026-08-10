@@ -344,7 +344,11 @@ export function renderDashboard(container, currentUser, onLogout) {
       closeModal();
       showBlockerLock('Fetching latest updates...');
       try {
-        await db.syncGoogleSheets(null);
+        if (activeTab === 'sohwh') {
+          await db.syncSectionData('sohwh');
+        } else {
+          await db.syncGoogleSheets(null);
+        }
         showToast('Application data refreshed successfully!');
       } catch (err) {
         showToast('Refresh error: ' + (err.message || err));
