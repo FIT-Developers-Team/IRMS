@@ -25,14 +25,14 @@ export function renderSoh(container, currentUser) {
 
   container.innerHTML = `
     <div class="card-panel">
-      <div class="card-title-group" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); margin-bottom: 0; width: 100%; box-sizing: border-box;">
+      <div class="card-title-group" style="display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-light); margin-bottom: 0; width: 100%; box-sizing: border-box; flex-wrap: wrap;">
         <div style="min-width: 0;">
           <h3 style="display: flex; align-items: center; gap: 6px; margin: 0; white-space: nowrap; font-size: 15px;">
             <span class="material-icons-round" style="color: var(--primary-600); flex-shrink: 0; font-size: 20px;">inventory_2</span>
             <span>Stock On Hand (SOH)</span>
           </h3>
         </div>
-        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; position: relative;">
+        <div style="display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; position: relative;">
           <span style="font-size: 11px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; margin-right: 4px;" id="sohCountBadge">0 SKUs</span>
           
           <!-- SOH Export Dropdown -->

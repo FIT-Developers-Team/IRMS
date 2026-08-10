@@ -1439,6 +1439,10 @@ body {
     gap: 8px !important;
   }
 
+  .sohwh-card-panel {
+    padding-bottom: 35px !important;
+  }
+
   .sm-sticky-header {
     gap: 8px !important;
   }
