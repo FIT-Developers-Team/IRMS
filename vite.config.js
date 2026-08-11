@@ -3,10 +3,10 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   server: {
     proxy: {
-      '/superset-api': {
+      '/chart-query': {
         target: 'https://dash.astronauts.id',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/superset-api/, ''),
+        rewrite: (path) => path.replace(/^\/chart-query/, ''),
         configure: (proxy, options) => {
           proxy.on('proxyReq', (proxyReq, req, res) => {
             const customCookie = req.headers['x-superset-cookie'];

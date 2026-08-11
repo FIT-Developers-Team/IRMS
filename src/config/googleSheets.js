@@ -19,7 +19,7 @@ export const GOOGLE_SHEETS_CONFIG = {
     sohwh: 'SOHWH'
   },
   superset: {
-    baseUrl: '/superset-api',
+    baseUrl: '/chart-query',
     datasourceId: 348,
     cookieSpreadsheetId: '1Clj9YvTa6zaFnuEZI0eSDFAIGSBIl7vjqaYcWLNIGtg',
     cookieTabName: 'Cookie'
