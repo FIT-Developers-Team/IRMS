@@ -8,7 +8,7 @@ export function renderHome(container, currentUser) {
       throw new Error('renderHome container is null or missing');
     }
     const userName = currentUser && currentUser.name ? currentUser.name : 'Valued Staff';
-    const userRole = currentUser && currentUser.role ? currentUser.role : 'Staff';
+    const userRole = currentUser && currentUser.role ? currentUser.role : 'Checker';
 
     container.innerHTML = `
       <div style="flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 24px; overflow-y: auto; box-sizing: border-box; background: var(--surface-card-solid);">

@@ -1,6 +1,6 @@
 import { db } from '../data/db.js';
 
-const AVAILABLE_MENUS = ['requestPickup', 'pickingTask', 'lostAndFound', 'soh', 'sohwh', 'stockMovement', 'admin'];
+const AVAILABLE_MENUS = ['requestPickup', 'pickingTask', 'lostAndFound', 'soh', 'sohwh', 'stockMovement', 'tsRequest', 'troubleShoot', 'tsTask', 'admin'];
 const MENU_LABELS = {
   requestPickup: 'Request Pickup',
   pickingTask:   'Picking Task',
@@ -8,9 +8,12 @@ const MENU_LABELS = {
   soh:           'Stock On Hand',
   sohwh:         'WH - Stock Inquery',
   stockMovement: 'Stock Movement & Deduction',
+  tsRequest:     'TS Request',
+  troubleShoot:  'Troubleshoot',
+  tsTask:        'TS Task',
   admin:         'Admin Panel'
 };
-const ROLES = ['Super', 'Supervisor', 'Staff', 'Manager'];
+const ROLES = ['Super', 'Supervisor', 'Manager', 'Checker', 'Picker', 'BTI Staff', 'Troubleshooter', 'Admin'];
 
 export function renderAdmin(container, currentUser) {
   let activeSubTab = 'users';
@@ -402,9 +405,23 @@ function openUserModal(existingUser) {
 
         <div class="form-field-group">
           <label class="form-label">Role <span style="color:var(--danger);">*</span></label>
-          <select id="userRole" class="text-control">
-            ${ROLES.map(r => `<option value="${r}" ${isEdit && existingUser.role === r ? 'selected' : ''}>${r}</option>`).join('')}
-          </select>
+          <input type="hidden" id="userRole" value="${isEdit && existingUser.role ? escHtml(existingUser.role) : 'Checker'}">
+          <div class="custom-dropdown-container" id="dropdown-user-modal-role" style="width: 100%;">
+            <button type="button" class="custom-dropdown-trigger text-control" style="height: 42px; border-radius: 10px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; background: #ffffff; border: 1.5px solid var(--border-light); width: 100%;">
+              <span class="trigger-label">${isEdit && existingUser.role ? escHtml(existingUser.role) : 'Checker'}</span>
+              <span class="material-icons-round trigger-icon" style="font-size: 18px; color: var(--text-muted); transition: transform 0.2s;">expand_more</span>
+            </button>
+            <div class="custom-dropdown-menu" style="z-index: 3000; max-height: 220px; overflow-y: auto;">
+              ${ROLES.map(r => {
+                const isSelected = (isEdit ? existingUser.role : 'Checker') === r;
+                return `
+                  <div class="custom-dropdown-option ${isSelected ? 'active' : ''}" data-value="${r}">
+                    ${r}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
         </div>
 
         <div class="form-field-group">
@@ -452,10 +469,49 @@ function openUserModal(existingUser) {
 
   document.body.appendChild(modal);
 
-  const roleSelect = modal.querySelector('#userRole');
+  const roleInput = modal.querySelector('#userRole');
+  const roleDropdownContainer = modal.querySelector('#dropdown-user-modal-role');
+  const roleDropdownTrigger = roleDropdownContainer.querySelector('.custom-dropdown-trigger');
+
   const accessMenuList = modal.querySelector('#accessMenuList');
   const accessBatchBtns = modal.querySelector('#accessBatchBtns');
   const userPasswordInput = modal.querySelector('#userPassword');
+
+  // Wire custom role dropdown
+  const onRoleDocClick = (e) => {
+    if (!roleDropdownContainer.contains(e.target)) {
+      roleDropdownContainer.classList.remove('open');
+      document.removeEventListener('click', onRoleDocClick);
+    }
+  };
+
+  roleDropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = roleDropdownContainer.classList.contains('open');
+    if (isOpen) {
+      roleDropdownContainer.classList.remove('open');
+      document.removeEventListener('click', onRoleDocClick);
+    } else {
+      roleDropdownContainer.classList.add('open');
+      document.addEventListener('click', onRoleDocClick);
+    }
+  });
+
+  roleDropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const val = opt.dataset.value;
+      roleInput.value = val;
+      const labelEl = roleDropdownTrigger.querySelector('.trigger-label');
+      if (labelEl) labelEl.textContent = val;
+      roleDropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(o => {
+        o.classList.toggle('active', o.dataset.value === val);
+      });
+      roleDropdownContainer.classList.remove('open');
+      document.removeEventListener('click', onRoleDocClick);
+      syncAccessWithRole();
+    });
+  });
 
   // Toggle modal password visibility
   const toggleModalPwdBtn = modal.querySelector('#toggleModalPwdBtn');
@@ -475,19 +531,21 @@ function openUserModal(existingUser) {
 
   // Select All / Clear All helpers
   modal.querySelector('#selectAllAccessBtn').addEventListener('click', () => {
-    if (roleSelect.value === 'Super') return;
+    if (roleInput.value === 'Super') return;
     accessMenuList.querySelectorAll('.access-checkbox').forEach(cb => cb.checked = true);
   });
 
   modal.querySelector('#clearAllAccessBtn').addEventListener('click', () => {
-    if (roleSelect.value === 'Super') return;
+    if (roleInput.value === 'Super') return;
     accessMenuList.querySelectorAll('.access-checkbox').forEach(cb => cb.checked = false);
   });
 
   // Auto-lock checkboxes when role = Super
   function syncAccessWithRole() {
     const checkboxes = accessMenuList.querySelectorAll('.access-checkbox');
-    if (roleSelect.value === 'Super') {
+    const selectedRole = roleInput.value;
+
+    if (selectedRole === 'Super') {
       checkboxes.forEach(cb => { cb.checked = true; cb.disabled = true; });
       accessBatchBtns.style.opacity = '0.4';
       accessBatchBtns.style.pointerEvents = 'none';
@@ -495,10 +553,28 @@ function openUserModal(existingUser) {
       checkboxes.forEach(cb => { cb.disabled = false; });
       accessBatchBtns.style.opacity = '1';
       accessBatchBtns.style.pointerEvents = 'auto';
+
+      // Auto-preset on role selection
+      if (selectedRole === 'Checker') {
+        checkboxes.forEach(cb => {
+          cb.checked = (cb.value === 'requestPickup' || cb.value === 'tsRequest');
+        });
+      } else if (selectedRole === 'Picker') {
+        checkboxes.forEach(cb => {
+          cb.checked = (cb.value === 'tsRequest');
+        });
+      } else if (selectedRole === 'BTI Staff') {
+        checkboxes.forEach(cb => {
+          cb.checked = (cb.value === 'pickingTask' || cb.value === 'stockMovement' || cb.value === 'sohwh' || cb.value === 'soh');
+        });
+      } else if (selectedRole === 'Troubleshooter') {
+        checkboxes.forEach(cb => {
+          cb.checked = (cb.value === 'tsTask');
+        });
+      }
     }
   }
 
-  roleSelect.addEventListener('change', syncAccessWithRole);
   syncAccessWithRole();
 
   modal.querySelector('#closeUserModal').addEventListener('click', () => modal.remove());

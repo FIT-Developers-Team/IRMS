@@ -3003,3 +3003,169 @@ body {
     width: 100% !important;
   }
 }
+
+/* ── Troubleshoot Module Styles ──────────────────────────────────────── */
+
+/* Status Badges */
+.ts-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.ts-status-open {
+  background: var(--primary-50, #eff6ff);
+  color: var(--primary-600, #2563eb);
+  border: 1px solid var(--primary-200, #bfdbfe);
+}
+
+.ts-status-assigned {
+  background: #f3e8ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+}
+
+.ts-status-picked {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.ts-status-found {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.ts-status-partial {
+  background: #ecfeff;
+  color: #0891b2;
+  border: 1px solid #a5f3fc;
+}
+
+.ts-status-notfound {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+/* Panel vertical scrolling */
+.ts-admin-panel, .ts-task-panel, .ts-request-panel {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  max-height: 100%;
+}
+
+/* Subtab bar for Troubleshoot Admin */
+.ts-subtab-bar {
+  display: flex;
+  gap: 8px;
+  background: var(--surface-body, #f1f5f9);
+  padding: 5px;
+  border-radius: 14px;
+  border: 1px solid var(--border-light, #e2e8f0);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Sub-tab buttons */
+.ts-sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.ts-sub-tab:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-primary, #0f172a);
+}
+
+.ts-sub-tab.active {
+  background: #ffffff !important;
+  color: var(--primary-600, #2563eb) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.ts-sub-tab .subtab-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+}
+
+.ts-sub-tab.active .subtab-count-badge {
+  background: var(--primary-50, #eff6ff);
+  color: var(--primary-700, #1d4ed8);
+}
+
+/* Ticket cards hover */
+.ts-ticket-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* Step cards */
+.ts-step-card {
+  transition: opacity 0.3s ease;
+}
+
+/* KPI card hover */
+.ts-kpi-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+  transition: all 0.2s;
+}
+
+/* Spin animation for loading buttons */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Slide up animation for modals */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Mobile responsive for troubleshoot */
+@media (max-width: 600px) {
+  .ts-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .ts-ticket-card {
+    padding: 12px !important;
+  }
+}

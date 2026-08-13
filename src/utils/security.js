@@ -14,6 +14,9 @@ export const ALL_PAGES = [
   { key: 'soh', label: 'Stock On Hand', icon: 'inventory_2' },
   { key: 'sohwh', label: 'WH - Stock Inquery', icon: 'warehouse' },
   { key: 'stockMovement', label: 'Stock Movement', icon: 'swap_horiz' },
+  { key: 'tsRequest', label: 'TS Request', icon: 'confirmation_number' },
+  { key: 'troubleShoot', label: 'Troubleshoot', icon: 'troubleshoot' },
+  { key: 'tsTask', label: 'TS Task', icon: 'task_alt' },
   { key: 'admin', label: 'Admin Panel', icon: 'admin_panel_settings' }
 ];
 
@@ -38,6 +41,9 @@ export function hasUserAccess(user, pageKey) {
     soh: ['soh', 'stock on hand', 'stockonhand'],
     sohwh: ['sohwh', 'wh - stock inquery', 'wh - stock inquiry', 'stock inquery', 'stock inquiry', 'inquery', 'inquiry'],
     stockMovement: ['stockmovement', 'stock movement', 'stock movement & deduction', 'movement', 'deduction'],
+    tsRequest: ['tsrequest', 'ts request', 'ts-request', 'troubleshoot request'],
+    troubleShoot: ['troubleshoot', 'trouble shoot', 'troubleshooting'],
+    tsTask: ['tstask', 'ts task', 'ts-task', 'troubleshoot task'],
     admin: ['admin', 'admin panel']
   };
 
@@ -48,3 +54,4 @@ export function hasUserAccess(user, pageKey) {
 export function getUserAccessiblePages(user) {
   return ALL_PAGES.filter(p => hasUserAccess(user, p.key));
 }
+

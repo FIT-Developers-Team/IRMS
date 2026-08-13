@@ -16,7 +16,8 @@ export const GOOGLE_SHEETS_CONFIG = {
     soh: 'SOH',
     stockMovement: 'Stock_Movement',
     stockActivity: 'Stock_Activity',
-    sohwh: 'SOHWH'
+    sohwh: 'SOHWH',
+    troubleShoot: 'Trouble_Shoot'
   },
   superset: {
     baseUrl: '/chart-query',

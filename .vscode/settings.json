@@ -1,3 +1,4 @@
 {
-    "agq.showPromptCredits": true
+    "agq.showPromptCredits": true,
+    "agq.pollingInterval": 30
 }

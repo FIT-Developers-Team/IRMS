@@ -6,6 +6,9 @@ import { renderSohwh } from './sohwh.js';
 import { renderHome } from './home.js';
 import { renderAdmin } from './admin.js';
 import { renderStockMovement } from './stockMovement.js';
+import { renderTsRequest } from './tsRequest.js';
+import { renderTroubleShoot } from './troubleShoot.js';
+import { renderTsTask } from './tsTask.js';
 import { db } from '../data/db.js';
 import { hasUserAccess, getUserAccessiblePages, ALL_PAGES } from '../utils/security.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
@@ -436,6 +439,9 @@ export function renderDashboard(container, currentUser, onLogout) {
       else if (tabId === 'sohwh') renderSohwh(targetArea, currentUser);
       else if (tabId === 'requestPickup') renderRequestPickup(targetArea, currentUser);
       else if (tabId === 'stockMovement') renderStockMovement(targetArea, currentUser);
+      else if (tabId === 'tsRequest') renderTsRequest(targetArea, currentUser);
+      else if (tabId === 'troubleShoot') renderTroubleShoot(targetArea, currentUser);
+      else if (tabId === 'tsTask') renderTsTask(targetArea, currentUser);
       else if (tabId === 'admin') renderAdmin(targetArea, currentUser);
       else renderHome(targetArea, currentUser);
 

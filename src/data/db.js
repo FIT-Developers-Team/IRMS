@@ -17,6 +17,7 @@ class DatabaseService {
     this.putawayRecords = this.loadSavedPutawayRecords();
     this.stockMovements = this.loadSavedStockMovements();
     this.stockActivities = this.loadSavedStockActivities();
+    this.troubleShootTickets = this.loadSavedTroubleShoot();
     this.skus = [];
     this.soh = [];
     this.sohwh = [];
@@ -45,7 +46,7 @@ class DatabaseService {
   async initCache() {
     try {
       await cacheManager.init();
-      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines, cSohwh] = await Promise.all([
+      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines, cSohwh, cTs] = await Promise.all([
         cacheManager.getStore('requests'),
         cacheManager.getStore('pickingTasks'),
         cacheManager.getStore('lostAndFound'),
@@ -56,7 +57,8 @@ class DatabaseService {
         cacheManager.getStore('racks'),
         cacheManager.getStore('zones'),
         cacheManager.getStore('checkerLines'),
-        cacheManager.getStore('sohwh')
+        cacheManager.getStore('sohwh'),
+        cacheManager.getStore('troubleShoot')
       ]);
 
       if (cReqs && cReqs.length) this.requests = cReqs;
@@ -70,6 +72,7 @@ class DatabaseService {
       if (cZones && cZones.length) this.zones = cZones;
       if (cLines && cLines.length) this.checkerLines = cLines;
       if (cSohwh && cSohwh.length) this.sohwh = cSohwh;
+      if (cTs && cTs.length) this.troubleShootTickets = cTs;
 
       this.isLoaded = true;
       this.notifyListeners();
@@ -163,6 +166,7 @@ class DatabaseService {
         const productName = this.findRowValue(row, ['product_name', 'product name', 'product']);
         const status = this.findRowValue(row, ['status']) || '';
         const qty = this.findRowValue(row, ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'qty', 'quantity']) || '1';
+        const originRackName = this.findRowValue(row, ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack']) || '';
 
         return {
           timestamp: String(timestamp).trim(),
@@ -171,7 +175,8 @@ class DatabaseService {
           skuNumber: String(skuNumber).trim(),
           productName: String(productName).trim(),
           status: String(status).trim(),
-          requestQty: parseInt(String(qty).trim() || '1', 10)
+          requestQty: parseInt(String(qty).trim() || '1', 10),
+          originRackName: String(originRackName).trim()
         };
       }).filter(item => item.soNumber);
     }
@@ -333,6 +338,7 @@ class DatabaseService {
     const stockMovementTab = GOOGLE_SHEETS_CONFIG.tabs.stockMovement || 'Stock_Movement';
     const stockActivityTab = GOOGLE_SHEETS_CONFIG.tabs.stockActivity || 'Stock_Activity';
     const sohwhTab = GOOGLE_SHEETS_CONFIG.tabs.sohwh || 'SOHWH';
+    const troubleShootTab = GOOGLE_SHEETS_CONFIG.tabs.troubleShoot || 'Trouble_Shoot';
     const cacheBuster = `_t=${Date.now()}`;
 
     let normalizedTabSet = null;
@@ -364,6 +370,18 @@ class DatabaseService {
           normalizedTabSet.add('stockActivity');
           normalizedTabSet.add('racks');
           normalizedTabSet.add('soh');
+        } else if (t === 'tsRequest') {
+          normalizedTabSet.add('troubleShoot');
+          normalizedTabSet.add('soData');
+          normalizedTabSet.add('checkerLines');
+        } else if (t === 'troubleShoot') {
+          normalizedTabSet.add('troubleShoot');
+          normalizedTabSet.add('soData');
+        } else if (t === 'tsTask') {
+          normalizedTabSet.add('troubleShoot');
+          normalizedTabSet.add('soData');
+          normalizedTabSet.add('soh');
+          normalizedTabSet.add('sohwh');
         } else {
           normalizedTabSet.add(t);
         }
@@ -413,6 +431,9 @@ class DatabaseService {
     }
     if (shouldSync('stockActivity')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(stockActivityTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'stockActivity', res: r })).catch(() => null));
+    }
+    if (shouldSync('troubleShoot')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(troubleShootTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'troubleShoot', res: r })).catch(() => null));
     }
     if (shouldSync('sohwh')) {
       const supersetFetch = (async () => {
@@ -586,6 +607,10 @@ class DatabaseService {
           this.parseSohwh(text);
           cacheManager.setStore('sohwh', this.sohwh);
         }
+        if (item.key === 'troubleShoot') {
+          this.parseTroubleShoot(text);
+          cacheManager.setStore('troubleShoot', this.troubleShootTickets);
+        }
       }
 
       // If fetches were attempted but ALL failed, treat as network error
@@ -628,6 +653,7 @@ class DatabaseService {
     this.putawayRecords = [];
     this.stockMovements = [];
     this.stockActivities = [];
+    this.troubleShootTickets = [];
     this.soh = [];
     this.sohwh = [];
     this.racks = [];
@@ -684,7 +710,10 @@ class DatabaseService {
       soh:           ['soh'],
       stockMovement: ['stockMovement', 'stockActivity', 'soh'],
       admin:         ['userDb'],
-      sohwh:         ['sohwh', 'soData']
+      sohwh:         ['sohwh', 'soData'],
+      tsRequest:     ['troubleShoot', 'soData', 'checkerLines'],
+      troubleShoot:  ['troubleShoot', 'soData'],
+      tsTask:        ['troubleShoot', 'soData']
     };
     const tabsToSync = tabMap[tabId];
     if (!tabsToSync || tabsToSync.length === 0) return true;
@@ -740,7 +769,7 @@ class DatabaseService {
     const newUser = {
       staffId: cleanStaffId,
       name: String(name || '').trim(),
-      role: String(role || 'Staff').trim(),
+      role: String(role || 'Checker').trim(),
       access: String(access || '').trim(),
       password: String(password || '').trim()
     };
@@ -1955,6 +1984,7 @@ class DatabaseService {
 
         return {
           skuCode: String(skuCode).trim(),
+          skuNumber: String(skuCode).trim(),
           rackLocation: String(rackLocation).trim(),
           qtySoh: parseInt(String(qtySoh).trim() || '0', 10),
           updatedAt: String(updatedAt).trim(),
@@ -2406,6 +2436,372 @@ class DatabaseService {
       } catch (err) {
         console.error('Failed to push cancelStockMovement to WebApp:', err);
       }
+    }
+  }
+
+  // ── Troubleshoot Tickets ────────────────────────────────────────────────
+
+  parseTroubleShoot(csvText) {
+    if (!csvText) {
+      this.troubleShootTickets = [];
+      this.persistTroubleShoot();
+      return;
+    }
+
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: h => h.trim()
+    });
+
+    const remoteEntries = (result.data || []).map(row => {
+      const id = this.findRowValue(row, ['id', 'ticket id', 'ticket_id', 'ticketid']);
+      const requestTimestamp = this.findRowValue(row, ['request timestamp', 'request_timestamp', 'requesttimestamp', 'timestamp']) || '';
+      const requestedBy = this.findRowValue(row, ['requested by', 'requested_by', 'requestedby']) || '';
+      const staffId = this.findRowValue(row, ['staff id', 'staff_id', 'staffid']) || '';
+      const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline']) || '';
+      const photo = this.findRowValue(row, ['photo', 'image', 'photo_url']) || '';
+      const reason = this.findRowValue(row, ['reason', 'reasons']) || '';
+      const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'pickername']) || '';
+      const soNumber = this.findRowValue(row, ['so number', 'so_number', 'sonumber']) || '';
+      const skuNumber = this.findRowValue(row, ['sku number', 'sku_number', 'skunumber', 'sku code', 'sku_code']) || '';
+      const productName = this.findRowValue(row, ['product name', 'product_name', 'productname']) || '';
+      const originRackName = this.findRowValue(row, ['origin rack name', 'origin_rack_name', 'originrackname']) || '';
+      const requestQuantity = this.findRowValue(row, ['request quantity', 'request_quantity', 'requestquantity', 'qty']) || '1';
+      const assignedBy = this.findRowValue(row, ['assigned by', 'assigned_by', 'assignedby']) || '';
+      const assignedTo = this.findRowValue(row, ['assigned to', 'assigned_to', 'assignedto']) || '';
+      const statusTicket = this.findRowValue(row, ['status ticket', 'status_ticket', 'statusticket', 'status']) || 'Open';
+      const troubleshootEvidence = this.findRowValue(row, ['troubleshoot evidence', 'troubleshoot_evidence', 'troubleshootevidence', 'evidence']) || '';
+      const foundQty = this.findRowValue(row, ['found qty', 'found_qty', 'foundqty']) || '0';
+      const foundAt = this.findRowValue(row, ['found at', 'found_at', 'foundat']) || '';
+      const deliveredAt = this.findRowValue(row, ['delivered at', 'delivered_at', 'deliveredat']) || '';
+      const pickedBy = this.findRowValue(row, ['picked by', 'picked_by', 'pickedby']) || '';
+      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updateat', 'updated at', 'updated_at']) || '';
+
+      return {
+        id: String(id).trim(),
+        requestTimestamp: String(requestTimestamp).trim(),
+        requestedBy: String(requestedBy).trim(),
+        staffId: String(staffId).trim(),
+        checkerLine: String(checkerLine).trim(),
+        photo: String(photo).trim(),
+        reason: String(reason).trim(),
+        pickerName: String(pickerName).trim(),
+        soNumber: String(soNumber).trim(),
+        skuNumber: String(skuNumber).trim(),
+        productName: String(productName).trim(),
+        originRackName: String(originRackName).trim(),
+        requestQuantity: parseInt(String(requestQuantity).trim() || '1', 10),
+        assignedBy: String(assignedBy).trim(),
+        assignedTo: String(assignedTo).trim(),
+        statusTicket: String(statusTicket).trim(),
+        troubleshootEvidence: String(troubleshootEvidence).trim(),
+        foundQty: parseInt(String(foundQty).trim() || '0', 10),
+        foundAt: String(foundAt).trim(),
+        deliveredAt: String(deliveredAt).trim(),
+        pickedBy: String(pickedBy).trim(),
+        updateAt: String(updateAt).trim()
+      };
+    }).filter(e => e.id);
+
+    this.troubleShootTickets = remoteEntries;
+    this.troubleShootTickets.sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+    this.persistTroubleShoot();
+  }
+
+  loadSavedTroubleShoot() {
+    try {
+      const saved = localStorage.getItem('irms_troubleshoot_tickets');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  persistTroubleShoot() {
+    try {
+      localStorage.setItem('irms_troubleshoot_tickets', JSON.stringify(this.troubleShootTickets));
+      cacheManager.setStore('troubleShoot', this.troubleShootTickets);
+    } catch (e) {
+      console.error('Failed to persist troubleShootTickets', e);
+    }
+  }
+
+  getTroubleShootTickets() {
+    return [...this.troubleShootTickets].sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+  }
+
+  getTroubleShootTicketsForUser(currentUser) {
+    const myName = (currentUser.name || '').trim().toLowerCase();
+    const myId = (currentUser.staffId || '').trim().toLowerCase();
+    return this.troubleShootTickets.filter(t => {
+      const reqBy = (t.requestedBy || '').trim().toLowerCase();
+      const sId = (t.staffId || '').trim().toLowerCase();
+      return reqBy === myName || sId === myId;
+    }).sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+  }
+
+  getTroubleShootTasksForUser(currentUser) {
+    const myName = (currentUser.name || '').trim().toLowerCase();
+    const myId = (currentUser.staffId || '').trim().toLowerCase();
+    return this.troubleShootTickets.filter(t => {
+      const assignedTo = (t.assignedTo || '').trim().toLowerCase();
+      const pickedBy = (t.pickedBy || '').trim().toLowerCase();
+      return assignedTo === myName || assignedTo === myId || pickedBy === myId;
+    }).sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+  }
+
+  /**
+   * Generate a 6-digit random numeric ID string (reuse existing pattern if available)
+   */
+  generateTroubleShootId(requesterRole) {
+    const prefix = (requesterRole || '').toLowerCase() === 'picker' ? 'TS-PC-' : 'TS-RC-';
+    const num = String(Math.floor(100000 + Math.random() * 900000));
+    const id = prefix + num;
+    // Ensure uniqueness against existing tickets
+    if (this.troubleShootTickets.some(t => t.id === id)) {
+      return this.generateTroubleShootId(requesterRole); // Retry on collision
+    }
+    return id;
+  }
+
+  async createTroubleShootTicket(ticketData, currentUser) {
+    const role = (currentUser.role || '').trim().toLowerCase();
+    const requesterRole = (role === 'picker') ? 'picker' : 'checker';
+    const id = this.generateTroubleShootId(requesterRole);
+    const timestamp = new Date().toISOString();
+
+    const newTicket = {
+      id,
+      requestTimestamp: timestamp,
+      requestedBy: String(currentUser.name || '').trim(),
+      staffId: String(currentUser.staffId || '').trim(),
+      checkerLine: requesterRole === 'checker' ? String(ticketData.checkerLine || '').trim() : '',
+      photo: String(ticketData.photo || '').trim(),
+      reason: String(ticketData.reason || '').trim(),
+      pickerName: String(ticketData.pickerName || '').trim(),
+      soNumber: String(ticketData.soNumber || '').trim(),
+      skuNumber: String(ticketData.skuNumber || '').trim(),
+      productName: String(ticketData.productName || '').trim(),
+      originRackName: String(ticketData.originRackName || '').trim(),
+      requestQuantity: parseInt(String(ticketData.requestQuantity || '1').trim(), 10),
+      assignedBy: '',
+      assignedTo: '',
+      statusTicket: 'Open',
+      troubleshootEvidence: '',
+      foundQty: 0,
+      foundAt: '',
+      deliveredAt: '',
+      pickedBy: '',
+      updateAt: ''
+    };
+
+    this.troubleShootTickets.unshift(newTicket);
+    this.persistTroubleShoot();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'createTroubleShoot', ...newTicket, requesterRole })
+        });
+        setTimeout(() => this.syncGoogleSheets(['troubleShoot']), 2500);
+      } catch (err) {
+        console.error('Failed to push createTroubleShoot to WebApp:', err);
+      }
+    }
+
+    return newTicket;
+  }
+
+  async assignTroubleShootTicket(ticketId, assignedBy, assignedTo) {
+    const idx = this.troubleShootTickets.findIndex(t => String(t.id).trim() === String(ticketId).trim());
+    if (idx === -1) throw new Error(`Troubleshoot ticket "${ticketId}" not found`);
+
+    const ticket = this.troubleShootTickets[idx];
+    if (ticket.statusTicket !== 'Open') {
+      throw new Error('Only Open tickets can be assigned');
+    }
+
+    this.troubleShootTickets[idx] = {
+      ...ticket,
+      statusTicket: 'Assigned',
+      assignedBy: String(assignedBy).trim(),
+      assignedTo: String(assignedTo).trim(),
+      updateAt: new Date().toISOString()
+    };
+    this.persistTroubleShoot();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'assignTroubleShoot',
+            ticketId,
+            assignedBy: String(assignedBy).trim(),
+            assignedTo: String(assignedTo).trim(),
+            updateAt: new Date().toISOString()
+          })
+        });
+        setTimeout(() => this.syncGoogleSheets(['troubleShoot']), 2500);
+      } catch (err) {
+        console.error('Failed to push assignTroubleShoot to WebApp:', err);
+      }
+    }
+
+    return this.troubleShootTickets[idx];
+  }
+
+  async pickTroubleShootTicket(ticketId, currentUser) {
+    const idx = this.troubleShootTickets.findIndex(t => String(t.id).trim() === String(ticketId).trim());
+    if (idx === -1) throw new Error(`Troubleshoot ticket "${ticketId}" not found`);
+
+    const ticket = this.troubleShootTickets[idx];
+    if (ticket.statusTicket !== 'Assigned') {
+      throw new Error('Only Assigned tickets can be picked up. This ticket may have been picked by someone else.');
+    }
+
+    this.troubleShootTickets[idx] = {
+      ...ticket,
+      statusTicket: 'Picked Up',
+      pickedBy: String(currentUser.staffId || '').trim(),
+      updateAt: new Date().toISOString()
+    };
+    this.persistTroubleShoot();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'pickTroubleShoot',
+            ticketId,
+            pickedBy: String(currentUser.staffId || '').trim(),
+            updateAt: new Date().toISOString()
+          })
+        });
+        setTimeout(() => this.syncGoogleSheets(['troubleShoot']), 2500);
+      } catch (err) {
+        console.error('Failed to push pickTroubleShoot to WebApp:', err);
+      }
+    }
+
+    return this.troubleShootTickets[idx];
+  }
+
+  async completeTroubleShootTicket(ticketId, resolutionData) {
+    const idx = this.troubleShootTickets.findIndex(t => String(t.id).trim() === String(ticketId).trim());
+    if (idx === -1) throw new Error(`Troubleshoot ticket "${ticketId}" not found`);
+
+    const ticket = this.troubleShootTickets[idx];
+    if (ticket.statusTicket !== 'Picked Up') {
+      throw new Error('Only Picked Up tickets can be completed');
+    }
+
+    const foundQty = parseInt(String(resolutionData.foundQty || '0').trim(), 10);
+    let statusTicket = 'Not Found';
+    if (resolutionData.statusTicket) {
+      statusTicket = resolutionData.statusTicket;
+    } else if (foundQty > 0 && foundQty >= ticket.requestQuantity) {
+      statusTicket = 'Found';
+    } else if (foundQty > 0) {
+      statusTicket = 'Found Partial';
+    }
+
+    // Determine foundFrom source for GAS backend SOH deduction logic
+    const foundAt = String(resolutionData.foundAt || '').trim();
+    let foundFrom = '';
+    if (foundAt) {
+      if (foundAt.toUpperCase().includes('STG')) {
+        foundFrom = 'soh';
+      } else {
+        // Check if it's a SOHWH rack
+        const sohwhMatch = this.sohwh.some(s =>
+          String(s.rackName).trim().toLowerCase() === foundAt.toLowerCase()
+        );
+        if (sohwhMatch) {
+          foundFrom = 'sohwh';
+        }
+      }
+    }
+
+    this.troubleShootTickets[idx] = {
+      ...ticket,
+      statusTicket,
+      foundQty,
+      foundAt,
+      troubleshootEvidence: String(resolutionData.troubleshootEvidence || '').trim(),
+      deliveredAt: String(resolutionData.deliveredAt || '').trim(),
+      updateAt: new Date().toISOString()
+    };
+    this.persistTroubleShoot();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'completeTroubleShoot',
+            ticketId,
+            statusTicket,
+            foundQty,
+            foundAt,
+            foundFrom,
+            skuNumber: ticket.skuNumber,
+            productName: ticket.productName,
+            troubleshootEvidence: String(resolutionData.troubleshootEvidence || '').trim(),
+            deliveredAt: String(resolutionData.deliveredAt || '').trim(),
+            updateAt: new Date().toISOString()
+          })
+        });
+        setTimeout(() => this.syncGoogleSheets(['troubleShoot', 'soh']), 2500);
+      } catch (err) {
+        console.error('Failed to push completeTroubleShoot to WebApp:', err);
+      }
+    }
+
+    return this.troubleShootTickets[idx];
+  }
+
+  /**
+   * Upload a photo to Google Drive via GAS DriveApp.
+   * Sends base64 image data to GAS which saves it and returns a Drive URL.
+   * Since we use mode: 'no-cors', we can't read the response. The URL will be
+   * written to the sheet by GAS and synced on next data fetch.
+   */
+  async uploadTroubleShootPhoto(base64Data, fileName, ticketId, fieldName) {
+    if (!this.webAppUrl) throw new Error('No WebApp URL configured');
+
+    try {
+      await fetch(this.webAppUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'uploadTroubleShootPhoto',
+          base64Data,
+          fileName: fileName || `ts_photo_${Date.now()}.jpg`,
+          ticketId: ticketId || '',
+          fieldName: fieldName || 'photo'
+        })
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to upload troubleshoot photo:', err);
+      throw err;
     }
   }
 }

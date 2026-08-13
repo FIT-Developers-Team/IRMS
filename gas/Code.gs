@@ -54,6 +54,16 @@ function doPost(e) {
       return handleUpdateCheckerLine(ss, data);
     } else if (action === 'deleteCheckerLine') {
       return handleDeleteCheckerLine(ss, data);
+    } else if (action === 'createTroubleShoot') {
+      return handleCreateTroubleShoot(ss, data);
+    } else if (action === 'assignTroubleShoot') {
+      return handleAssignTroubleShoot(ss, data);
+    } else if (action === 'pickTroubleShoot') {
+      return handlePickTroubleShoot(ss, data);
+    } else if (action === 'completeTroubleShoot') {
+      return handleCompleteTroubleShoot(ss, data);
+    } else if (action === 'uploadTroubleShootPhoto') {
+      return handleUploadTroubleShootPhoto(ss, data);
     } else {
       // Default: Create Request_Checker entry
       return handleCreateRequestChecker(ss, data);
@@ -231,8 +241,44 @@ function appendRowByHeader(sheet, payload, defaultHeaders) {
 }
 
 function getValueForHeader(cleanHeader, payload) {
+  // Troubleshoot Module explicit mappings
+  if (cleanHeader === 'requesttimestamp') {
+    return payload.requestTimestamp || '';
+  }
+  if (cleanHeader === 'requestedby') {
+    return payload.requestedBy || '';
+  }
+  if (cleanHeader === 'originrackname') {
+    return payload.originRackName || '';
+  }
+  if (cleanHeader === 'requestquantity') {
+    return payload.requestQuantity || payload.qty || 1;
+  }
+  if (cleanHeader === 'photo') {
+    return payload.photo || '';
+  }
+  if (cleanHeader === 'assignedto') {
+    return payload.assignedTo || '';
+  }
+  if (cleanHeader === 'statusticket') {
+    return payload.statusTicket || payload.status || 'Open';
+  }
+  if (cleanHeader === 'troubleshootevidence') {
+    return payload.troubleshootEvidence || '';
+  }
+  if (cleanHeader === 'foundqty') {
+    return payload.foundQty !== undefined ? payload.foundQty : '';
+  }
+  if (cleanHeader === 'deliveredat') {
+    return payload.deliveredAt || '';
+  }
+  if (cleanHeader === 'updateat') {
+    return payload.updateAt || payload.updatedAt || '';
+  }
+
+  // Standard mappings
   if (cleanHeader === 'ticketid' || cleanHeader === 'uniqueid' || cleanHeader === 'id') {
-    return payload.ticketId || payload.uniqueid || payload.ticket_id || '';
+    return payload.ticketId || payload.uniqueid || payload.ticket_id || payload.id || '';
   }
   if (cleanHeader === 'pickingid') {
     return payload.pickingId || payload.picking_id || '';
@@ -1448,3 +1494,328 @@ function handleDeleteCheckerLine(ss, data) {
 }
 
 // lookupSkuDetails removed (lookups are performed client-side to improve save response latency)
+
+// ── Troubleshoot Handlers ─────────────────────────────────────────────────────
+
+function handleCreateTroubleShoot(ss, data) {
+  var tsHeaders = [
+    "id", "Request Timestamp", "Requested By", "Staff ID", "Checker Line",
+    "Photo", "Reason", "Picker Name", "SO Number", "SKU Number",
+    "Product Name", "Origin Rack Name", "Request Quantity",
+    "Assigned By", "Assigned To", "Status Ticket",
+    "Troubleshoot Evidence", "Found Qty", "Found At",
+    "Delivered At", "Picked By", "Update At"
+  ];
+  var tsSheet = getOrCreateSheet(ss, "Trouble_Shoot", tsHeaders);
+
+  var payload = {
+    id: String(data.id || '').trim(),
+    requestTimestamp: String(data.requestTimestamp || new Date().toISOString()),
+    requestedBy: String(data.requestedBy || '').trim(),
+    staffId: String(data.staffId || '').trim(),
+    checkerLine: String(data.checkerLine || '').trim(),
+    photo: String(data.photo || '').trim(),
+    reason: String(data.reason || '').trim(),
+    pickerName: String(data.pickerName || '').trim(),
+    soNumber: String(data.soNumber || '').trim(),
+    skuNumber: String(data.skuNumber || '').trim(),
+    productName: String(data.productName || '').trim(),
+    originRackName: String(data.originRackName || '').trim(),
+    requestQuantity: parseInt(data.requestQuantity || 1, 10),
+    assignedBy: '',
+    assignedTo: '',
+    statusTicket: 'Open',
+    troubleshootEvidence: '',
+    foundQty: '',
+    foundAt: '',
+    deliveredAt: '',
+    pickedBy: '',
+    updateAt: ''
+  };
+
+  appendRowByHeader(tsSheet, payload, tsHeaders);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", id: payload.id }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleAssignTroubleShoot(ss, data) {
+  var tsSheet = ss.getSheetByName("Trouble_Shoot");
+  if (!tsSheet) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: "Trouble_Shoot sheet not found" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var ticketId = String(data.ticketId || '').trim();
+  var values = tsSheet.getDataRange().getValues();
+  var headers = values[0];
+
+  var idCol = -1, statusCol = -1, assignedByCol = -1, assignedToCol = -1, updateAtCol = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanH === 'id') idCol = h;
+    if (cleanH === 'statusticket') statusCol = h;
+    if (cleanH === 'assignedby') assignedByCol = h;
+    if (cleanH === 'assignedto') assignedToCol = h;
+    if (cleanH === 'updateat') updateAtCol = h;
+  }
+
+  if (idCol === -1) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: "ID column not found" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  for (var r = 1; r < values.length; r++) {
+    if (String(values[r][idCol]).trim() === ticketId) {
+      var currentStatus = String(values[r][statusCol] || '').trim();
+      if (currentStatus !== 'Open') {
+        return ContentService
+          .createTextOutput(JSON.stringify({ result: "error", message: "Ticket is no longer Open (current: " + currentStatus + ")" }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      if (statusCol !== -1) tsSheet.getRange(r + 1, statusCol + 1).setValue('Assigned');
+      if (assignedByCol !== -1) tsSheet.getRange(r + 1, assignedByCol + 1).setValue(String(data.assignedBy || ''));
+      if (assignedToCol !== -1) tsSheet.getRange(r + 1, assignedToCol + 1).setValue(String(data.assignedTo || ''));
+      if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setValue(data.updateAt || new Date().toISOString());
+      break;
+    }
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", ticketId: ticketId }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handlePickTroubleShoot(ss, data) {
+  var tsSheet = ss.getSheetByName("Trouble_Shoot");
+  if (!tsSheet) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: "Trouble_Shoot sheet not found" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var ticketId = String(data.ticketId || '').trim();
+  var values = tsSheet.getDataRange().getValues();
+  var headers = values[0];
+
+  var idCol = -1, statusCol = -1, pickedByCol = -1, updateAtCol = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanH === 'id') idCol = h;
+    if (cleanH === 'statusticket') statusCol = h;
+    if (cleanH === 'pickedby') pickedByCol = h;
+    if (cleanH === 'updateat') updateAtCol = h;
+  }
+
+  if (idCol === -1) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: "ID column not found" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  for (var r = 1; r < values.length; r++) {
+    if (String(values[r][idCol]).trim() === ticketId) {
+      var currentStatus = String(values[r][statusCol] || '').trim();
+      if (currentStatus !== 'Assigned') {
+        return ContentService
+          .createTextOutput(JSON.stringify({ result: "error", message: "Ticket is no longer Assigned (current: " + currentStatus + "). It may have been picked by someone else." }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+      if (statusCol !== -1) tsSheet.getRange(r + 1, statusCol + 1).setValue('Picked Up');
+      if (pickedByCol !== -1) tsSheet.getRange(r + 1, pickedByCol + 1).setValue(String(data.pickedBy || ''));
+      if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setValue(data.updateAt || new Date().toISOString());
+      break;
+    }
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", ticketId: ticketId }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleCompleteTroubleShoot(ss, data) {
+  var tsSheet = ss.getSheetByName("Trouble_Shoot");
+  if (!tsSheet) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: "Trouble_Shoot sheet not found" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var ticketId = String(data.ticketId || '').trim();
+  var statusTicket = String(data.statusTicket || 'Not Found').trim();
+  var foundQty = parseInt(data.foundQty || 0, 10);
+  var foundAt = String(data.foundAt || '').trim();
+  var foundFrom = String(data.foundFrom || '').trim();
+  var skuNumber = String(data.skuNumber || '').trim();
+  var productName = String(data.productName || '').trim();
+  var troubleshootEvidence = String(data.troubleshootEvidence || '').trim();
+  var deliveredAt = String(data.deliveredAt || '').trim();
+  var updateAt = data.updateAt || new Date().toISOString();
+
+  // 1. Update Trouble_Shoot sheet
+  var values = tsSheet.getDataRange().getValues();
+  var headers = values[0];
+
+  var colMap = {};
+  for (var h = 0; h < headers.length; h++) {
+    var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+    colMap[cleanH] = h;
+  }
+
+  var idCol = colMap['id'];
+  if (idCol === undefined) idCol = -1;
+
+  for (var r = 1; r < values.length; r++) {
+    if (String(values[r][idCol]).trim() === ticketId) {
+      if (colMap['statusticket'] !== undefined) tsSheet.getRange(r + 1, colMap['statusticket'] + 1).setValue(statusTicket);
+      if (colMap['foundqty'] !== undefined) tsSheet.getRange(r + 1, colMap['foundqty'] + 1).setValue(foundQty);
+      if (colMap['foundat'] !== undefined) tsSheet.getRange(r + 1, colMap['foundat'] + 1).setValue(foundAt);
+      if (colMap['troubleshootevidence'] !== undefined) tsSheet.getRange(r + 1, colMap['troubleshootevidence'] + 1).setValue(troubleshootEvidence);
+      if (colMap['deliveredat'] !== undefined) tsSheet.getRange(r + 1, colMap['deliveredat'] + 1).setValue(deliveredAt);
+      if (colMap['updateat'] !== undefined) tsSheet.getRange(r + 1, colMap['updateat'] + 1).setValue(updateAt);
+      break;
+    }
+  }
+
+  // 2. SOH Deduction — only if found at SOH STG rack
+  if ((statusTicket === 'Found' || statusTicket === 'Found Partial') && foundFrom === 'soh' && foundAt && foundQty > 0) {
+    try {
+      var sohSheet = ss.getSheetByName("SOH");
+      if (sohSheet) {
+        var sohValues = sohSheet.getDataRange().getValues();
+        var sHeaders = sohValues[0];
+
+        var sUpdatedAtCol = -1, sSkuCol = -1, sLocCol = -1, sQtySohCol = -1;
+        for (var col = 0; col < sHeaders.length; col++) {
+          var sCleanH = String(sHeaders[col]).toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (sCleanH === 'updatedat') sUpdatedAtCol = col;
+          if (sCleanH === 'skunumber' || sCleanH === 'skucode' || sCleanH === 'sku') sSkuCol = col;
+          if (sCleanH === 'racklocation' || sCleanH === 'location') sLocCol = col;
+          if (sCleanH === 'qtysoh' || sCleanH === 'qty') sQtySohCol = col;
+        }
+
+        if (sSkuCol !== -1 && sLocCol !== -1 && sQtySohCol !== -1) {
+          for (var sr = 1; sr < sohValues.length; sr++) {
+            var rowSku = String(sohValues[sr][sSkuCol]).replace(/^'/, '').trim().toLowerCase();
+            var rowLoc = String(sohValues[sr][sLocCol]).trim().toLowerCase();
+            var targetSku = String(skuNumber || '').replace(/^'/, '').trim().toLowerCase();
+            var targetLoc = String(foundAt || '').trim().toLowerCase();
+
+            if (rowSku === targetSku && rowLoc === targetLoc) {
+              var currQty = parseInt(sohValues[sr][sQtySohCol] || 0, 10);
+              var newQty = Math.max(0, currQty - foundQty);
+              sohSheet.getRange(sr + 1, sQtySohCol + 1).setValue(newQty);
+              if (sUpdatedAtCol !== -1) {
+                var formattedNow = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+                sohSheet.getRange(sr + 1, sUpdatedAtCol + 1).setValue(formattedNow);
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      // 3. Append Stock_Activity record
+      var saHeaders = [
+        "Activity ID", "Ticket ID", "Sku Code", "Product Name",
+        "Qty", "Operator", "From Location", "To Location", "Timestamp"
+      ];
+      var saSheet = getOrCreateSheet(ss, "Stock_Activity", saHeaders);
+      var saPayload = {
+        activityId: "SA-" + Math.floor(100000 + Math.random() * 900000),
+        ticketId: ticketId,
+        skuCode: skuNumber,
+        productName: productName,
+        qty: foundQty,
+        operator: '[-]',
+        fromLocation: foundAt,
+        toLocation: 'Troubleshoot Resolution',
+        timestamp: new Date().toISOString()
+      };
+      appendRowByHeader(saSheet, saPayload, saHeaders);
+
+    } catch (sohErr) {
+      Logger.log("SOH deduction error in troubleshoot: " + sohErr.toString());
+    }
+  }
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ result: "success", ticketId: ticketId, statusTicket: statusTicket }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function handleUploadTroubleShootPhoto(ss, data) {
+  try {
+    var base64Data = String(data.base64Data || '');
+    var fileName = String(data.fileName || ('ts_photo_' + Date.now() + '.jpg'));
+    var ticketId = String(data.ticketId || '').trim();
+    var fieldName = String(data.fieldName || 'photo').trim();
+
+    if (!base64Data) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ result: "error", message: "No image data provided" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Remove data URL prefix if present (e.g., "data:image/jpeg;base64,")
+    var cleanBase64 = base64Data.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
+
+    // Create or find the target folder
+    var folderName = 'IRMS_Troubleshoot_Photos';
+    var folders = DriveApp.getFoldersByName(folderName);
+    var folder;
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      folder = DriveApp.createFolder(folderName);
+    }
+
+    // Create the file in the folder
+    var blob = Utilities.newBlob(Utilities.base64Decode(cleanBase64), 'image/jpeg', fileName);
+    var file = folder.createFile(blob);
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    var fileUrl = file.getUrl();
+
+    // Update the Trouble_Shoot sheet with the photo URL
+    if (ticketId) {
+      var tsSheet = ss.getSheetByName("Trouble_Shoot");
+      if (tsSheet) {
+        var values = tsSheet.getDataRange().getValues();
+        var headers = values[0];
+
+        var idCol = -1, photoCol = -1, evidenceCol = -1;
+        for (var h = 0; h < headers.length; h++) {
+          var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (cleanH === 'id') idCol = h;
+          if (cleanH === 'photo') photoCol = h;
+          if (cleanH === 'troubleshootevidence') evidenceCol = h;
+        }
+
+        if (idCol !== -1) {
+          for (var r = 1; r < values.length; r++) {
+            if (String(values[r][idCol]).trim() === ticketId) {
+              var targetCol = (fieldName === 'troubleshootEvidence' || fieldName === 'evidence') ? evidenceCol : photoCol;
+              if (targetCol !== -1) {
+                tsSheet.getRange(r + 1, targetCol + 1).setValue(fileUrl);
+              }
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "success", fileUrl: fileUrl }))
+      .setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    Logger.log("Photo upload error: " + err.toString());
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}

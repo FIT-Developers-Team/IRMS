@@ -59,6 +59,7 @@ this dataset is used to store Sales Order (SO) data, detailing the picker assign
 |product_name|System generated|
 |status|System generated|
 |SUM(request_quantity)|System generated|
+|Wave|System Generated (New)|
 
 # Stock Acitivty
 
