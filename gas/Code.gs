@@ -416,6 +416,9 @@ function getValueForHeader(cleanHeader, payload) {
   if (cleanHeader === 'zone' || cleanHeader === 'zonename') {
     return payload.zoneName || payload.zone || '';
   }
+  if (cleanHeader === 'wave' || cleanHeader === 'wavenumber') {
+    return payload.wave || '';
+  }
 
   return '';
 }
@@ -461,7 +464,8 @@ function handleCreateRequestChecker(ss, data) {
     "Sku Code", 
     "Product Name", 
     "Qty", 
-    "Status"
+    "Status",
+    "Reason"
   ];
   var sheet = getOrCreateSheet(ss, "Request_Checker", defaultHeaders);
   var ticketIdVal = data.ticketId || data.uniqueid || '';
@@ -1504,7 +1508,7 @@ function handleCreateTroubleShoot(ss, data) {
     "Product Name", "Origin Rack Name", "Request Quantity",
     "Assigned By", "Assigned To", "Status Ticket",
     "Troubleshoot Evidence", "Found Qty", "Found At",
-    "Delivered At", "Picked By", "Update At"
+    "Delivered At", "Picked By", "Update At", "Wave"
   ];
   var tsSheet = getOrCreateSheet(ss, "Trouble_Shoot", tsHeaders);
 
@@ -1530,7 +1534,8 @@ function handleCreateTroubleShoot(ss, data) {
     foundAt: '',
     deliveredAt: '',
     pickedBy: '',
-    updateAt: ''
+    updateAt: '',
+    wave: String(data.wave || '').trim()
   };
 
   appendRowByHeader(tsSheet, payload, tsHeaders);

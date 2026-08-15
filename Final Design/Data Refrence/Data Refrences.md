@@ -163,3 +163,17 @@ this dataset is used to store user data that is used for IRMS process, it will b
 |Qty Stock|System generated|
 |Reserve Stock|System generated|
 |Final Virtual SOH|System generated|
+
+# WH_PLANOGRAM
+
+## Data Structure
+|Column|Behaviour|
+|------|---------|
+|L1 Category|System generated|
+|Zone Suggestion|System generated|
+|Aisle Suggestion|System generated|
+
+Example:
+| Minuman | SRA1 | 01 - 08 |
+| Snack | SRA1 | 09 - 10 |
+| Makanan Beku | SFRA1 | 01 - 02 |

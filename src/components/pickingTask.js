@@ -575,6 +575,7 @@ export function renderPickingTask(container, currentUser) {
         requestedBy: r.checkerName || 'N/A',
         sourceProcess: 'Request_Checker',
         checkerLine: r.checkerLine || '',
+        reason: r.reason || '',
         sourceLocation: '',
         timestamp: r.timestamp
       })),
@@ -614,7 +615,8 @@ export function renderPickingTask(container, currentUser) {
         item.productName.toLowerCase().includes(q) ||
         item.requestedBy.toLowerCase().includes(q) ||
         item.checkerLine.toLowerCase().includes(q) ||
-        item.sourceLocation.toLowerCase().includes(q)
+        item.sourceLocation.toLowerCase().includes(q) ||
+        (item.reason && item.reason.toLowerCase().includes(q))
       );
     }
 
@@ -669,6 +671,11 @@ export function renderPickingTask(container, currentUser) {
           <div style="font-size: 11px; margin-top: 3px; font-weight: 600; color: #0369a1; display: flex; align-items: center; gap: 3px;">
             <span class="material-icons-round" style="font-size: 12px;">view_stream</span> ${escapeHtml(item.checkerLine || 'Line N/A')}
           </div>
+          ${item.reason ? `
+            <div style="font-size: 11px; margin-top: 3px; font-weight: 700; color: #b45309; display: flex; align-items: center; gap: 3px;">
+              <span class="material-icons-round" style="font-size: 12px;">flag</span> ${escapeHtml(item.reason)}
+            </div>
+          ` : ''}
         `;
       } else if (item.sourceProcess === 'Lost_And_Found') {
         sourceBadgeHtml = `
@@ -742,6 +749,13 @@ export function renderPickingTask(container, currentUser) {
           <div class="card-body-content">
             <div class="product-sku">SKU: <strong>${escapeHtml(item.sku)}</strong></div>
             <div class="product-name">${escapeHtml(item.productName)}</div>
+            ${item.reason ? `
+              <div style="margin-top: 4px;">
+                <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: #fef3c7; color: #92400e; display: inline-flex; align-items: center; gap: 3px;">
+                  <span class="material-icons-round" style="font-size: 12px;">flag</span> ${escapeHtml(item.reason)}
+                </span>
+              </div>
+            ` : ''}
           </div>
           
           <div class="card-footer-row">
@@ -1151,16 +1165,23 @@ export function renderPickingTask(container, currentUser) {
     let assignedToLocation = null;
     let isTransferLocation = false;
     let isDeductionLocation = false;
+    let planogramSuggestion = null;
 
-    if (task && (sourceInfo.sourceProcess === 'Stock_Movement' || (task.ticketId && (task.ticketId.startsWith('SM-') || task.ticketId.startsWith('SM'))))) {
-      const entry = db.stockMovements.find(m => String(m.movementId || m.ticketId || m.id).trim() === String(task.ticketId).trim());
-      if (entry) {
-        if (entry.type === 'Transfer location') {
-          isTransferLocation = true;
-          assignedToLocation = String(entry.toLocation || '').trim();
-        } else if (entry.type === 'Stock deduction') {
-          isDeductionLocation = true;
-        }
+    const actualSku = (task && (task.skuCode || task.sku)) || sku;
+
+    if (task && (sourceInfo.sourceProcess === 'Stock_Movement' || (task.ticketId && (String(task.ticketId).trim().toUpperCase().startsWith('SM'))))) {
+      const cleanTicket = String(task.ticketId || '').trim().toLowerCase();
+      const entry = (db.stockMovements || []).find(m => {
+        const mId = String(m.movementId || m.ticketId || m.id || '').trim().toLowerCase();
+        return mId === cleanTicket;
+      });
+      const moveType = String((entry && entry.type) || sourceInfo.type || '').trim().toLowerCase();
+      if (moveType === 'transfer location' || moveType.includes('transfer')) {
+        isTransferLocation = true;
+        assignedToLocation = String(entry ? entry.toLocation : '').trim();
+      } else if (moveType === 'stock deduction' || moveType.includes('deduction')) {
+        isDeductionLocation = true;
+        planogramSuggestion = db.getPlanogramSuggestionForSku(actualSku);
       }
     }
 
@@ -1188,7 +1209,37 @@ export function renderPickingTask(container, currentUser) {
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Product Name:</strong> ${productName}</div>
               <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;"><strong>Remaining Qty to Putaway:</strong> ${maxQty}</div>
               ${isTransferLocation ? `<div style="font-size: 12px; color: var(--primary-700); margin-top: 4px; font-weight: 700;"><strong>Assigned Location:</strong> ${escapeHtml(assignedToLocation)} (Transfer Location)</div>` : ''}
-              ${isDeductionLocation ? `<div style="font-size: 12px; color: var(--danger); margin-top: 4px; font-weight: 700;"><strong>Movement Type:</strong> Stock Deduction (Outside System)</div>` : ''}
+              ${isDeductionLocation ? `
+                <div style="font-size: 12px; color: var(--danger); margin-top: 4px; font-weight: 700;"><strong>Movement Type:</strong> Stock Deduction (Outside System)</div>
+                ${planogramSuggestion ? `
+                  <div style="margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-light);">
+                    <div style="font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: flex; align-items: center; gap: 4px;">
+                      <span class="material-icons-round" style="font-size: 15px; color: var(--primary-600);">map</span>
+                      <span>Planogram Suggestions (WH_PLANOGRAM)</span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+                      <div class="planogram-chip category" style="display: inline-flex; align-items: center; gap: 5px; background: #e0f2fe; color: #0369a1; padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid #bae6fd;">
+                        <span class="material-icons-round" style="font-size: 14px;">category</span>
+                        <span>L1: <strong>${escapeHtml(planogramSuggestion.l1Category || 'Not Mapped')}</strong></span>
+                      </div>
+                      ${(planogramSuggestion.suggestions && planogramSuggestion.suggestions.length > 0) ? planogramSuggestion.suggestions.map((sug, sIdx) => `
+                        <div style="display: inline-flex; align-items: center; gap: 6px; background: #ffffff; padding: 3px 8px; border-radius: 20px; border: 1.5px solid var(--border-light); box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+                          <span class="planogram-chip zone" style="display: inline-flex; align-items: center; gap: 4px; background: #fef3c7; color: #92400e; padding: 3px 10px; border-radius: 14px; font-size: 12px; font-weight: 700; border: 1px solid #fde68a;">
+                            <span class="material-icons-round" style="font-size: 13px;">place</span>
+                            <span>Zone: <strong>${escapeHtml(sug.zoneSuggestion || '-')}</strong></span>
+                          </span>
+                          <span class="planogram-chip aisle" style="display: inline-flex; align-items: center; gap: 4px; background: #ecfdf5; color: #065f46; padding: 3px 10px; border-radius: 14px; font-size: 12px; font-weight: 700; border: 1px solid #a7f3d0;">
+                            <span class="material-icons-round" style="font-size: 13px;">alt_route</span>
+                            <span>Aisle: <strong>${escapeHtml(sug.aisleSuggestion || '-')}</strong></span>
+                          </span>
+                        </div>
+                      `).join('') : `
+                        <span style="font-size: 11px; color: var(--text-muted); font-style: italic;">No specific zone/aisle planogram configured for this category</span>
+                      `}
+                    </div>
+                  </div>
+                ` : ''}
+              ` : ''}
             </div>
 
             <div class="form-grid">
@@ -1231,7 +1282,7 @@ export function renderPickingTask(container, currentUser) {
                     style="width: 100%; height: 42px; font-size: 13px; font-weight: 600;"
                   />
                   <span class="input-helper-text" id="putawayLocationHelper" style="color: var(--primary-600); font-weight: 600; display: block; margin-top: 4px;">
-                    Stock Deduction: Enter the destination location parameter outside IRMS.
+                    Stock Deduction: Enter destination parameter outside IRMS${planogramSuggestion && planogramSuggestion.suggestions && planogramSuggestion.suggestions.length > 0 ? ` (Suggested: ${planogramSuggestion.suggestions.map(s => `Zone ${s.zoneSuggestion || '-'}, Aisle ${s.aisleSuggestion || '-'}`).join(' | ')})` : ''}.
                   </span>
                 ` : `
                   <div class="custom-dropdown-container" id="putawayRackDropdown" style="position: relative; width: 100%;">
@@ -1534,6 +1585,7 @@ export function renderPickingTask(container, currentUser) {
           <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Line:</strong> <span style="font-weight: 700; color: #0369a1; background: #e0f2fe; padding: 2px 6px; border-radius: 6px; font-size: 11px;">${escapeHtml(chkLine)}</span></div>
           <div style="font-size: 13px; margin-bottom: 4px;"><strong>Checker Name:</strong> ${escapeHtml(chkName)}</div>
           <div style="font-size: 13px; margin-bottom: 4px;"><strong>SO Number:</strong> ${escapeHtml(soNum)}</div>
+          ${entry && entry.reason ? `<div style="font-size: 13px; margin-bottom: 4px;"><strong>Reason:</strong> <span style="font-weight: 700; color: #92400e; background: #fef3c7; padding: 2px 6px; border-radius: 6px; font-size: 11px;">${escapeHtml(entry.reason)}</span></div>` : ''}
           <div style="font-size: 13px;"><strong>Ticket Qty:</strong> ${ticketQty}</div>
         </div>
       `;

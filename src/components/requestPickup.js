@@ -33,6 +33,7 @@ export function renderRequestPickup(container, currentUser) {
               <th>Unique ID</th>
               <th>Checker Line</th>
               <th>Timestamp</th>
+              <th>Reason</th>
               <th>SO Number</th>
               <th>Picker Name</th>
               <th>Checker</th>
@@ -71,7 +72,7 @@ export function renderRequestPickup(container, currentUser) {
       `;
       requestTableBody.innerHTML = `
         <tr>
-          <td colspan="11">
+          <td colspan="12">
             ${emptyHtml}
           </td>
         </tr>
@@ -86,11 +87,25 @@ export function renderRequestPickup(container, currentUser) {
       const soStatus = soDetails ? soDetails.status : 'N/A';
       const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
 
+      let reasonBadgeStyle = 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;';
+      if (req.reason === 'Damaged') {
+        reasonBadgeStyle = 'background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;';
+      } else if (req.reason === 'Excess picking') {
+        reasonBadgeStyle = 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;';
+      } else if (req.reason === 'Wrong Picking') {
+        reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
+      }
+
       return `
         <tr>
           <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
           <td><span style="font-weight: 600; color: var(--primary-800);">${escapeHtml(req.checkerLine || '-')}</span></td>
           <td style="font-size: 12px; color: var(--text-secondary);">${new Date(req.timestamp).toLocaleString()}</td>
+          <td>
+            <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; ${reasonBadgeStyle}">
+              ${escapeHtml(req.reason || '-')}
+            </span>
+          </td>
           <td style="font-size: 12px; font-weight: 600;">${req.soNumber}</td>
           <td>${req.pickerName || 'N/A'}</td>
           <td><strong>${req.checkerName}</strong></td>
@@ -112,6 +127,15 @@ export function renderRequestPickup(container, currentUser) {
       const soStatus = soDetails ? soDetails.status : 'N/A';
       const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
 
+      let reasonBadgeStyle = 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;';
+      if (req.reason === 'Damaged') {
+        reasonBadgeStyle = 'background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;';
+      } else if (req.reason === 'Excess picking') {
+        reasonBadgeStyle = 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;';
+      } else if (req.reason === 'Wrong Picking') {
+        reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
+      }
+
       return `
         <div class="mobile-task-card">
           <div class="card-header-row">
@@ -122,6 +146,14 @@ export function renderRequestPickup(container, currentUser) {
           <div class="card-body-content">
             <div class="product-sku">SKU: <strong>${escapeHtml(req.skuNumber)}</strong></div>
             <div class="product-name">${escapeHtml(req.productName)}</div>
+            ${req.reason ? `
+              <div style="margin-top: 6px;">
+                <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; ${reasonBadgeStyle}">
+                  <span class="material-icons-round" style="font-size: 13px;">report_problem</span>
+                  ${escapeHtml(req.reason)}
+                </span>
+              </div>
+            ` : ''}
           </div>
           
           <div class="card-footer-row" style="margin-top: 8px;">
@@ -248,7 +280,7 @@ export function renderRequestPickup(container, currentUser) {
 
               <!-- Quantity Input -->
               <div class="form-field-wrapper">
-                <label class="form-label">Quantity</label>
+                <label class="form-label">Quantity <span style="color: var(--danger-500, #ef4444); font-weight: 700;">*</span></label>
                 <input 
                   type="number" 
                   id="qtyInput" 
@@ -257,6 +289,23 @@ export function renderRequestPickup(container, currentUser) {
                   value="1" 
                   required 
                 />
+              </div>
+
+              <!-- Reason Dropdown -->
+              <div class="form-field-wrapper">
+                <label class="form-label">Reason <span style="color: var(--danger-500, #ef4444); font-weight: 700;">*</span></label>
+                <div class="custom-dropdown-container" id="dropdown-request-reason" style="width: 100%;">
+                  <button type="button" class="custom-dropdown-trigger text-control" id="reasonDropdownTrigger" style="height: 42px; border-radius: 10px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; background: #ffffff; border: 1.5px solid var(--border-light); width: 100%;">
+                    <span class="trigger-label" id="reasonTriggerLabel" style="color: var(--text-muted);">Select Reason...</span>
+                    <span class="material-icons-round trigger-icon" style="font-size: 18px; color: var(--text-muted); transition: transform 0.2s;">expand_more</span>
+                  </button>
+                  <input type="hidden" id="reasonInput" value="" />
+                  <div class="custom-dropdown-menu" id="reasonDropdownMenu" style="z-index: 3000; width: 100%;">
+                    <div class="custom-dropdown-option" data-value="Damaged">Damaged</div>
+                    <div class="custom-dropdown-option" data-value="Excess picking">Excess picking</div>
+                    <div class="custom-dropdown-option" data-value="Wrong Picking">Wrong Picking</div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -290,6 +339,47 @@ export function renderRequestPickup(container, currentUser) {
     const skuMenu = modalOverlay.querySelector('#skuMenu');
     const selectedSkuDisplay = modalOverlay.querySelector('#selectedSkuDisplay');
     const qtyInput = modalOverlay.querySelector('#qtyInput');
+
+    const reasonInput = modalOverlay.querySelector('#reasonInput');
+    const reasonDropdownContainer = modalOverlay.querySelector('#dropdown-request-reason');
+    const reasonDropdownTrigger = modalOverlay.querySelector('#reasonDropdownTrigger');
+    const reasonTriggerLabel = modalOverlay.querySelector('#reasonTriggerLabel');
+
+    if (reasonDropdownContainer && reasonDropdownTrigger) {
+      const onReasonDocClick = (e) => {
+        if (!reasonDropdownContainer.contains(e.target)) {
+          reasonDropdownContainer.classList.remove('open');
+          document.removeEventListener('click', onReasonDocClick);
+        }
+      };
+
+      reasonDropdownTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = reasonDropdownContainer.classList.contains('open');
+        if (isOpen) {
+          reasonDropdownContainer.classList.remove('open');
+          document.removeEventListener('click', onReasonDocClick);
+        } else {
+          reasonDropdownContainer.classList.add('open');
+          document.addEventListener('click', onReasonDocClick);
+        }
+      });
+
+      reasonDropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.dataset.value;
+          reasonInput.value = val;
+          reasonTriggerLabel.textContent = val;
+          reasonTriggerLabel.style.color = 'var(--text-primary)';
+          reasonDropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(o => {
+            o.classList.toggle('active', o.dataset.value === val);
+          });
+          reasonDropdownContainer.classList.remove('open');
+          document.removeEventListener('click', onReasonDocClick);
+        });
+      });
+    }
 
     const soScannerBtn = modalOverlay.querySelector('#soScannerBtn');
     if (soScannerBtn) {
@@ -626,6 +716,13 @@ export function renderRequestPickup(container, currentUser) {
         return;
       }
 
+      const reasonVal = reasonInput ? reasonInput.value.trim() : '';
+      if (!reasonVal) {
+        showAlertModal('Please select a Reason for this pickup request (Damaged, Excess picking, or Wrong Picking).', 'Reason Required');
+        if (reasonDropdownTrigger) reasonDropdownTrigger.focus();
+        return;
+      }
+
       submitRequestBtn.disabled = true;
       showBlockerLock('Submitting Pickup Request to Google Sheets...');
       try {
@@ -636,7 +733,8 @@ export function renderRequestPickup(container, currentUser) {
           soNumber: currentSoVal,
           skuNumber: selectedSku.skuNumber,
           productName: selectedSku.productName,
-          qty: qty
+          qty: qty,
+          reason: reasonVal
         });
 
         closeModal();

@@ -195,7 +195,7 @@ export function renderTroubleShoot(container, currentUser) {
 
     if (searchQuery) {
       filtered = filtered.filter(t => {
-        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.requestedBy, t.assignedTo, t.originRackName, t.reason].join(' ').toLowerCase();
+        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.requestedBy, t.assignedTo, t.originRackName, t.reason, t.wave].join(' ').toLowerCase();
         return haystack.includes(searchQuery);
       });
     }
@@ -232,8 +232,9 @@ export function renderTroubleShoot(container, currentUser) {
             <span style="grid-column: 1 / -1;"><strong>Product:</strong> ${escapeHtml(t.productName)}</span>
             <span><strong>Rack:</strong> ${escapeHtml(t.originRackName)}</span>
             <span><strong>Qty:</strong> ${escapeHtml(t.requestQuantity)}</span>
+            <span><strong>Wave:</strong> <span style="color: var(--primary-700); font-weight: 700;">${escapeHtml(t.wave || '-')}</span></span>
             <span><strong>Reason:</strong> ${escapeHtml(t.reason)}</span>
-            <span><strong>By:</strong> ${escapeHtml(t.requestedBy)} · ${timeAgo}</span>
+            <span style="grid-column: 1 / -1;"><strong>By:</strong> ${escapeHtml(t.requestedBy)} · ${timeAgo}</span>
           </div>
           <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; border-top: 1px dashed var(--border-light); padding-top: 8px;">
             <div style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
@@ -320,6 +321,10 @@ export function renderTroubleShoot(container, currentUser) {
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Request Quantity</span>
                 <span style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(ticket.requestQuantity || 1)}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Wave</span>
+                <span style="font-weight: 700; color: var(--primary-700); font-size: 13px;">${escapeHtml(ticket.wave || '-')}</span>
               </div>
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Origin Rack</span>

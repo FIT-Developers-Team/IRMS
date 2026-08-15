@@ -4,6 +4,8 @@ import { openCameraScanner } from '../utils/scanner.js';
 export function renderTsTask(container, currentUser) {
   let searchQuery = '';
   let activeSubTab = 'myTasks';
+  let waveFilter = 'all';
+  let sortBy = 'newest';
 
   container.innerHTML = `
     <div class="card-panel ts-task-panel" style="display: flex; flex-direction: column; height: 100%; min-height: 0; box-sizing: border-box; overflow-y: auto;">
@@ -37,11 +39,55 @@ export function renderTsTask(container, currentUser) {
         </button>
       </div>
 
-      <!-- Search Area -->
-      <div style="margin-top: 12px; margin-bottom: 12px; flex-shrink: 0;">
+      <!-- Search & Filters Toolbar -->
+      <div style="margin-top: 12px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;">
         <div class="search-box" style="position: relative; width: 100%;">
           <span class="material-icons-round search-icon" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 20px; pointer-events: none;">search</span>
-          <input type="text" id="tsTaskSearch" class="text-control" placeholder="Search by SO, SKU, product, rack..." style="padding-left: 40px; width: 100%; border-radius: 12px; box-sizing: border-box;">
+          <input type="text" id="tsTaskSearch" class="text-control" placeholder="Search by SO, SKU, product, rack, wave..." style="padding-left: 40px; width: 100%; border-radius: 12px; box-sizing: border-box;">
+        </div>
+
+        <!-- Filter & Sort Bar -->
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;">
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; flex: 1;">
+            
+            <!-- Wave Filter Custom Dropdown -->
+            <div class="custom-dropdown-container" id="dropdown-ts-wave-filter" style="width: 160px;">
+              <button type="button" class="custom-dropdown-trigger" style="height: 34px; padding: 0 10px; font-size: 12px; border-radius: 10px;">
+                <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
+                  <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600); flex-shrink: 0;">waves</span>
+                  <span class="trigger-label" style="font-weight: 700;">All Waves</span>
+                </span>
+                <span class="material-icons-round trigger-icon">expand_more</span>
+              </button>
+              <div class="custom-dropdown-menu" style="z-index: 2500; max-height: 220px; overflow-y: auto;">
+                <div class="custom-dropdown-option active" data-value="all">All Waves</div>
+              </div>
+            </div>
+
+            <!-- Sort By Custom Dropdown -->
+            <div class="custom-dropdown-container" id="dropdown-ts-sort" style="width: 160px;">
+              <button type="button" class="custom-dropdown-trigger" style="height: 34px; padding: 0 10px; font-size: 12px; border-radius: 10px;">
+                <span style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
+                  <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600); flex-shrink: 0;">sort</span>
+                  <span class="trigger-label" style="font-weight: 700;">Newest First</span>
+                </span>
+                <span class="material-icons-round trigger-icon">expand_more</span>
+              </button>
+              <div class="custom-dropdown-menu" style="z-index: 2500; max-height: 220px; overflow-y: auto;">
+                <div class="custom-dropdown-option active" data-value="newest">Newest First</div>
+                <div class="custom-dropdown-option" data-value="oldest">Oldest First</div>
+                <div class="custom-dropdown-option" data-value="waveAsc">Wave (A → Z)</div>
+                <div class="custom-dropdown-option" data-value="waveDesc">Wave (Z → A)</div>
+                <div class="custom-dropdown-option" data-value="soNumber">SO Number</div>
+                <div class="custom-dropdown-option" data-value="rack">Rack Location</div>
+              </div>
+            </div>
+
+            <!-- Clear Filters Button -->
+            <button id="tsTaskClearFilterBtn" style="display: none; background: none; border: none; color: #ef4444; font-size: 11px; font-weight: 700; cursor: pointer; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 8px;">
+              <span class="material-icons-round" style="font-size: 14px;">close</span> Clear Filters
+            </button>
+          </div>
         </div>
       </div>
 
@@ -53,6 +99,9 @@ export function renderTsTask(container, currentUser) {
   `;
 
   const searchInput = container.querySelector('#tsTaskSearch');
+  const waveDropdownEl = container.querySelector('#dropdown-ts-wave-filter');
+  const sortDropdownEl = container.querySelector('#dropdown-ts-sort');
+  const clearFilterBtn = container.querySelector('#tsTaskClearFilterBtn');
   const listContainer = container.querySelector('#tsTaskList');
   const countBadge = container.querySelector('#tsTaskCountBadge');
   const subTabs = container.querySelectorAll('.ts-sub-tab');
@@ -61,10 +110,123 @@ export function renderTsTask(container, currentUser) {
   const badgeInProgress = container.querySelector('#subtabCountInProgress');
   const badgeCompleted = container.querySelector('#subtabCountCompleted');
 
+  // Custom Dropdown Helper Function
+  function setupDropdown(containerEl, initialVal, options, onChange) {
+    if (!containerEl) return { getValue: () => initialVal, setValue: () => {}, updateOptions: () => {} };
+    const triggerBtn = containerEl.querySelector('.custom-dropdown-trigger');
+    const menuEl = containerEl.querySelector('.custom-dropdown-menu');
+    if (!triggerBtn || !menuEl) return { getValue: () => initialVal, setValue: () => {}, updateOptions: () => {} };
+
+    let currentVal = initialVal;
+
+    function renderMenu() {
+      menuEl.innerHTML = options.map(opt => `
+        <div class="custom-dropdown-option ${opt.value === currentVal ? 'active' : ''}" data-value="${escapeHtml(opt.value)}">
+          ${escapeHtml(opt.label || opt.value)}
+        </div>
+      `).join('');
+
+      const found = options.find(o => o.value === currentVal) || options[0];
+      if (found) {
+        const labelSpan = triggerBtn.querySelector('.trigger-label');
+        if (labelSpan) labelSpan.textContent = found.label || found.value;
+      }
+    }
+
+    renderMenu();
+
+    triggerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.custom-dropdown-container.open').forEach(el => {
+        if (el !== containerEl) el.classList.remove('open', 'open-up');
+      });
+
+      const isOpen = containerEl.classList.contains('open');
+      if (isOpen) {
+        containerEl.classList.remove('open', 'open-up');
+      } else {
+        const rect = triggerBtn.getBoundingClientRect();
+        let spaceBelow = window.innerHeight - rect.bottom;
+        if (spaceBelow < 210) {
+          containerEl.classList.add('open-up');
+        } else {
+          containerEl.classList.remove('open-up');
+        }
+        containerEl.classList.add('open');
+      }
+    });
+
+    menuEl.addEventListener('click', (e) => {
+      const optEl = e.target.closest('.custom-dropdown-option');
+      if (!optEl) return;
+      currentVal = optEl.dataset.value;
+      const found = options.find(o => o.value === currentVal);
+      const labelSpan = triggerBtn.querySelector('.trigger-label');
+      if (labelSpan) labelSpan.textContent = found ? (found.label || found.value) : optEl.textContent.trim();
+      containerEl.classList.remove('open', 'open-up');
+      renderMenu();
+      if (typeof onChange === 'function') onChange(currentVal);
+    });
+
+    return {
+      getValue: () => currentVal,
+      setValue: (val) => {
+        currentVal = val;
+        renderMenu();
+      },
+      updateOptions: (newOpts, newVal) => {
+        options = newOpts;
+        if (newVal !== undefined) currentVal = newVal;
+        renderMenu();
+      }
+    };
+  }
+
+  // Setup Sort Custom Dropdown
+  const sortDropdown = setupDropdown(sortDropdownEl, 'newest', [
+    { value: 'newest', label: 'Newest First' },
+    { value: 'oldest', label: 'Oldest First' },
+    { value: 'waveAsc', label: 'Wave (A → Z)' },
+    { value: 'waveDesc', label: 'Wave (Z → A)' },
+    { value: 'soNumber', label: 'SO Number' },
+    { value: 'rack', label: 'Rack Location' }
+  ], (val) => {
+    sortBy = val;
+    renderList();
+  });
+
+  // Setup Wave Custom Dropdown
+  const waveDropdown = setupDropdown(waveDropdownEl, 'all', [
+    { value: 'all', label: 'All Waves' }
+  ], (val) => {
+    waveFilter = val;
+    renderList();
+  });
+
+  // Document click listener to close open dropdowns
+  const onDocClick = (e) => {
+    if (!e.target.closest('.custom-dropdown-container')) {
+      container.querySelectorAll('.custom-dropdown-container.open').forEach(el => el.classList.remove('open', 'open-up'));
+    }
+  };
+  document.addEventListener('click', onDocClick);
+
   searchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value.trim().toLowerCase();
     renderList();
   });
+
+  if (clearFilterBtn) {
+    clearFilterBtn.addEventListener('click', () => {
+      searchQuery = '';
+      waveFilter = 'all';
+      sortBy = 'newest';
+      if (searchInput) searchInput.value = '';
+      waveDropdown.setValue('all');
+      sortDropdown.setValue('newest');
+      renderList();
+    });
+  }
 
   subTabs.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -75,8 +237,39 @@ export function renderTsTask(container, currentUser) {
     });
   });
 
+  function populateWaveOptions(allTasks) {
+    const wavesSet = new Set();
+    allTasks.forEach(t => {
+      if (t.wave && String(t.wave).trim()) {
+        wavesSet.add(String(t.wave).trim());
+      }
+    });
+
+    const sortedWaves = Array.from(wavesSet).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    const waveOpts = [
+      { value: 'all', label: `All Waves (${allTasks.length})` },
+      ...sortedWaves.map(w => {
+        const count = allTasks.filter(t => String(t.wave || '').trim() === w).length;
+        return { value: w, label: `${w} (${count})` };
+      })
+    ];
+
+    if (allTasks.some(t => !t.wave || !String(t.wave).trim())) {
+      const countNoWave = allTasks.filter(t => !t.wave || !String(t.wave).trim()).length;
+      waveOpts.push({ value: '_none', label: `No Wave (${countNoWave})` });
+    }
+
+    const currentVal = waveDropdown.getValue();
+    const isValidVal = waveOpts.some(o => o.value === currentVal);
+    const targetVal = isValidVal ? currentVal : 'all';
+    waveFilter = targetVal;
+    waveDropdown.updateOptions(waveOpts, targetVal);
+  }
+
   function renderList() {
     const allTasks = db.getTroubleShootTasksForUser(currentUser);
+    populateWaveOptions(allTasks);
 
     // Update subtab counts
     const myTasksCount = allTasks.filter(t => t.statusTicket === 'Assigned').length;
@@ -92,11 +285,45 @@ export function renderTsTask(container, currentUser) {
     else if (activeSubTab === 'inProgress') filtered = filtered.filter(t => t.statusTicket === 'Picked Up');
     else if (activeSubTab === 'completed') filtered = filtered.filter(t => ['Found', 'Found Partial', 'Not Found'].includes(t.statusTicket));
 
+    // Wave filter
+    if (waveFilter !== 'all') {
+      if (waveFilter === '_none') {
+        filtered = filtered.filter(t => !t.wave || !String(t.wave).trim());
+      } else {
+        filtered = filtered.filter(t => String(t.wave || '').trim().toLowerCase() === waveFilter.toLowerCase());
+      }
+    }
+
+    // Search query
     if (searchQuery) {
       filtered = filtered.filter(t => {
-        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.originRackName, t.reason].join(' ').toLowerCase();
+        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.originRackName, t.reason, t.wave].join(' ').toLowerCase();
         return haystack.includes(searchQuery);
       });
+    }
+
+    // Sorting
+    filtered.sort((a, b) => {
+      if (sortBy === 'newest') {
+        return new Date(b.requestTimestamp || 0) - new Date(a.requestTimestamp || 0);
+      } else if (sortBy === 'oldest') {
+        return new Date(a.requestTimestamp || 0) - new Date(b.requestTimestamp || 0);
+      } else if (sortBy === 'waveAsc') {
+        return String(a.wave || '').localeCompare(String(b.wave || ''), undefined, { numeric: true });
+      } else if (sortBy === 'waveDesc') {
+        return String(b.wave || '').localeCompare(String(a.wave || ''), undefined, { numeric: true });
+      } else if (sortBy === 'soNumber') {
+        return String(a.soNumber || '').localeCompare(String(b.soNumber || ''), undefined, { numeric: true });
+      } else if (sortBy === 'rack') {
+        return String(a.originRackName || '').localeCompare(String(b.originRackName || ''), undefined, { numeric: true });
+      }
+      return 0;
+    });
+
+    // Clear filters button visibility
+    const isFiltered = searchQuery !== '' || waveFilter !== 'all' || sortBy !== 'newest';
+    if (clearFilterBtn) {
+      clearFilterBtn.style.display = isFiltered ? 'inline-flex' : 'none';
     }
 
     countBadge.textContent = `${filtered.length} Task${filtered.length !== 1 ? 's' : ''}`;
@@ -132,8 +359,9 @@ export function renderTsTask(container, currentUser) {
             <span style="grid-column: 1 / -1;"><strong>Product:</strong> ${escapeHtml(t.productName)}</span>
             <span><strong>Rack:</strong> ${escapeHtml(t.originRackName)}</span>
             <span><strong>Qty:</strong> ${escapeHtml(t.requestQuantity)}</span>
+            <span><strong>Wave:</strong> <span style="color: var(--primary-700); font-weight: 700;">${escapeHtml(t.wave || '-')}</span></span>
             <span><strong>Reason:</strong> <span style="color: #ea580c; font-weight: 700;">${escapeHtml(t.reason)}</span></span>
-            <span><strong>Requested:</strong> ${timeAgo}</span>
+            <span style="grid-column: 1 / -1;"><strong>Requested:</strong> ${timeAgo}</span>
           </div>
           ${t.foundAt ? `<div style="margin-top: 6px; font-size: 11px; color: #10b981; font-weight: 600;"><strong>Found at:</strong> ${escapeHtml(t.foundAt)} (Qty: ${escapeHtml(t.foundQty)})</div>` : ''}
           <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed var(--border-light); padding-top: 8px;">
@@ -235,6 +463,10 @@ export function renderTsTask(container, currentUser) {
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Request Quantity</span>
                 <span style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(ticket.requestQuantity || 1)}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Wave</span>
+                <span style="font-weight: 700; color: var(--primary-700); font-size: 13px;">${escapeHtml(ticket.wave || '-')}</span>
               </div>
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Origin Rack</span>
@@ -421,8 +653,9 @@ export function renderTsTask(container, currentUser) {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 12px; color: var(--text-secondary); margin-top: 8px;">
               <span><strong>SKU:</strong> ${escapeHtml(ticket.skuNumber)}</span>
               <span><strong>Qty:</strong> ${escapeHtml(ticket.requestQuantity)}</span>
+              <span><strong>Wave:</strong> <span style="color: var(--primary-700); font-weight: 700;">${escapeHtml(ticket.wave || '-')}</span></span>
               <span><strong>Origin Rack:</strong> ${escapeHtml(ticket.originRackName)}</span>
-              <span><strong>Reason:</strong> <span style="color: #ea580c; font-weight: 700;">${escapeHtml(ticket.reason)}</span></span>
+              <span style="grid-column: 1 / -1;"><strong>Reason:</strong> <span style="color: #ea580c; font-weight: 700;">${escapeHtml(ticket.reason)}</span></span>
             </div>
           </div>
 
@@ -586,7 +819,7 @@ export function renderTsTask(container, currentUser) {
           <!-- Ticket Summary -->
           <div style="padding: 10px; background: var(--surface-body); border-radius: 10px; margin-bottom: 14px; font-size: 12px; color: var(--text-secondary);">
             <strong>${ticket.skuNumber}</strong> — ${ticket.productName}<br>
-            Qty requested: <strong>${ticket.requestQuantity}</strong> · Reason: <strong>${ticket.reason}</strong>
+            Qty requested: <strong>${ticket.requestQuantity}</strong> · Wave: <strong>${ticket.wave || '-'}</strong> · Reason: <strong>${ticket.reason}</strong>
           </div>
 
           <!-- Step 1: Origin Rack -->

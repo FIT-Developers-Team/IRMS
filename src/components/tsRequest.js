@@ -96,8 +96,9 @@ export function renderTsRequest(container, currentUser) {
             <span style="grid-column: 1 / -1;"><strong>Product:</strong> ${escapeHtml(t.productName)}</span>
             <span><strong>Rack:</strong> ${escapeHtml(t.originRackName)}</span>
             <span><strong>Qty:</strong> ${escapeHtml(t.requestQuantity)}</span>
+            <span><strong>Wave:</strong> <span style="color: var(--primary-700); font-weight: 700;">${escapeHtml(t.wave || '-')}</span></span>
             <span><strong>Reason:</strong> <span style="color: #ea580c; font-weight: 700;">${escapeHtml(t.reason)}</span></span>
-            <span><strong>Requested:</strong> ${timeAgo}</span>
+            <span style="grid-column: 1 / -1;"><strong>Requested:</strong> ${timeAgo}</span>
           </div>
           ${t.assignedTo ? `<div style="margin-top: 6px; font-size: 11px; color: #7c3aed; font-weight: 600;"><strong>Assigned:</strong> ${escapeHtml(t.assignedTo)}</div>` : ''}
           ${t.foundAt ? `<div style="margin-top: 4px; font-size: 11px; color: #10b981; font-weight: 600;"><strong>Found at:</strong> ${escapeHtml(t.foundAt)} (Qty: ${escapeHtml(t.foundQty)})</div>` : ''}
@@ -169,6 +170,10 @@ export function renderTsRequest(container, currentUser) {
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Request Quantity</span>
                 <span style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(ticket.requestQuantity || 1)}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Wave</span>
+                <span style="font-weight: 700; color: var(--primary-700); font-size: 13px;">${escapeHtml(ticket.wave || '-')}</span>
               </div>
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">Origin Rack</span>
@@ -354,8 +359,9 @@ export function renderTsRequest(container, currentUser) {
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; color: var(--text-secondary);">
                   <div><strong>SKU:</strong> <span id="tsAutoSku">-</span></div>
                   <div><strong>Qty:</strong> <span id="tsAutoQty">-</span></div>
-                  <div style="grid-column: 1 / -1;"><strong>Product:</strong> <span id="tsAutoProduct">-</span></div>
+                  <div><strong>Wave:</strong> <span id="tsAutoWave">-</span></div>
                   <div><strong>Rack:</strong> <span id="tsAutoRack">-</span></div>
+                  <div style="grid-column: 1 / -1;"><strong>Product:</strong> <span id="tsAutoProduct">-</span></div>
                   <div><strong>Picker:</strong> <span id="tsAutoPicker">-</span></div>
                 </div>
               </div>
@@ -467,6 +473,7 @@ export function renderTsRequest(container, currentUser) {
       document.getElementById('tsAutoProduct').textContent = item.productName || '-';
       document.getElementById('tsAutoRack').textContent = item.originRackName || '-';
       document.getElementById('tsAutoQty').textContent = item.requestQty || '-';
+      document.getElementById('tsAutoWave').textContent = item.wave || '-';
       document.getElementById('tsAutoPicker').textContent = item.pickerName || '-';
       document.getElementById('tsCreateAutoFields').style.display = 'block';
     }
@@ -817,6 +824,7 @@ export function renderTsRequest(container, currentUser) {
           originRackName: soData.originRackName,
           requestQuantity: soData.requestQty,
           pickerName: soData.pickerName,
+          wave: soData.wave || '',
           reason,
           checkerLine,
           photo: '' // Will be uploaded separately

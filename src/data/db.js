@@ -19,6 +19,7 @@ class DatabaseService {
     this.stockActivities = this.loadSavedStockActivities();
     this.troubleShootTickets = this.loadSavedTroubleShoot();
     this.skus = [];
+    this.whPlanograms = [];
     this.soh = [];
     this.sohwh = [];
     this.spreadsheetId = GOOGLE_SHEETS_CONFIG.spreadsheetId;
@@ -34,8 +35,8 @@ class DatabaseService {
     this.initCache();
 
     // On fresh start / browser refresh (F5) / login: fetch Master Reference Data once.
-    // Master data (skusDb, zones, racks, checkerLines) is cached in IndexedDB and NOT re-fetched on page navigation.
-    this.initPromise = this.syncGoogleSheets(['userDb', 'skusDb', 'zones', 'racks', 'checkerLines']);
+    // Master data (skusDb, zones, racks, checkerLines, whPlanogram) is cached in IndexedDB and NOT re-fetched on page navigation.
+    this.initPromise = this.syncGoogleSheets(['userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram']);
 
     // Background interval: Check every 60 seconds if data has reached expiry duration and force refresh
     this.cacheCheckInterval = setInterval(() => {
@@ -46,7 +47,7 @@ class DatabaseService {
   async initCache() {
     try {
       await cacheManager.init();
-      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines, cSohwh, cTs] = await Promise.all([
+      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines, cSohwh, cTs, cWp] = await Promise.all([
         cacheManager.getStore('requests'),
         cacheManager.getStore('pickingTasks'),
         cacheManager.getStore('lostAndFound'),
@@ -58,7 +59,8 @@ class DatabaseService {
         cacheManager.getStore('zones'),
         cacheManager.getStore('checkerLines'),
         cacheManager.getStore('sohwh'),
-        cacheManager.getStore('troubleShoot')
+        cacheManager.getStore('troubleShoot'),
+        cacheManager.getStore('whPlanogram')
       ]);
 
       if (cReqs && cReqs.length) this.requests = cReqs;
@@ -73,6 +75,7 @@ class DatabaseService {
       if (cLines && cLines.length) this.checkerLines = cLines;
       if (cSohwh && cSohwh.length) this.sohwh = cSohwh;
       if (cTs && cTs.length) this.troubleShootTickets = cTs;
+      if (cWp && cWp.length) this.whPlanograms = cWp;
 
       this.isLoaded = true;
       this.notifyListeners();
@@ -167,6 +170,7 @@ class DatabaseService {
         const status = this.findRowValue(row, ['status']) || '';
         const qty = this.findRowValue(row, ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'qty', 'quantity']) || '1';
         const originRackName = this.findRowValue(row, ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack']) || '';
+        const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name']) || '';
 
         return {
           timestamp: String(timestamp).trim(),
@@ -176,7 +180,8 @@ class DatabaseService {
           productName: String(productName).trim(),
           status: String(status).trim(),
           requestQty: parseInt(String(qty).trim() || '1', 10),
-          originRackName: String(originRackName).trim()
+          originRackName: String(originRackName).trim(),
+          wave: String(wave).trim()
         };
       }).filter(item => item.soNumber);
     }
@@ -206,6 +211,7 @@ class DatabaseService {
       const productName = this.findRowValue(row, ['product name', 'product_name', 'product']);
       const qty = this.findRowValue(row, ['qty', 'quantity', 'request_quantity']) || '1';
       const status = this.findRowValue(row, ['status']) || 'Pending';
+      const reason = this.findRowValue(row, ['reason', 'request reason', 'alasan']) || '';
 
       const tid = String(ticketId).trim();
       return {
@@ -219,7 +225,8 @@ class DatabaseService {
         skuNumber: String(skuNumber).trim(),
         productName: String(productName).trim(),
         qty: parseInt(String(qty).trim() || '1', 10),
-        status: String(status).trim()
+        status: String(status).trim(),
+        reason: String(reason).trim()
       };
     }).filter(req => req.ticketId || req.soNumber);
 
@@ -339,6 +346,7 @@ class DatabaseService {
     const stockActivityTab = GOOGLE_SHEETS_CONFIG.tabs.stockActivity || 'Stock_Activity';
     const sohwhTab = GOOGLE_SHEETS_CONFIG.tabs.sohwh || 'SOHWH';
     const troubleShootTab = GOOGLE_SHEETS_CONFIG.tabs.troubleShoot || 'Trouble_Shoot';
+    const whPlanogramTab = GOOGLE_SHEETS_CONFIG.tabs.whPlanogram || 'WH_PLANOGRAM';
     const cacheBuster = `_t=${Date.now()}`;
 
     let normalizedTabSet = null;
@@ -359,6 +367,8 @@ class DatabaseService {
           normalizedTabSet.add('pickingTask');
           normalizedTabSet.add('racks');
           normalizedTabSet.add('soh');
+          normalizedTabSet.add('skusDb');
+          normalizedTabSet.add('whPlanogram');
         } else if (t === 'lostAndFound') {
           normalizedTabSet.add('lostAndFound');
         } else if (t === 'soh') {
@@ -434,6 +444,9 @@ class DatabaseService {
     }
     if (shouldSync('troubleShoot')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(troubleShootTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'troubleShoot', res: r })).catch(() => null));
+    }
+    if (shouldSync('whPlanogram')) {
+      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(whPlanogramTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'whPlanogram', res: r })).catch(() => null));
     }
     if (shouldSync('sohwh')) {
       const supersetFetch = (async () => {
@@ -610,6 +623,10 @@ class DatabaseService {
         if (item.key === 'troubleShoot') {
           this.parseTroubleShoot(text);
           cacheManager.setStore('troubleShoot', this.troubleShootTickets);
+        }
+        if (item.key === 'whPlanogram') {
+          this.parseWhPlanogram(text);
+          cacheManager.setStore('whPlanogram', this.whPlanograms);
         }
       }
 
@@ -1115,7 +1132,8 @@ class DatabaseService {
         map.set(item.soNumber, {
           soNumber: item.soNumber,
           pickerName: item.pickerName || '',
-          status: item.status || ''
+          status: item.status || '',
+          wave: item.wave || ''
         });
       }
     });
@@ -1184,7 +1202,8 @@ class DatabaseService {
       skuNumber: requestData.skuNumber,
       productName: requestData.productName,
       qty: requestData.qty,
-      status: 'Pending'
+      status: 'Pending',
+      reason: requestData.reason || ''
     };
 
     // 1. Add locally immediately for instant feedback
@@ -1949,16 +1968,139 @@ class DatabaseService {
   }
 
   lookupSkuDetails(skuCode) {
-    const cleanSku = String(skuCode || '').trim();
+    if (!skuCode) return null;
+    const cleanSku = String(skuCode || '').replace(/^SKU[:\s-]*/i, '').trim().toLowerCase();
     if (!cleanSku) return null;
-    return this.skus.find(s => s.skuCode === cleanSku) || null;
+
+    // 1. Search in SKUs_DB
+    let match = (this.skus || []).find(s => {
+      const sCode = String(s.skuCode || s.skuNumber || '').replace(/^SKU[:\s-]*/i, '').trim().toLowerCase();
+      const pId = String(s.productId || '').replace(/^SKU[:\s-]*/i, '').trim().toLowerCase();
+      return sCode === cleanSku || pId === cleanSku;
+    });
+
+    // 2. Fallback to SOH if not found in SKUs_DB
+    if (!match && this.soh && this.soh.length > 0) {
+      const sohMatch = this.soh.find(s => {
+        const sCode = String(s.skuCode || s.skuNumber || '').replace(/^SKU[:\s-]*/i, '').trim().toLowerCase();
+        return sCode === cleanSku;
+      });
+      if (sohMatch) {
+        match = {
+          skuCode: sohMatch.skuCode || sohMatch.skuNumber,
+          productName: sohMatch.productName,
+          productId: sohMatch.productId,
+          l0CategoryName: sohMatch.l0CategoryName || '',
+          l1CategoryName: sohMatch.l1CategoryName || '',
+          l2CategoryName: sohMatch.l2CategoryName || '',
+          foodOrNonFood: sohMatch.foodOrNonFood || ''
+        };
+      }
+    }
+
+    return match || null;
   }
 
   lookupProductName(skuCode) {
-    const cleanSku = String(skuCode || '').trim();
+    const cleanSku = String(skuCode || '').replace(/^SKU[:\s-]*/i, '').trim().toLowerCase();
     if (!cleanSku) return '';
-    const match = this.skus.find(s => s.skuCode === cleanSku);
+    const match = this.lookupSkuDetails(skuCode);
     return match ? match.productName : '';
+  }
+
+  parseWhPlanogram(csvText) {
+    if (!csvText) return;
+    const result = Papa.parse(csvText, { skipEmptyLines: true });
+    const rows = result.data || [];
+    if (rows.length === 0) return;
+
+    const list = [];
+    let startIndex = 0;
+
+    // Check if row 0 has concatenated categories or is standard header
+    const firstRow = rows[0] || [];
+    const cell0 = String(firstRow[0] || '').trim();
+    const cell1 = String(firstRow[1] || '').trim();
+    const cell2 = String(firstRow[2] || '').trim();
+
+    if (cell0.toLowerCase().includes('l1 category') && cell0.length > 25) {
+      // Concatenated row 0
+      const knownCats = [
+        'Minuman', 'Snack', 'Biskuit', 'Sarapan', 'Tepung & Bahan Kue',
+        'Susu & Olahan Susu', 'Bahan Masak & Bumbu', 'Kebutuhan Pokok',
+        'Kebutuhan Dapur', 'Kebutuhan Cuci Baju', 'Tata Rumah',
+        'Perlengkapan Pakaian', 'Kebutuhan Ibu & Bayi'
+      ];
+      
+      const zones = cell1.replace(/^zone\s*suggestion\s*/i, '').trim().split(/\s+/);
+      const aisleMatches = cell2.replace(/^aisle\s*suggestion\s*/i, '').trim().match(/\d+(?:\s*-\s*\d+)?/g) || [];
+
+      knownCats.forEach((cat, i) => {
+        list.push({
+          id: `wp_hdr_${i}_${cat}`,
+          l1Category: cat,
+          zoneSuggestion: zones[i] || '',
+          aisleSuggestion: aisleMatches[i] || ''
+        });
+      });
+      startIndex = 1;
+    } else if (cell0.toLowerCase() === 'l1 category' || cell0.toLowerCase().includes('category')) {
+      startIndex = 1;
+    }
+
+    // Parse all subsequent rows
+    for (let i = startIndex; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r || r.length < 2) continue;
+      const cat = String(r[0] || '').trim();
+      const zone = String(r[1] || '').trim();
+      const aisle = String(r[2] || '').trim();
+      if (cat && !cat.toLowerCase().startsWith('l1 category')) {
+        list.push({
+          id: `wp_${i}_${cat}`,
+          l1Category: cat,
+          zoneSuggestion: zone,
+          aisleSuggestion: aisle
+        });
+      }
+    }
+
+    this.whPlanograms = list;
+  }
+
+  lookupPlanogramsByL1Category(l1Category) {
+    if (!l1Category) return [];
+    const clean = String(l1Category).trim().toLowerCase();
+    return (this.whPlanograms || []).filter(p => {
+      const pCat = String(p.l1Category || '').trim().toLowerCase();
+      return pCat === clean || pCat.includes(clean) || clean.includes(pCat);
+    });
+  }
+
+  lookupPlanogramByL1Category(l1Category) {
+    const list = this.lookupPlanogramsByL1Category(l1Category);
+    return list.length > 0 ? list[0] : null;
+  }
+
+  getPlanogramSuggestionForSku(skuCode) {
+    if (!skuCode) return null;
+    const skuDetails = this.lookupSkuDetails(skuCode);
+    const l1Category = skuDetails ? (skuDetails.l1CategoryName || '') : '';
+    if (!l1Category) {
+      return {
+        l1Category: '',
+        suggestions: []
+      };
+    }
+
+    const matches = this.lookupPlanogramsByL1Category(l1Category);
+    return {
+      l1Category: l1Category,
+      suggestions: matches.map(m => ({
+        zoneSuggestion: m.zoneSuggestion || '',
+        aisleSuggestion: m.aisleSuggestion || ''
+      }))
+    };
   }
 
   parseSoh(csvText) {
@@ -2477,6 +2619,7 @@ class DatabaseService {
       const deliveredAt = this.findRowValue(row, ['delivered at', 'delivered_at', 'deliveredat']) || '';
       const pickedBy = this.findRowValue(row, ['picked by', 'picked_by', 'pickedby']) || '';
       const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updateat', 'updated at', 'updated_at']) || '';
+      const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name']) || '';
 
       return {
         id: String(id).trim(),
@@ -2500,7 +2643,8 @@ class DatabaseService {
         foundAt: String(foundAt).trim(),
         deliveredAt: String(deliveredAt).trim(),
         pickedBy: String(pickedBy).trim(),
-        updateAt: String(updateAt).trim()
+        updateAt: String(updateAt).trim(),
+        wave: String(wave).trim()
       };
     }).filter(e => e.id);
 
@@ -2593,7 +2737,8 @@ class DatabaseService {
       foundAt: '',
       deliveredAt: '',
       pickedBy: '',
-      updateAt: ''
+      updateAt: '',
+      wave: String(ticketData.wave || '').trim()
     };
 
     this.troubleShootTickets.unshift(newTicket);
