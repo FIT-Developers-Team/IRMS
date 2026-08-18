@@ -332,14 +332,31 @@ export function renderTsRequest(container, currentUser) {
           <form id="tsCreateForm" autocomplete="off" onsubmit="return false;">
             <div class="form-grid">
               
-              <!-- SO Number -->
+              <!-- SO Number (Searchable Custom Dropdown with Scanner) -->
               <div class="form-field-wrapper span-full">
                 <label class="form-label">SO Number *</label>
-                <div style="display: flex; gap: 6px; position: relative; width: 100%;">
-                  <input type="text" id="tsCreateSoNumber" class="sku-search-input" placeholder="Enter or scan SO Number..." required style="padding-right: 42px;">
-                  <button id="tsCreateScanSoBtn" type="button" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; padding: 0; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; z-index: 50;" title="Scan SO Barcode">
-                    <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
-                  </button>
+                <div class="custom-dropdown-container" id="tsSoDropdownContainer" style="position: relative; width: 100%;">
+                  <div style="position: relative; width: 100%; display: flex; align-items: center;">
+                    <input 
+                      type="text" 
+                      id="tsCreateSoNumber" 
+                      class="sku-search-input" 
+                      placeholder="Type or select SO number..." 
+                      required 
+                      autocomplete="off"
+                      style="width: 100%; padding-right: 68px; font-weight: 600;"
+                    />
+                    <div style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px; z-index: 20;">
+                      <button id="tsSoDropdownToggleBtn" type="button" style="background: none; border: none; padding: 4px; margin: 0; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; border-radius: 6px;" title="Toggle SO Dropdown">
+                        <span class="material-icons-round trigger-icon" style="font-size: 20px; transition: transform 0.2s;">expand_more</span>
+                      </button>
+                      <button id="tsCreateScanSoBtn" type="button" style="background: none; border: none; padding: 4px; margin: 0; color: var(--primary-600); cursor: pointer; display: flex; align-items: center; justify-content: center; outline: none; border-radius: 6px;" title="Scan SO Barcode">
+                        <span class="material-icons-round" style="font-size: 20px;">qr_code_scanner</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="custom-dropdown-menu" id="tsSoDropdownMenu" style="width: 100%; z-index: 5200; max-height: 230px; overflow-y: auto;">
+                  </div>
                 </div>
               </div>
 
@@ -733,20 +750,171 @@ export function renderTsRequest(container, currentUser) {
       renderChips();
     }
 
-    // Scan SO
-    overlay.querySelector('#tsCreateScanSoBtn').addEventListener('click', () => {
-      openCameraScanner((scannedText) => {
-        overlay.querySelector('#tsCreateSoNumber').value = scannedText;
-        lookupSo(scannedText);
+    // SO Custom Dropdown Elements
+    const soDropdownContainer = overlay.querySelector('#tsSoDropdownContainer');
+    const soInput = overlay.querySelector('#tsCreateSoNumber');
+    const soToggleBtn = overlay.querySelector('#tsSoDropdownToggleBtn');
+    const soMenu = overlay.querySelector('#tsSoDropdownMenu');
+    const scanSoBtn = overlay.querySelector('#tsCreateScanSoBtn');
+
+    function getUniqueSoList() {
+      const map = new Map();
+      const list = [];
+      (db.soList || []).forEach(item => {
+        if (!item || !item.soNumber) return;
+        const key = item.soNumber.toLowerCase().trim();
+        if (!map.has(key)) {
+          const entry = {
+            soNumber: item.soNumber.trim(),
+            pickerName: item.pickerName || '',
+            wave: item.wave || '',
+            firstProduct: item.productName || '',
+            itemCount: 1,
+            items: [item]
+          };
+          map.set(key, entry);
+          list.push(entry);
+        } else {
+          const entry = map.get(key);
+          entry.itemCount++;
+          entry.items.push(item);
+          if (!entry.pickerName && item.pickerName) entry.pickerName = item.pickerName;
+          if (!entry.wave && item.wave) entry.wave = item.wave;
+        }
       });
+      return list;
+    }
+
+    function renderSoDropdown(query = '') {
+      const uniqueSos = getUniqueSoList();
+      const q = (query || '').toLowerCase().trim();
+      const filtered = uniqueSos.filter(so => {
+        if (!q) return true;
+        return (
+          so.soNumber.toLowerCase().includes(q) ||
+          so.pickerName.toLowerCase().includes(q) ||
+          so.wave.toLowerCase().includes(q) ||
+          (so.firstProduct && so.firstProduct.toLowerCase().includes(q))
+        );
+      });
+
+      if (!filtered.length) {
+        soMenu.innerHTML = `
+          <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">
+            No matching SO numbers found
+          </div>
+        `;
+        return;
+      }
+
+      soMenu.innerHTML = filtered.map(item => {
+        const isSelected = soInput.value.trim().toLowerCase() === item.soNumber.toLowerCase();
+        return `
+          <div class="custom-dropdown-option ${isSelected ? 'active' : ''}" data-so="${escapeHtml(item.soNumber)}" style="display: flex; flex-direction: column; gap: 3px; padding: 8px 12px; cursor: pointer; border-radius: 8px; margin-bottom: 2px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-weight: 700; color: var(--primary-700); font-size: 13px;">${escapeHtml(item.soNumber)}</span>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                ${item.wave ? `<span style="font-size: 10px; font-weight: 700; background: var(--primary-50); color: var(--primary-700); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--primary-200);">Wave: ${escapeHtml(item.wave)}</span>` : ''}
+                <span style="font-size: 10px; font-weight: 700; background: #f1f5f9; color: #475569; padding: 1px 6px; border-radius: 4px;">${item.itemCount} item${item.itemCount > 1 ? 's' : ''}</span>
+              </div>
+            </div>
+            <div style="font-size: 11px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center;">
+              <span>Picker: <strong style="color: var(--text-primary);">${escapeHtml(item.pickerName || 'N/A')}</strong></span>
+              ${item.firstProduct ? `<span style="max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; color: var(--text-muted);">${escapeHtml(item.firstProduct)}</span>` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      soMenu.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const chosenSo = opt.dataset.so;
+          soInput.value = chosenSo;
+          closeSoDropdown();
+          lookupSo(chosenSo);
+        });
+      });
+    }
+
+    function openSoDropdown() {
+      renderSoDropdown(soInput.value);
+      soDropdownContainer.classList.add('open');
+    }
+
+    function closeSoDropdown() {
+      soDropdownContainer.classList.remove('open');
+    }
+
+    function toggleSoDropdown() {
+      if (soDropdownContainer.classList.contains('open')) {
+        closeSoDropdown();
+      } else {
+        openSoDropdown();
+      }
+    }
+
+    // Toggle dropdown button
+    if (soToggleBtn) {
+      soToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSoDropdown();
+        if (soDropdownContainer.classList.contains('open')) {
+          soInput.focus();
+        }
+      });
+    }
+
+    // Scan SO
+    if (scanSoBtn) {
+      scanSoBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeSoDropdown();
+        openCameraScanner((scannedText) => {
+          soInput.value = scannedText;
+          closeSoDropdown();
+          lookupSo(scannedText);
+        });
+      });
+    }
+
+    // Focus & Click handlers
+    soInput.addEventListener('focus', () => {
+      openSoDropdown();
     });
 
-    // SO Number manual entry
-    const soInput = overlay.querySelector('#tsCreateSoNumber');
+    soInput.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSoDropdown();
+    });
+
+    // Keyboard support
+    soInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        closeSoDropdown();
+        lookupSo(soInput.value.trim());
+      } else if (e.key === 'Escape') {
+        closeSoDropdown();
+      }
+    });
+
+    // SO Number manual entry & real-time search
     let soDebounce = null;
     soInput.addEventListener('input', () => {
+      renderSoDropdown(soInput.value);
+      if (!soDropdownContainer.classList.contains('open')) {
+        soDropdownContainer.classList.add('open');
+      }
       clearTimeout(soDebounce);
       soDebounce = setTimeout(() => lookupSo(soInput.value.trim()), 400);
+    });
+
+    // Close dropdown on click outside
+    overlay.addEventListener('click', (e) => {
+      if (soDropdownContainer && !soDropdownContainer.contains(e.target)) {
+        closeSoDropdown();
+      }
     });
 
     function lookupSo(soNumber) {
