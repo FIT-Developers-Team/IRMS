@@ -197,11 +197,16 @@ export function renderDashboard(container, currentUser, onLogout) {
       texts.forEach(tx => tx.textContent = 'Syncing...');
 
       try {
-        await db.syncGoogleSheets([activeTab]);
-        icons.forEach(ic => { ic.textContent = 'cloud_done'; ic.style.animation = 'none'; });
-        texts.forEach(tx => tx.textContent = 'All synced');
+        const ok = (activeTab === 'home') ? await db.syncGoogleSheets(null) : await db.syncSectionData(activeTab);
+        if (ok) {
+          icons.forEach(ic => { ic.textContent = 'cloud_done'; ic.style.animation = 'none'; });
+          texts.forEach(tx => tx.textContent = 'All synced');
+        } else {
+          icons.forEach(ic => { ic.textContent = 'sync_problem'; ic.style.animation = 'none'; });
+          texts.forEach(tx => tx.textContent = 'Sync failed (Retry)');
+        }
       } catch (err) {
-        icons.forEach(ic => { ic.textContent = 'error'; ic.style.animation = 'none'; });
+        icons.forEach(ic => { ic.textContent = 'sync_problem'; ic.style.animation = 'none'; });
         texts.forEach(tx => tx.textContent = 'Sync failed (Retry)');
       } finally {
         btn.style.opacity = '1';
@@ -209,6 +214,45 @@ export function renderDashboard(container, currentUser, onLogout) {
       }
     });
   });
+
+  // ── Reactive Top Header Sync Status Indicator ────────────────────────────
+  function updateTopSyncStatusUI() {
+    const icons = container.querySelectorAll('.headerSyncIcon');
+    const texts = container.querySelectorAll('.headerSyncText');
+    const badges = container.querySelectorAll('.inline-sync-status-badge');
+
+    if (db.isSyncing) {
+      badges.forEach(b => {
+        b.classList.remove('synced', 'error');
+        b.classList.add('syncing');
+      });
+      icons.forEach(ic => {
+        ic.textContent = 'sync';
+        ic.style.animation = 'spinIcon 1s linear infinite';
+      });
+      texts.forEach(tx => tx.textContent = 'Syncing data...');
+    } else if (db.syncError) {
+      badges.forEach(b => {
+        b.classList.remove('synced', 'syncing');
+        b.classList.add('error');
+      });
+      icons.forEach(ic => {
+        ic.textContent = 'sync_problem';
+        ic.style.animation = 'none';
+      });
+      texts.forEach(tx => tx.textContent = 'Sync failed (Click)');
+    } else {
+      badges.forEach(b => {
+        b.classList.remove('syncing', 'error');
+        b.classList.add('synced');
+      });
+      icons.forEach(ic => {
+        ic.textContent = 'cloud_done';
+        ic.style.animation = 'none';
+      });
+      texts.forEach(tx => tx.textContent = 'All synced');
+    }
+  }
 
   // ── Reactive Badge Counters Update Function ──────────────────────────────
   function updateNavBadgeCounters() {
@@ -280,9 +324,12 @@ export function renderDashboard(container, currentUser, onLogout) {
 
   // Initial calculation & subscription for live updates
   updateNavBadgeCounters();
+  updateTopSyncStatusUI();
+
   const unsubscribeBadges = db.subscribe(() => {
     if (container.isConnected) {
       updateNavBadgeCounters();
+      updateTopSyncStatusUI();
     } else {
       unsubscribeBadges();
     }
@@ -384,8 +431,6 @@ export function renderDashboard(container, currentUser, onLogout) {
   });
 
   // ── Security Filtered Route Guard & Navigation ─────────────────────────────
-  const secondaryTabs = ['lostAndFound', 'stockMovement', 'admin'];
-
   function showAccessDeniedToast(msg) {
     let toast = document.createElement('div');
     toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#c92a2a;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.25);';
@@ -396,59 +441,51 @@ export function renderDashboard(container, currentUser, onLogout) {
 
   async function switchTab(tabId) {
     const tabObj = ALL_PAGES.find(p => p.key === tabId) || { label: tabId };
-    showBlockerLock(`Launching ${tabObj.label}...`);
-    try {
-      // Security Guard: Check user permission
-      if (!hasUserAccess(currentUser, tabId)) {
-        showAccessDeniedToast(`Access Denied: You do not have permission to access "${tabId}".`);
-        tabId = 'home';
+    
+    // Security Guard: Check user permission
+    if (!hasUserAccess(currentUser, tabId)) {
+      showAccessDeniedToast(`Access Denied: You do not have permission to access "${tabId}".`);
+      tabId = 'home';
+    }
+
+    activeTab = tabId;
+    window.irmsActiveTab = tabId;
+    
+    navTabs.forEach(btn => {
+      if (btn.dataset.tab) {
+        btn.classList.toggle('active', btn.dataset.tab === tabId);
       }
+    });
 
-      activeTab = tabId;
-      window.irmsActiveTab = tabId;
+    const moreBtn = container.querySelector('#mobileMoreNavBtn');
+    if (moreBtn) {
+      const isExtendedActive = extendedTabs.some(t => t.key === tabId);
+      moreBtn.classList.toggle('active', isExtendedActive);
+    }
 
-      // Sync section data lazily if expired
-      if (db.isSectionDataExpired(tabId)) {
-        await db.syncSectionData(tabId);
-      } else {
-        db.checkAndRefreshIfExpired();
-      }
-      
-      navTabs.forEach(btn => {
-        if (btn.dataset.tab) {
-          btn.classList.toggle('active', btn.dataset.tab === tabId);
-        }
-      });
+    const targetArea = tabContentArea || container.querySelector('#tabContentArea');
+    if (!targetArea) {
+      console.error('tabContentArea container (#tabContentArea) is missing in DOM');
+      return;
+    }
 
-      const moreBtn = container.querySelector('#mobileMoreNavBtn');
-      if (moreBtn) {
-        const isExtendedActive = extendedTabs.some(t => t.key === tabId);
-        moreBtn.classList.toggle('active', isExtendedActive);
-      }
+    // Render section immediately from in-memory/IndexedDB cache (0ms instant response)
+    if (tabId === 'home') renderHome(targetArea, currentUser);
+    else if (tabId === 'pickingTask') renderPickingTask(targetArea, currentUser);
+    else if (tabId === 'lostAndFound') renderLostAndFound(targetArea, currentUser);
+    else if (tabId === 'soh') renderSoh(targetArea, currentUser);
+    else if (tabId === 'sohwh') renderSohwh(targetArea, currentUser);
+    else if (tabId === 'requestPickup') renderRequestPickup(targetArea, currentUser);
+    else if (tabId === 'stockMovement') renderStockMovement(targetArea, currentUser);
+    else if (tabId === 'tsRequest') renderTsRequest(targetArea, currentUser);
+    else if (tabId === 'troubleShoot') renderTroubleShoot(targetArea, currentUser);
+    else if (tabId === 'tsTask') renderTsTask(targetArea, currentUser);
+    else if (tabId === 'admin') renderAdmin(targetArea, currentUser);
+    else renderHome(targetArea, currentUser);
 
-      const targetArea = tabContentArea || container.querySelector('#tabContentArea');
-      if (!targetArea) {
-        throw new Error('tabContentArea container (#tabContentArea) is missing in DOM');
-      }
-
-      // Render section
-      if (tabId === 'home') renderHome(targetArea, currentUser);
-      else if (tabId === 'pickingTask') renderPickingTask(targetArea, currentUser);
-      else if (tabId === 'lostAndFound') renderLostAndFound(targetArea, currentUser);
-      else if (tabId === 'soh') renderSoh(targetArea, currentUser);
-      else if (tabId === 'sohwh') renderSohwh(targetArea, currentUser);
-      else if (tabId === 'requestPickup') renderRequestPickup(targetArea, currentUser);
-      else if (tabId === 'stockMovement') renderStockMovement(targetArea, currentUser);
-      else if (tabId === 'tsRequest') renderTsRequest(targetArea, currentUser);
-      else if (tabId === 'troubleShoot') renderTroubleShoot(targetArea, currentUser);
-      else if (tabId === 'tsTask') renderTsTask(targetArea, currentUser);
-      else if (tabId === 'admin') renderAdmin(targetArea, currentUser);
-      else renderHome(targetArea, currentUser);
-
-    } catch (err) {
-      console.error(`[SwitchTab Error for "${tabId}"]`, err);
-    } finally {
-      setTimeout(() => hideBlockerLock(), 250);
+    // If section data is expired, run a non-blocking background sync with live indicator
+    if (db.isSectionDataExpired(tabId) && !db.isSyncing) {
+      db.syncSectionData(tabId);
     }
   }
 

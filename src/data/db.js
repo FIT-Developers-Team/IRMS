@@ -2,7 +2,7 @@ import Papa from 'papaparse';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets.js';
 import { cacheManager } from './cacheManager.js';
 
-export const DATA_EXPIRY_DURATION_MS = 1 * 60 * 1000; // 1 minute TTL
+export const DATA_EXPIRY_DURATION_MS = 5 * 60 * 1000; // 5 minutes TTL
 
 class DatabaseService {
   constructor() {
@@ -30,6 +30,7 @@ class DatabaseService {
     this.syncError = null;
     this.isLoaded = false;
     this.listeners = [];
+    this.isRetryingSync = false;
     
     // Instant 0ms IndexedDB Hydration
     this.initCache();
@@ -38,16 +39,77 @@ class DatabaseService {
     // Master data (skusDb, zones, racks, checkerLines, whPlanogram) is cached in IndexedDB and NOT re-fetched on page navigation.
     this.initPromise = this.syncGoogleSheets(['userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram']);
 
-    // Background interval: Check every 60 seconds if data has reached expiry duration and force refresh
+    // Background interval: Check every 30 seconds if active task data needs background refresh
     this.cacheCheckInterval = setInterval(() => {
       this.checkAndRefreshIfExpired();
-    }, 60 * 1000);
+    }, 30 * 1000);
+  }
+
+  /**
+   * Universal Delta Sync & Upsert Helper
+   * - Appends new records if ID not present in local cache.
+   * - Updates existing record if remote timestamp >= local timestamp.
+   * - Preserves optimistic local pending changes.
+   * - Sorts resulting dataset descending by primary timestamp.
+   */
+  mergeDeltaRecords(cachedList, remoteList, keyProp, timestampProps = ['updateAt', 'updatedAt', 'timestamp', 'requestTimestamp', 'date', 'time']) {
+    const map = new Map();
+    const tProps = Array.isArray(timestampProps) ? timestampProps : [timestampProps];
+
+    const getTimestampMs = (item) => {
+      if (!item) return 0;
+      for (const p of tProps) {
+        if (item[p]) {
+          const ms = new Date(item[p]).getTime();
+          if (!isNaN(ms)) return ms;
+        }
+      }
+      return 0;
+    };
+
+    // 1. Seed with local cached data
+    if (Array.isArray(cachedList)) {
+      for (const item of cachedList) {
+        if (item && item[keyProp] !== undefined && item[keyProp] !== null && String(item[keyProp]).trim() !== '') {
+          map.set(String(item[keyProp]).trim(), item);
+        }
+      }
+    }
+
+    // 2. Upsert incoming remote records
+    if (Array.isArray(remoteList)) {
+      for (const remote of remoteList) {
+        if (!remote || remote[keyProp] === undefined || remote[keyProp] === null || String(remote[keyProp]).trim() === '') continue;
+        const pk = String(remote[keyProp]).trim();
+        const existing = map.get(pk);
+
+        if (!existing) {
+          // Brand new row -> Append
+          map.set(pk, remote);
+        } else {
+          // Existing row -> Compare timestamps
+          const remoteTime = getTimestampMs(remote);
+          const localTime = getTimestampMs(existing);
+
+          // Don't overwrite an optimistic local pending change with stale remote data
+          if (existing.syncState === 'pending' && remote.syncState !== 'synced') {
+            continue;
+          }
+
+          if (remoteTime >= localTime || localTime === 0) {
+            map.set(pk, { ...existing, ...remote });
+          }
+        }
+      }
+    }
+
+    return Array.from(map.values()).sort((a, b) => getTimestampMs(b) - getTimestampMs(a));
   }
 
   async initCache() {
     try {
       await cacheManager.init();
-      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines, cSohwh, cTs, cWp] = await Promise.all([
+      const [cReqs, cTasks, cLf, cSoh, cSm, cUsers, cSkus, cRacks, cZones, cLines, cSohwh, cTs, cWp, cSo, cPutaway, cSa] = await Promise.all([
         cacheManager.getStore('requests'),
         cacheManager.getStore('pickingTasks'),
         cacheManager.getStore('lostAndFound'),
@@ -60,7 +122,10 @@ class DatabaseService {
         cacheManager.getStore('checkerLines'),
         cacheManager.getStore('sohwh'),
         cacheManager.getStore('troubleShoot'),
-        cacheManager.getStore('whPlanogram')
+        cacheManager.getStore('whPlanogram'),
+        cacheManager.getStore('soData'),
+        cacheManager.getStore('putaway'),
+        cacheManager.getStore('stockActivity')
       ]);
 
       if (cReqs && cReqs.length) this.requests = cReqs;
@@ -76,6 +141,9 @@ class DatabaseService {
       if (cSohwh && cSohwh.length) this.sohwh = cSohwh;
       if (cTs && cTs.length) this.troubleShootTickets = cTs;
       if (cWp && cWp.length) this.whPlanograms = cWp;
+      if (cSo && cSo.length) this.soList = cSo;
+      if (cPutaway && cPutaway.length) this.putawayRecords = cPutaway;
+      if (cSa && cSa.length) this.stockActivities = cSa;
 
       this.isLoaded = true;
       this.notifyListeners();
@@ -172,11 +240,16 @@ class DatabaseService {
         const originRackName = this.findRowValue(row, ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack']) || '';
         const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name']) || '';
 
+        const sNum = String(soNumber || '').trim();
+        const sku = String(skuNumber || '').trim();
+        const tStamp = String(timestamp || '').trim();
+
         return {
-          timestamp: String(timestamp).trim(),
+          id: `${sNum}_${sku}_${tStamp}`,
+          timestamp: tStamp,
           pickerName: String(pickerName).trim(),
-          soNumber: String(soNumber).trim(),
-          skuNumber: String(skuNumber).trim(),
+          soNumber: sNum,
+          skuNumber: sku,
           productName: String(productName).trim(),
           status: String(status).trim(),
           requestQty: parseInt(String(qty).trim() || '1', 10),
@@ -184,7 +257,51 @@ class DatabaseService {
           wave: String(wave).trim()
         };
       }).filter(item => item.soNumber);
+
+      if (this.soList.length > 0) {
+        const topTs = this._pendingSoDataTimestamp || this.soList[0].timestamp;
+        if (topTs) {
+          cacheManager.setLastSyncTime('soData_timestamp', topTs);
+        }
+      }
     }
+  }
+
+  async checkLatestSheetTimestamp(tabName) {
+    try {
+      const url = `https://docs.google.com/spreadsheets/d/${this.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&range=A1:A2&_t=${Date.now()}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) return null;
+      const text = await res.text();
+      if (text.includes('<!DOCTYPE html>') || !text.trim()) return null;
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length >= 2) {
+        const val = lines[1].replace(/^"|"$/g, '').trim();
+        return val || null;
+      }
+      return null;
+    } catch (e) {
+      console.warn(`Timestamp check failed for ${tabName}:`, e);
+      return null;
+    }
+  }
+
+  recalculateVirtualSoh() {
+    if (!this.sohwh || this.sohwh.length === 0) return;
+    const reserveMap = new Map();
+    this.soList.forEach(so => {
+      const sku = String(so.skuNumber).trim();
+      if (sku) {
+        const current = reserveMap.get(sku) || 0;
+        reserveMap.set(sku, current + (so.requestQty || 0));
+      }
+    });
+
+    this.sohwh.forEach(item => {
+      const reserveStock = reserveMap.get(item.skuNumber) || 0;
+      item.reserveStock = reserveStock;
+      item.finalVirtualSoh = (item.qtyStock || 0) - reserveStock;
+    });
   }
 
   parseRequestChecker(csvText) {
@@ -230,9 +347,8 @@ class DatabaseService {
       };
     }).filter(req => req.ticketId || req.soNumber);
 
-    // Google Sheet is source of truth for Request_Checker
-    this.requests = remoteReqs;
-    this.requests.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Delta sync: update existing if newer timestamp, append if new row
+    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['timestamp', 'date']);
     this.persistRequests();
   }
 
@@ -271,9 +387,8 @@ class DatabaseService {
       };
     }).filter(task => task.pickingId || task.ticketId);
 
-    // Google Sheet is source of truth for Picking Tasks
-    this.pickingTasks = remoteTasks;
-    this.pickingTasks.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Delta sync: update existing if newer timestamp, append if new row
+    this.pickingTasks = this.mergeDeltaRecords(this.pickingTasks, remoteTasks, 'pickingId', ['timestamp', 'date']);
     this.persistPickingTasks();
   }
 
@@ -286,15 +401,6 @@ class DatabaseService {
       if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
         const val = String(row[matchedKey]).trim();
         if (val) return val;
-      }
-    }
-    // Fallback to first column for ID if possibleKeys includes an ID key
-    const hasIdKey = possibleKeys.some(k => ['ticket id', 'staff id', 'staff_id', 'staffid', 'user id', 'id'].includes(k));
-    if (keys.length > 0 && hasIdKey) {
-      const firstVal = String(row[keys[0]] || '').trim();
-      const lowerFirst = firstVal.toLowerCase();
-      if (firstVal && !['ticket id', 'staff id', 'uniqueid', 'user id', 'id'].includes(lowerFirst)) {
-        return firstVal;
       }
     }
     return '';
@@ -362,23 +468,18 @@ class DatabaseService {
           normalizedTabSet.add('requestChecker');
           normalizedTabSet.add('soData');
           normalizedTabSet.add('checkerLines');
-          // skusDb excluded from section sync — fetched on initial load/login/refresh
         } else if (t === 'pickingTask') {
           normalizedTabSet.add('pickingTask');
-          normalizedTabSet.add('racks');
+          normalizedTabSet.add('requestChecker');
+          normalizedTabSet.add('putaway');
           normalizedTabSet.add('soh');
-          normalizedTabSet.add('skusDb');
-          normalizedTabSet.add('whPlanogram');
         } else if (t === 'lostAndFound') {
           normalizedTabSet.add('lostAndFound');
         } else if (t === 'soh') {
           normalizedTabSet.add('soh');
-          normalizedTabSet.add('racks');
-          // skusDb excluded from section sync — fetched on initial load/login/refresh
         } else if (t === 'stockMovement') {
           normalizedTabSet.add('stockMovement');
           normalizedTabSet.add('stockActivity');
-          normalizedTabSet.add('racks');
           normalizedTabSet.add('soh');
         } else if (t === 'tsRequest') {
           normalizedTabSet.add('troubleShoot');
@@ -407,7 +508,26 @@ class DatabaseService {
       fetches.push(fetch(userDbUrl, { cache: 'no-store' }).then(r => ({ key: 'userDb', res: r })).catch(() => null));
     }
     if (shouldSync('soData')) {
-      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'soData', res: r })));
+      const soDataFetch = (async () => {
+        try {
+          // If we already have cached soData, check if Column A Row 2 timestamp has changed
+          if (this.soList && this.soList.length > 0) {
+            const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
+            const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
+            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
+              console.log(`[SO_DATA Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
+              return { key: 'soData', skipped: true };
+            }
+            this._pendingSoDataTimestamp = latestTs;
+          }
+          const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' });
+          return { key: 'soData', res: res };
+        } catch (err) {
+          console.error('soData fetch error:', err);
+          return null;
+        }
+      })();
+      fetches.push(soDataFetch);
     }
     if (shouldSync('requestChecker')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(requestCheckerTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'requestChecker', res: r })).catch(() => null));
@@ -431,7 +551,26 @@ class DatabaseService {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(putawayTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'putaway', res: r })).catch(() => null));
     }
     if (shouldSync('skusDb')) {
-      fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(skusDbTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'skusDb', res: r })).catch(() => null));
+      const skusDbFetch = (async () => {
+        try {
+          // If we already have cached skus, check if Column A Row 2 timestamp has changed
+          if (this.skus && this.skus.length > 0) {
+            const latestTs = await this.checkLatestSheetTimestamp(skusDbTab);
+            const cachedTs = await cacheManager.getLastSyncTime('skusDb_timestamp');
+            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
+              console.log(`[SKUs_DB Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
+              return { key: 'skusDb', skipped: true };
+            }
+            this._pendingSkusDbTimestamp = latestTs;
+          }
+          const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(skusDbTab)}&${cacheBuster}`, { cache: 'no-store' });
+          return { key: 'skusDb', res: res };
+        } catch (err) {
+          console.error('skusDb fetch error:', err);
+          return null;
+        }
+      })();
+      fetches.push(skusDbFetch);
     }
     if (shouldSync('soh')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sohTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'soh', res: r })).catch(() => null));
@@ -583,7 +722,12 @@ class DatabaseService {
       let successCount = 0;
 
       for (const item of results) {
-        if (!item || !item.res || !item.res.ok) continue;
+        if (!item) continue;
+        if (item.skipped) {
+          successCount++;
+          continue;
+        }
+        if (!item.res || !item.res.ok) continue;
         const text = await item.res.text();
         if (text.includes('<!DOCTYPE html>')) continue;
 
@@ -604,18 +748,45 @@ class DatabaseService {
           }
           cacheManager.setStore('userDb', this.users);
         }
-        if (item.key === 'soData') this.parseSoData(text);
+        if (item.key === 'soData') {
+          this.parseSoData(text);
+          cacheManager.setStore('soData', this.soList);
+        }
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
-        if (item.key === 'racks') this.parseRacks(text);
-        if (item.key === 'zones') this.parseZones(text);
+        if (item.key === 'racks') {
+          this.parseRacks(text);
+          cacheManager.setStore('racks', this.racks);
+        }
+        if (item.key === 'zones') {
+          this.parseZones(text);
+          cacheManager.setStore('zones', this.zones);
+        }
         if (item.key === 'lostAndFound') this.parseLostAndFound(text);
-        if (item.key === 'checkerLines') this.parseCheckerLines(text);
-        if (item.key === 'putaway') this.parsePutaway(text);
-        if (item.key === 'skusDb') this.parseSkusDb(text);
-        if (item.key === 'soh') this.parseSoh(text);
-        if (item.key === 'stockMovement') this.parseStockMovement(text);
-        if (item.key === 'stockActivity') this.parseStockActivity(text);
+        if (item.key === 'checkerLines') {
+          this.parseCheckerLines(text);
+          cacheManager.setStore('checkerLines', this.checkerLines);
+        }
+        if (item.key === 'putaway') {
+          this.parsePutaway(text);
+          cacheManager.setStore('putaway', this.putawayRecords);
+        }
+        if (item.key === 'skusDb') {
+          this.parseSkusDb(text);
+          cacheManager.setStore('skusDb', this.skus);
+        }
+        if (item.key === 'soh') {
+          this.parseSoh(text);
+          cacheManager.setStore('soh', this.soh);
+        }
+        if (item.key === 'stockMovement') {
+          this.parseStockMovement(text);
+          cacheManager.setStore('stockMovements', this.stockMovements);
+        }
+        if (item.key === 'stockActivity') {
+          this.parseStockActivity(text);
+          cacheManager.setStore('stockActivity', this.stockActivities);
+        }
         if (item.key === 'sohwh') {
           this.parseSohwh(text);
           cacheManager.setStore('sohwh', this.sohwh);
@@ -733,7 +904,10 @@ class DatabaseService {
       tsTask:        ['troubleShoot', 'soData']
     };
     const tabsToSync = tabMap[tabId];
-    if (!tabsToSync || tabsToSync.length === 0) return true;
+    if (!tabsToSync || tabsToSync.length === 0) {
+      this.lastSectionSyncTime[tabId] = new Date().toISOString();
+      return true;
+    }
     const ok = await this.syncGoogleSheets(tabsToSync);
     if (ok) {
       this.lastSectionSyncTime[tabId] = new Date().toISOString();
@@ -1495,7 +1669,6 @@ class DatabaseService {
   }
 
   getZones() {
-    this.checkAndRefreshIfExpired();
     return this.zones;
   }
 
@@ -1520,7 +1693,6 @@ class DatabaseService {
   }
 
   getCheckerLines() {
-    this.checkAndRefreshIfExpired();
     return this.checkerLines;
   }
 
@@ -1561,8 +1733,8 @@ class DatabaseService {
       };
     }).filter(e => e.ticketId || e.skuCode);
 
-    this.lostAndFound = remoteEntries;
-    this.lostAndFound.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Delta sync: update existing if newer timestamp, append if new row
+    this.lostAndFound = this.mergeDeltaRecords(this.lostAndFound, remoteEntries, 'ticketId', ['timestamp', 'date']);
     this.persistLostAndFound();
   }
 
@@ -1702,17 +1874,8 @@ class DatabaseService {
       };
     }).filter(e => e.putawayId || e.pickingId);
 
-    const unsynced = this.putawayRecords.filter(p => p.syncState === 'pending' || p.syncState === 'failed');
-    const merged = [...unsynced];
-    remoteEntries.forEach(re => {
-      if (!merged.some(p => p.putawayId === re.putawayId)) {
-        re.syncState = 'synced';
-        merged.push(re);
-      }
-    });
-
-    this.putawayRecords = merged;
-    this.putawayRecords.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    // Delta sync: merge remote putaway records with local pending putaways
+    this.putawayRecords = this.mergeDeltaRecords(this.putawayRecords, remoteEntries, 'putawayId', ['timestamp', 'date']);
     this.persistPutawayRecords();
   }
 
@@ -1908,31 +2071,37 @@ class DatabaseService {
   }
 
   async retryPendingSyncs() {
+    if (this.isRetryingSync) return;
     const pending = this.putawayRecords.filter(p => p.syncState === 'failed' || p.syncState === 'pending');
     if (pending.length === 0) return;
     
+    this.isRetryingSync = true;
     console.log(`Retrying ${pending.length} pending putaway syncs...`);
     let someSucceeded = false;
-    for (const entry of pending) {
-      try {
-        await fetch(this.webAppUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'createPutaway', ...entry })
-        });
-        entry.syncState = 'synced';
-        someSucceeded = true;
-        console.log(`Successfully synced PT-#${entry.putawayId} in background retry`);
-      } catch (err) {
-        console.error(`Retry failed for PT-#${entry.putawayId}:`, err);
-        this.scheduleSyncRetry();
-        break;
+    try {
+      for (const entry of pending) {
+        try {
+          await fetch(this.webAppUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action: 'createPutaway', ...entry })
+          });
+          entry.syncState = 'synced';
+          someSucceeded = true;
+          console.log(`Successfully synced PT-#${entry.putawayId} in background retry`);
+        } catch (err) {
+          console.error(`Retry failed for PT-#${entry.putawayId}:`, err);
+          this.scheduleSyncRetry();
+          break;
+        }
       }
-    }
-    if (someSucceeded) {
-      this.persistPutawayRecords();
-      this.notifyListeners();
+      if (someSucceeded) {
+        this.persistPutawayRecords();
+        this.notifyListeners();
+      }
+    } finally {
+      this.isRetryingSync = false;
     }
   }
 
@@ -1964,6 +2133,11 @@ class DatabaseService {
           foodOrNonFood: String(foodOrNonFood).trim()
         };
       }).filter(s => s.skuCode);
+
+      if (this.skus.length > 0) {
+        const topTs = this._pendingSkusDbTimestamp || new Date().toISOString();
+        cacheManager.setLastSyncTime('skusDb_timestamp', topTs);
+      }
     }
   }
 
@@ -2112,7 +2286,7 @@ class DatabaseService {
     });
 
     if (result.data && result.data.length > 0) {
-      this.soh = result.data.map(row => {
+      const remoteSoh = result.data.map(row => {
         const skuCode = this.findRowValue(row, ['sku_number', 'sku number', 'sku code', 'sku_code', 'sku']);
         const rackLocation = this.findRowValue(row, ['rack_location', 'rack location', 'location', 'rack']);
         const qtySoh = this.findRowValue(row, ['qty soh', 'qty_soh', 'quantity SOH', 'quantity_soh', 'qty', 'quantity']);
@@ -2124,10 +2298,14 @@ class DatabaseService {
         const stockAge = this.findRowValue(row, ['stock age', 'stock_age', 'stockage', 'age']);
         const actionSuggestion = this.findRowValue(row, ['action suggestion', 'action_suggestion', 'actionsuggest', 'suggestion']);
 
+        const sCode = String(skuCode).trim();
+        const rLoc = String(rackLocation).trim();
+
         return {
-          skuCode: String(skuCode).trim(),
-          skuNumber: String(skuCode).trim(),
-          rackLocation: String(rackLocation).trim(),
+          id: `${sCode}_${rLoc}`,
+          skuCode: sCode,
+          skuNumber: sCode,
+          rackLocation: rLoc,
           qtySoh: parseInt(String(qtySoh).trim() || '0', 10),
           updatedAt: String(updatedAt).trim(),
           qtyOnSo: parseFloat(String(qtyOnSo).trim() || '0'),
@@ -2137,6 +2315,10 @@ class DatabaseService {
           actionSuggestion: String(actionSuggestion || '').trim()
         };
       }).filter(s => s.skuCode);
+
+      // Delta sync for SOH by unique SKU + Location key
+      this.soh = this.mergeDeltaRecords(this.soh, remoteSoh, 'id', ['updatedAt', 'timestamp', 'date']);
+      cacheManager.setStore('soh', this.soh);
     }
   }
 
@@ -2201,6 +2383,11 @@ class DatabaseService {
           finalVirtualSoh: finalVirtualSoh
         };
       }).filter(s => s.skuNumber);
+
+      if (this.sohwh.length > 0) {
+        const topTs = this._pendingSohwhTimestamp || new Date().toISOString();
+        cacheManager.setLastSyncTime('sohwh_timestamp', topTs);
+      }
     }
   }
 
@@ -2249,11 +2436,8 @@ class DatabaseService {
         };
       }).filter(m => m.movementId);
 
-      const mergedMap = new Map();
-      this.stockMovements.forEach(m => mergedMap.set(m.movementId, m));
-      remoteMovements.forEach(m => mergedMap.set(m.movementId, m));
-      
-      this.stockMovements = Array.from(mergedMap.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // Delta sync: update existing movement status if newer, append if new movement
+      this.stockMovements = this.mergeDeltaRecords(this.stockMovements, remoteMovements, 'movementId', ['timestamp', 'date']);
       this.persistStockMovements();
     }
   }
@@ -2291,11 +2475,8 @@ class DatabaseService {
         };
       }).filter(a => a.activityId);
 
-      const mergedMap = new Map();
-      this.stockActivities.forEach(a => mergedMap.set(a.activityId, a));
-      remoteActs.forEach(a => mergedMap.set(a.activityId, a));
-
-      this.stockActivities = Array.from(mergedMap.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      // Delta sync: append/update stock activity logs
+      this.stockActivities = this.mergeDeltaRecords(this.stockActivities, remoteActs, 'activityId', ['timestamp', 'date']);
       this.persistStockActivities();
     }
   }
@@ -2648,7 +2829,7 @@ class DatabaseService {
       };
     }).filter(e => e.id);
 
-    this.troubleShootTickets = remoteEntries;
+    this.troubleShootTickets = this.mergeDeltaRecords(this.troubleShootTickets, remoteEntries, 'id', ['updateAt', 'requestTimestamp', 'timestamp']);
     this.troubleShootTickets.sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
     this.persistTroubleShoot();
   }

@@ -1,3 +1,5 @@
+import { db } from '../data/db.js';
+
 function escapeHtml(str) {
   return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
@@ -29,16 +31,16 @@ export function renderHome(container, currentUser) {
           </div>
         </div>
 
-        <!-- Quick Summary Stats Widgets (Placeholder Content) -->
+        <!-- Quick Summary Stats Widgets (Real-time Live Content) -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
           
           <div style="background: #ffffff; border: 1.5px solid var(--border-light); border-radius: 16px; padding: 18px; display: flex; align-items: center; gap: 14px; box-shadow: var(--shadow-sm);">
-            <div style="width: 48px; height: 48px; border-radius: 50%; background: rgba(34, 197, 94, 0.1); color: #22c55e; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-              <span class="material-icons-round" style="font-size: 24px;">cloud_done</span>
+            <div id="homeSyncStatusIconWrapper" style="width: 48px; height: 48px; border-radius: 50%; background: rgba(34, 197, 94, 0.1); color: #22c55e; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+              <span class="material-icons-round" id="homeSyncStatusIcon" style="font-size: 24px;">cloud_done</span>
             </div>
             <div>
               <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Sync Status</span>
-              <strong style="font-size: 16px; color: var(--text-primary); display: block; margin-top: 2px;">All Synced</strong>
+              <strong style="font-size: 16px; color: var(--text-primary); display: block; margin-top: 2px;" id="homeSyncStatusText">All Synced</strong>
             </div>
           </div>
 
@@ -48,7 +50,7 @@ export function renderHome(container, currentUser) {
             </div>
             <div>
               <span style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Active Tasks</span>
-              <strong style="font-size: 16px; color: var(--text-primary); display: block; margin-top: 2px;">5 Claims</strong>
+              <strong style="font-size: 16px; color: var(--text-primary); display: block; margin-top: 2px;" id="homeActiveTasksCount">0 Claims</strong>
             </div>
           </div>
 
@@ -210,6 +212,72 @@ export function renderHome(container, currentUser) {
 
       </div>
     `;
+
+    // Function to calculate and update real-time Home metrics
+    function updateHomeLiveStats() {
+      const activeTaskCountEl = container.querySelector('#homeActiveTasksCount');
+      const syncStatusTextEl = container.querySelector('#homeSyncStatusText');
+      const syncStatusIconEl = container.querySelector('#homeSyncStatusIcon');
+      const syncStatusIconWrapper = container.querySelector('#homeSyncStatusIconWrapper');
+
+      if (activeTaskCountEl) {
+        const userPickup = db.getPickupRequestsForUser ? db.getPickupRequestsForUser(currentUser) : (db.requests || []);
+        const pendingPickup = userPickup.filter(r => String(r.status || '').toLowerCase().trim() === 'pending').length;
+
+        const rawTasks = db.getPickingTasksForUser ? db.getPickingTasksForUser(currentUser) : (db.pickingTasks || []);
+        const activeTasks = rawTasks.filter(pt => {
+          const st = String(pt.status || '').toLowerCase().trim();
+          return st === 'picking' || st === 'in progress';
+        }).length;
+
+        const rawMovements = db.getStockMovementsForUser ? db.getStockMovementsForUser(currentUser) : (db.stockMovements || []);
+        const pendingMovements = rawMovements.filter(m => String(m.status || '').toLowerCase().trim() === 'pending').length;
+
+        const totalActive = pendingPickup + activeTasks + pendingMovements;
+        activeTaskCountEl.textContent = `${totalActive} Claim${totalActive !== 1 ? 's' : ''}`;
+      }
+
+      if (syncStatusTextEl && syncStatusIconEl) {
+        if (db.isSyncing) {
+          syncStatusTextEl.textContent = 'Syncing...';
+          syncStatusIconEl.textContent = 'sync';
+          syncStatusIconEl.style.animation = 'spinIcon 1s linear infinite';
+          if (syncStatusIconWrapper) {
+            syncStatusIconWrapper.style.background = 'rgba(59, 130, 246, 0.1)';
+            syncStatusIconWrapper.style.color = '#3b82f6';
+          }
+        } else if (db.syncError) {
+          syncStatusTextEl.textContent = 'Sync Issue';
+          syncStatusIconEl.textContent = 'sync_problem';
+          syncStatusIconEl.style.animation = 'none';
+          if (syncStatusIconWrapper) {
+            syncStatusIconWrapper.style.background = 'rgba(239, 68, 68, 0.1)';
+            syncStatusIconWrapper.style.color = '#ef4444';
+          }
+        } else {
+          syncStatusTextEl.textContent = 'All Synced';
+          syncStatusIconEl.textContent = 'cloud_done';
+          syncStatusIconEl.style.animation = 'none';
+          if (syncStatusIconWrapper) {
+            syncStatusIconWrapper.style.background = 'rgba(34, 197, 94, 0.1)';
+            syncStatusIconWrapper.style.color = '#22c55e';
+          }
+        }
+      }
+    }
+
+    // Initial update
+    updateHomeLiveStats();
+
+    // Subscribe to DB updates
+    const ownRoot = container.firstElementChild;
+    const unsubscribeHome = db.subscribe(() => {
+      if (!container.isConnected || container.firstElementChild !== ownRoot) {
+        unsubscribeHome();
+        return;
+      }
+      updateHomeLiveStats();
+    });
 
     // Attach event listeners for in-app documentation modal viewing
     const fullManualBtn = container.querySelector('#openFullManualBtn');

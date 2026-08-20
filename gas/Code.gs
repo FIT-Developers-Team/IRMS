@@ -4,7 +4,16 @@
  */
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
+  var hasLock = false;
   try {
+    hasLock = lock.tryLock(20000);
+    if (!hasLock) {
+      return ContentService
+        .createTextOutput(JSON.stringify({ result: "error", message: "Server busy processing other requests. Please retry in a few seconds." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var data = {};
     
@@ -73,6 +82,10 @@ function doPost(e) {
     return ContentService
       .createTextOutput(JSON.stringify({ result: "error", message: err.toString() }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    if (hasLock) {
+      lock.releaseLock();
+    }
   }
 }
 

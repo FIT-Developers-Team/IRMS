@@ -274,11 +274,11 @@ export function renderLogin(container, onLoginSuccess) {
 
     let isPasswordCorrect = false;
     if (currentUserFound) {
-      if (currentUserFound.password) {
-        isPasswordCorrect = (pwd === currentUserFound.password);
+      if (currentUserFound.password && currentUserFound.password.trim() !== '') {
+        isPasswordCorrect = (pwd === currentUserFound.password.trim());
       } else {
-        // Fallback for demo if password column is empty in sheet for this user
-        const validPasswords = ['123456', '1234', 'password', 'admin', currentUserFound.staffId];
+        // Fallback for accounts without password explicitly configured in User_DB sheet
+        const validPasswords = ['123456', '1234', 'password', 'admin', String(currentUserFound.staffId || '').trim()];
         isPasswordCorrect = validPasswords.includes(pwd);
       }
     }

@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'IRMS_IndexedDB_Cache';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 class CacheManager {
   constructor() {
@@ -34,12 +34,12 @@ class CacheManager {
             { name: 'lostAndFound', keyPath: 'ticketId' },
             { name: 'soh', keyPath: 'id' },
             { name: 'stockMovements', keyPath: 'movementId' },
-            { name: 'skusDb', keyPath: 'sku_number' },
+            { name: 'skusDb', keyPath: 'skuCode' },
             { name: 'userDb', keyPath: 'staffId' },
             { name: 'racks', keyPath: 'locationName' },
-            { name: 'zones', keyPath: 'zone' },
+            { name: 'zones', keyPath: 'id' },
             { name: 'checkerLines', keyPath: 'lineName' },
-            { name: 'putaway', keyPath: 'ticketId' },
+            { name: 'putaway', keyPath: 'putawayId' },
             { name: 'soData', keyPath: 'id' },
             { name: 'stockActivity', keyPath: 'activityId' },
             { name: 'sohwh', keyPath: 'id' },
@@ -49,9 +49,11 @@ class CacheManager {
           ];
 
           stores.forEach(s => {
-            if (!db.objectStoreNames.contains(s.name)) {
-              db.createObjectStore(s.name, { keyPath: s.keyPath });
+            if (db.objectStoreNames.contains(s.name)) {
+              // Delete old store if upgrading to ensure correct keyPath definition
+              db.deleteObjectStore(s.name);
             }
+            db.createObjectStore(s.name, { keyPath: s.keyPath });
           });
         };
 

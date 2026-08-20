@@ -454,29 +454,38 @@ export function renderSohwh(container, currentUser) {
     }));
   }
 
+  // Debounce helper for large dataset filtering
+  let sohwhDebounceTimer = null;
+  function debouncedRenderTable() {
+    if (sohwhDebounceTimer) clearTimeout(sohwhDebounceTimer);
+    sohwhDebounceTimer = setTimeout(() => {
+      renderTable();
+    }, 150);
+  }
+
   // Bind filter events
   sohwhSearchInput.addEventListener('input', (e) => {
     searchQuery = e.target.value.trim();
     currentPage = 1;
-    renderTable();
+    debouncedRenderTable();
   });
 
   filterQtyStock.addEventListener('input', (e) => {
     qtyStockQuery = e.target.value.trim();
     currentPage = 1;
-    renderTable();
+    debouncedRenderTable();
   });
 
   filterReserveStock.addEventListener('input', (e) => {
     reserveStockQuery = e.target.value.trim();
     currentPage = 1;
-    renderTable();
+    debouncedRenderTable();
   });
 
   filterVirtualSoh.addEventListener('input', (e) => {
     virtualSohQuery = e.target.value.trim();
     currentPage = 1;
-    renderTable();
+    debouncedRenderTable();
   });
 
   // Bind Export Dropdown events

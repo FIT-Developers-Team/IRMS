@@ -981,24 +981,33 @@ export function renderSoh(container, currentUser) {
     renderTable();
   }
 
+  // Debounced update helper to prevent UI stutter on large datasets
+  let filterDebounceTimer = null;
+  function debouncedUpdateFilters(updates) {
+    if (filterDebounceTimer) clearTimeout(filterDebounceTimer);
+    filterDebounceTimer = setTimeout(() => {
+      updateFilters(updates);
+    }, 150);
+  }
+
   // Event Listeners (Desktop Headers)
-  headerSkuFilter.addEventListener('input', (e) => updateFilters({ skuQuery: e.target.value.trim() }));
-  headerNameFilter.addEventListener('input', (e) => updateFilters({ nameQuery: e.target.value.trim() }));
-  headerLocationsFilter.addEventListener('input', (e) => updateFilters({ locationsQuery: e.target.value.trim() }));
-  headerQtySohFilter.addEventListener('input', (e) => updateFilters({ qtySohQuery: e.target.value.trim() }));
-  headerQtyOnSoFilter.addEventListener('input', (e) => updateFilters({ qtyOnSoQuery: e.target.value.trim() }));
-  headerCountSoFilter.addEventListener('input', (e) => updateFilters({ countSoQuery: e.target.value.trim() }));
-  headerQtyOnLdpFilter.addEventListener('input', (e) => updateFilters({ qtyOnLdpQuery: e.target.value.trim() }));
-  headerStockAgeFilter.addEventListener('input', (e) => updateFilters({ stockAgeQuery: e.target.value.trim() }));
+  headerSkuFilter.addEventListener('input', (e) => debouncedUpdateFilters({ skuQuery: e.target.value.trim() }));
+  headerNameFilter.addEventListener('input', (e) => debouncedUpdateFilters({ nameQuery: e.target.value.trim() }));
+  headerLocationsFilter.addEventListener('input', (e) => debouncedUpdateFilters({ locationsQuery: e.target.value.trim() }));
+  headerQtySohFilter.addEventListener('input', (e) => debouncedUpdateFilters({ qtySohQuery: e.target.value.trim() }));
+  headerQtyOnSoFilter.addEventListener('input', (e) => debouncedUpdateFilters({ qtyOnSoQuery: e.target.value.trim() }));
+  headerCountSoFilter.addEventListener('input', (e) => debouncedUpdateFilters({ countSoQuery: e.target.value.trim() }));
+  headerQtyOnLdpFilter.addEventListener('input', (e) => debouncedUpdateFilters({ qtyOnLdpQuery: e.target.value.trim() }));
+  headerStockAgeFilter.addEventListener('input', (e) => debouncedUpdateFilters({ stockAgeQuery: e.target.value.trim() }));
 
   // Event Listeners (Mobile View)
-  mobileSohSearchInput.addEventListener('input', (e) => updateFilters({ mobileSearchQuery: e.target.value.trim() }));
-  mobileLocationsFilter.addEventListener('input', (e) => updateFilters({ locationsQuery: e.target.value.trim() }));
-  mobileQtySohFilter.addEventListener('input', (e) => updateFilters({ qtySohQuery: e.target.value.trim() }));
-  mobileQtyOnSoFilter.addEventListener('input', (e) => updateFilters({ qtyOnSoQuery: e.target.value.trim() }));
-  mobileCountSoFilter.addEventListener('input', (e) => updateFilters({ countSoQuery: e.target.value.trim() }));
-  mobileQtyOnLdpFilter.addEventListener('input', (e) => updateFilters({ qtyOnLdpQuery: e.target.value.trim() }));
-  mobileStockAgeFilter.addEventListener('input', (e) => updateFilters({ stockAgeQuery: e.target.value.trim() }));
+  mobileSohSearchInput.addEventListener('input', (e) => debouncedUpdateFilters({ mobileSearchQuery: e.target.value.trim() }));
+  mobileLocationsFilter.addEventListener('input', (e) => debouncedUpdateFilters({ locationsQuery: e.target.value.trim() }));
+  mobileQtySohFilter.addEventListener('input', (e) => debouncedUpdateFilters({ qtySohQuery: e.target.value.trim() }));
+  mobileQtyOnSoFilter.addEventListener('input', (e) => debouncedUpdateFilters({ qtyOnSoQuery: e.target.value.trim() }));
+  mobileCountSoFilter.addEventListener('input', (e) => debouncedUpdateFilters({ countSoQuery: e.target.value.trim() }));
+  mobileQtyOnLdpFilter.addEventListener('input', (e) => debouncedUpdateFilters({ qtyOnLdpQuery: e.target.value.trim() }));
+  mobileStockAgeFilter.addEventListener('input', (e) => debouncedUpdateFilters({ stockAgeQuery: e.target.value.trim() }));
 
   // --- Export Functionality (CSV & XLSX) ---
   function getExportTimestamp() {

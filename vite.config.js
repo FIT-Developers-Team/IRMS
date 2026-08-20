@@ -17,5 +17,17 @@ export default defineConfig({
         }
       }
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          xlsx: ['xlsx'],
+          scanner: ['html5-qrcode'],
+          papaparse: ['papaparse'],
+          gsap: ['gsap']
+        }
+      }
+    }
   }
 });
