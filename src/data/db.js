@@ -2,7 +2,8 @@ import Papa from 'papaparse';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets.js';
 import { cacheManager } from './cacheManager.js';
 
-export const DATA_EXPIRY_DURATION_MS = 5 * 60 * 1000; // 5 minutes TTL
+export const DATA_EXPIRY_DURATION_MS = 5 * 60 * 1000; // 5 minutes TTL for operational data
+export const MASTER_DATA_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours TTL for static master reference data
 
 class DatabaseService {
   constructor() {
@@ -46,17 +47,56 @@ class DatabaseService {
       }
     }
     
-    // Instant 0ms IndexedDB Hydration
-    this.initCache();
-
-    // On fresh start / browser refresh (F5) / login: fetch Master Reference Data once.
-    // Master data (skusDb, zones, racks, checkerLines, whPlanogram) is cached in IndexedDB and NOT re-fetched on page navigation.
-    this.initPromise = this.syncGoogleSheets(['userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram']);
+    // Instant 0ms IndexedDB Hydration & Master Data Lifecycle Check
+    this.initPromise = this.initStartupSync();
 
     // Background interval: Check every 30 seconds if active task data needs background refresh
     this.cacheCheckInterval = setInterval(() => {
       this.checkAndRefreshIfExpired();
     }, 30 * 1000);
+  }
+
+  async isMasterDataExpired(storeName) {
+    const lastSync = await cacheManager.getLastSyncTime(storeName);
+    if (!lastSync) return true;
+    const ms = new Date(lastSync).getTime();
+    if (isNaN(ms)) return true;
+    return (Date.now() - ms) >= MASTER_DATA_TTL_MS;
+  }
+
+  async initStartupSync() {
+    await this.initCache();
+
+    // Check which master data stores are missing or expired (> 12 hours)
+    const masterStores = [
+      { key: 'userDb', data: this.users },
+      { key: 'skusDb', data: this.skus },
+      { key: 'zones', data: this.zones },
+      { key: 'racks', data: this.racks },
+      { key: 'checkerLines', data: this.checkerLines },
+      { key: 'whPlanogram', data: this.whPlanograms }
+    ];
+
+    const neededTabs = [];
+    for (const m of masterStores) {
+      if (!m.data || m.data.length === 0) {
+        neededTabs.push(m.key);
+      } else {
+        const isExpired = await this.isMasterDataExpired(m.key);
+        if (isExpired) {
+          neededTabs.push(m.key);
+        }
+      }
+    }
+
+    if (neededTabs.length > 0) {
+      console.log(`[Master Data Sync] Fetching missing/expired master datasets: ${neededTabs.join(', ')}`);
+      await this.syncGoogleSheets(neededTabs);
+    } else {
+      console.log(`[Master Data Sync] Master reference data is fully cached in IndexedDB. 0ms instant startup.`);
+      // Fast background user check so role/account changes apply promptly
+      this.syncGoogleSheets(['userDb']).catch(() => {});
+    }
   }
 
   broadcastUpdate(storeName) {
@@ -794,6 +834,7 @@ class DatabaseService {
             this.parseUsers(text);
           }
           cacheManager.setStore('userDb', this.users);
+          cacheManager.setLastSyncTime('userDb', new Date().toISOString());
         }
         if (item.key === 'soData') {
           this.parseSoData(text);
@@ -804,15 +845,18 @@ class DatabaseService {
         if (item.key === 'racks') {
           this.parseRacks(text);
           cacheManager.setStore('racks', this.racks);
+          cacheManager.setLastSyncTime('racks', new Date().toISOString());
         }
         if (item.key === 'zones') {
           this.parseZones(text);
           cacheManager.setStore('zones', this.zones);
+          cacheManager.setLastSyncTime('zones', new Date().toISOString());
         }
         if (item.key === 'lostAndFound') this.parseLostAndFound(text);
         if (item.key === 'checkerLines') {
           this.parseCheckerLines(text);
           cacheManager.setStore('checkerLines', this.checkerLines);
+          cacheManager.setLastSyncTime('checkerLines', new Date().toISOString());
         }
         if (item.key === 'putaway') {
           this.parsePutaway(text);
@@ -821,6 +865,7 @@ class DatabaseService {
         if (item.key === 'skusDb') {
           this.parseSkusDb(text);
           cacheManager.setStore('skusDb', this.skus);
+          cacheManager.setLastSyncTime('skusDb', new Date().toISOString());
         }
         if (item.key === 'soh') {
           this.parseSoh(text);
@@ -845,6 +890,7 @@ class DatabaseService {
         if (item.key === 'whPlanogram') {
           this.parseWhPlanogram(text);
           cacheManager.setStore('whPlanogram', this.whPlanograms);
+          cacheManager.setLastSyncTime('whPlanogram', new Date().toISOString());
         }
       }
 
