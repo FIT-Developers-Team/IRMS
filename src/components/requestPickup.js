@@ -96,6 +96,12 @@ export function renderRequestPickup(container, currentUser) {
         reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
       }
 
+      const statusLower = (req.status || 'Pending').toLowerCase();
+      let statusClass = 'pending';
+      if (statusLower === 'completed' || statusLower === 'done') statusClass = 'completed';
+      else if (statusLower === 'picking' || statusLower === 'in progress') statusClass = 'picking';
+      else if (statusLower === 'cancelled' || statusLower === 'rejected') statusClass = 'cancelled';
+
       return `
         <tr>
           <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
@@ -116,7 +122,7 @@ export function renderRequestPickup(container, currentUser) {
           <td><strong style="font-size: 14px;">${req.qty}</strong></td>
           <td><span class="status-badge" style="font-size: 11px; padding: 2px 8px; background: #e2e8f0; color: #475569; font-weight: 700; text-transform: uppercase;">${soStatus}</span></td>
           <td><strong style="font-size: 14px;">${soOrigQty}</strong></td>
-          <td><span class="status-badge pending">${req.status}</span></td>
+          <td><span class="status-badge ${statusClass}">${escapeHtml(req.status || 'Pending')}</span></td>
         </tr>
       `;
     }).join('');
@@ -136,11 +142,17 @@ export function renderRequestPickup(container, currentUser) {
         reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
       }
 
+      const statusLower = (req.status || 'Pending').toLowerCase();
+      let statusClass = 'pending';
+      if (statusLower === 'completed' || statusLower === 'done') statusClass = 'completed';
+      else if (statusLower === 'picking' || statusLower === 'in progress') statusClass = 'picking';
+      else if (statusLower === 'cancelled' || statusLower === 'rejected') statusClass = 'cancelled';
+
       return `
         <div class="mobile-task-card">
           <div class="card-header-row">
             <span class="picking-id-label">#${req.ticketId || req.uniqueid}</span>
-            <span class="status-badge pending">${req.status}</span>
+            <span class="status-badge ${statusClass}">${escapeHtml(req.status || 'Pending')}</span>
           </div>
           
           <div class="card-body-content">
