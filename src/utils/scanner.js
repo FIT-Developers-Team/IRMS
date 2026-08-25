@@ -40,85 +40,136 @@ const ALL_SUPPORTED_FORMATS = [
 ];
 
 /**
- * Find the best back camera deviceId using raw navigator.mediaDevices.
+ * Find the best back camera deviceId.
  * 
- * Strategy:
- * 1. Request a temporary back-camera stream to trigger permission grant
- *    and reveal full device labels.
- * 2. Enumerate all video input devices.
- * 3. Filter out front cameras and ultra-wide/macro/depth sensors.
- * 4. Pick the main 1x rear camera.
- * 5. Stop the temporary stream.
+ * Strategy (bulletproof):
+ * 1. Request getUserMedia with facingMode: { exact: 'environment' }.
+ *    This forces the OS to open a REAR camera. We then read the actual
+ *    deviceId from track.getSettings().deviceId.
+ * 2. Enumerate all video devices (labels are now revealed).
+ * 3. Among rear cameras, prefer the standard 1x main lens over ultrawide.
+ * 4. Stop the temporary stream.
  * 
  * Returns the deviceId string, or null if detection fails.
  */
 async function findMainBackCameraId() {
+  let tempStream = null;
+  
   try {
-    // Step 1: Open a temporary back-camera stream so the browser reveals labels
-    let tempStream;
+    // === PHASE 1: Get a confirmed back-camera deviceId from the OS ===
+    let confirmedBackDeviceId = null;
+
+    // Try exact: 'environment' — this MUST open a rear camera or throw
     try {
       tempStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } }
+        video: { facingMode: { exact: 'environment' } }
       });
+      const track = tempStream.getVideoTracks()[0];
+      const settings = track.getSettings();
+      confirmedBackDeviceId = settings.deviceId || null;
+      console.log('[Scanner] OS back camera deviceId:', confirmedBackDeviceId, 'label:', track.label);
     } catch (e) {
-      // If even ideal fails, try without constraint
-      tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      console.warn('[Scanner] exact:environment failed, trying ideal:', e.message);
+      // Fallback: use ideal (may give front on some devices, we'll verify below)
+      try {
+        tempStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        });
+        const track = tempStream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        // Only trust this if the OS reports it as environment
+        if (settings.facingMode === 'environment') {
+          confirmedBackDeviceId = settings.deviceId || null;
+        }
+        console.log('[Scanner] ideal stream facingMode:', settings.facingMode, 'deviceId:', settings.deviceId);
+      } catch (e2) {
+        console.warn('[Scanner] ideal:environment also failed:', e2.message);
+        tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
     }
 
-    // Step 2: Enumerate devices (labels are now available after permission)
+    // === PHASE 2: Enumerate all cameras (labels are now available) ===
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
-    // Step 3: Stop the temporary stream immediately
+    // Stop the temporary stream
     if (tempStream) {
       tempStream.getTracks().forEach(t => t.stop());
+      tempStream = null;
     }
+
+    console.log('[Scanner] All cameras:', videoDevices.map(d => `"${d.label}" (${d.deviceId.substring(0, 12)}...)`));
 
     if (videoDevices.length === 0) return null;
     if (videoDevices.length === 1) return videoDevices[0].deviceId;
 
-    // Step 4: Log all cameras for debugging
-    console.log('[Scanner] Available cameras:', videoDevices.map(d => `${d.label} (${d.deviceId.substring(0, 8)}...)`));
-
-    // Step 5: Classify cameras
+    // === PHASE 3: If we have a confirmed back deviceId, check if there's a better main lens ===
     const FRONT_KEYWORDS = ['front', 'user', 'selfie', 'facing front', 'facingfront'];
     const ULTRAWIDE_KEYWORDS = ['ultra', '0.5', '0.6', 'wide-angle', 'wide angle', 'macro', 'depth', 'aux'];
-    const TELEPHOTO_KEYWORDS = ['telephoto', '2x', '3x', '5x', '10x'];
-    const MAIN_KEYWORDS = ['main', 'primary', '1x', 'standard'];
+    
+    // If the OS gave us a definitive back camera, see if it's ultrawide
+    // and if there's a better main camera available
+    if (confirmedBackDeviceId) {
+      const confirmedDevice = videoDevices.find(d => d.deviceId === confirmedBackDeviceId);
+      const confirmedLabel = (confirmedDevice?.label || '').toLowerCase();
+      const isConfirmedUltraWide = ULTRAWIDE_KEYWORDS.some(kw => confirmedLabel.includes(kw));
 
-    const backCameras = [];
+      if (!isConfirmedUltraWide) {
+        // OS picked a non-ultrawide back camera — trust it
+        console.log('[Scanner] Using OS-selected back camera:', confirmedDevice?.label);
+        return confirmedBackDeviceId;
+      }
 
-    for (const dev of videoDevices) {
+      // OS picked ultrawide — find the main lens among other back cameras
+      console.log('[Scanner] OS picked ultrawide, looking for main lens...');
+      for (const dev of videoDevices) {
+        if (dev.deviceId === confirmedBackDeviceId) continue;
+        const label = (dev.label || '').toLowerCase();
+        if (FRONT_KEYWORDS.some(kw => label.includes(kw))) continue;
+        if (ULTRAWIDE_KEYWORDS.some(kw => label.includes(kw))) continue;
+        // This is likely the main rear camera
+        console.log('[Scanner] Found main lens:', dev.label);
+        return dev.deviceId;
+      }
+      // No better option found, use the ultrawide
+      return confirmedBackDeviceId;
+    }
+
+    // === PHASE 4: No confirmed back deviceId — classify by labels ===
+    const MAIN_KEYWORDS = ['main', 'primary', '1x', 'standard', 'back', 'rear', 'environment'];
+    
+    const scored = videoDevices.map(dev => {
       const label = (dev.label || '').toLowerCase();
-
-      // Skip front cameras
-      if (FRONT_KEYWORDS.some(kw => label.includes(kw))) continue;
-
-      const isUltraWide = ULTRAWIDE_KEYWORDS.some(kw => label.includes(kw));
-      const isTelephoto = TELEPHOTO_KEYWORDS.some(kw => label.includes(kw));
+      const isFront = FRONT_KEYWORDS.some(kw => label.includes(kw));
+      const isUltra = ULTRAWIDE_KEYWORDS.some(kw => label.includes(kw));
       const isMain = MAIN_KEYWORDS.some(kw => label.includes(kw));
+      
+      let score = 0;
+      if (isFront) score = -100;
+      else if (isMain && !isUltra) score = 100;
+      else if (!isUltra) score = 50;
+      else score = -10;
 
-      let priority;
-      if (isMain) priority = 100;
-      else if (isUltraWide) priority = -10;
-      else if (isTelephoto) priority = 10;
-      else priority = 50; // Unknown back cam — likely main on most devices
+      return { deviceId: dev.deviceId, label: dev.label, score };
+    });
 
-      backCameras.push({ deviceId: dev.deviceId, label: dev.label, priority });
+    scored.sort((a, b) => b.score - a.score);
+    console.log('[Scanner] Scored cameras:', scored.map(s => `"${s.label}" score:${s.score}`));
+
+    // Pick the highest-scored camera
+    if (scored[0].score > -100) {
+      return scored[0].deviceId;
     }
 
-    if (backCameras.length === 0) {
-      // All cameras were classified as front — just use the last device (often back on Android)
-      return videoDevices[videoDevices.length - 1].deviceId;
-    }
-
-    // Sort by priority descending
-    backCameras.sort((a, b) => b.priority - a.priority);
-    console.log('[Scanner] Selected camera:', backCameras[0].label, `(priority: ${backCameras[0].priority})`);
-    return backCameras[0].deviceId;
+    // Desperate fallback: use the last device (often back camera on Android)
+    return videoDevices[videoDevices.length - 1].deviceId;
 
   } catch (err) {
     console.warn('[Scanner] Camera detection failed, will use facingMode fallback:', err);
+    // Clean up temp stream if still open
+    if (tempStream) {
+      tempStream.getTracks().forEach(t => t.stop());
+    }
     return null;
   }
 }
