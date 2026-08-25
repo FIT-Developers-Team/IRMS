@@ -23,6 +23,58 @@ const SUPPORTED_FORMATS = [
   Html5QrcodeSupportedFormats.PDF_417,
 ];
 
+// Negative keywords: disqualifies selfie, ultrawide (.5x, 0.5x, .6x, etc.), telephoto, and auxiliary sensors
+const NEGATIVE_KEYWORDS = [
+  // Front / Selfie
+  'front', 'depan', 'user', 'selfie', 'face', 'facing front',
+  // Ultrawide (including .5 and 0.5 variations)
+  'ultra', 'ultrawide', 'ultra-wide', 'wide-angle', 'wide angle',
+  '.5x', '0.5x', '.5', '0.5', '.6x', '0.6x', '.6', '0.6',
+  // Telephoto / Zoom
+  'tele', 'telephoto', 'zoom', '2x', '3x', '5x', '10x',
+  // Auxiliary sensors
+  'macro', 'depth', 'tof', 'virtual'
+];
+
+// Positive keywords for the main 1x rear camera
+const MAIN_1X_KEYWORDS = [
+  '1x', '1.0x', 'x1', '1.0', '(1x)', '[1x]',
+  'main', 'primary', 'standard',
+  'camera2 0', 'camera 0', '0, facing back', '0 (facing back)'
+];
+
+/**
+ * Scores a camera label to find the primary 1x rear camera.
+ * Higher score = higher priority to be the default camera.
+ */
+function scoreCamera(cam) {
+  if (!cam || !cam.label) return 0;
+  const l = cam.label.toLowerCase();
+
+  // Instant penalty for any negative keyword (ultrawide, telephoto, front, etc.)
+  for (const neg of NEGATIVE_KEYWORDS) {
+    if (l.includes(neg)) {
+      return -100;
+    }
+  }
+
+  let score = 10; // base score for clean camera
+
+  // Check for main 1x keywords
+  for (const pos of MAIN_1X_KEYWORDS) {
+    if (l.includes(pos)) {
+      score += 80;
+    }
+  }
+
+  // Standard rear camera hints
+  if (l.includes('back') || l.includes('rear') || l.includes('environment') || l.includes('belakang')) {
+    score += 40;
+  }
+
+  return score;
+}
+
 /**
  * Sort cameras so that:
  * 1. Main rear camera (1x) is first
@@ -32,38 +84,16 @@ const SUPPORTED_FORMATS = [
 function sortCameras(cameras) {
   if (!cameras || cameras.length === 0) return [];
 
-  const frontKeywords = ['front', 'depan', 'user', 'selfie', 'face', 'facing front'];
-  const ultraWideKeywords = ['ultra', 'wide-angle', 'ultrawide', 'ultra-wide', '0.5x', '0.6x', 'wide angle'];
-  const teleKeywords = ['telephoto', 'tele', 'zoom', '2x', '3x', '5x', '10x'];
-
-  const mainRear = [];
-  const otherRear = [];
-  const front = [];
-  const unknown = [];
-
-  for (const cam of cameras) {
+  const scored = cameras.map((cam, idx) => {
     const l = (cam.label || '').toLowerCase();
-    const isFront = frontKeywords.some(k => l.includes(k));
-    const isUltra = ultraWideKeywords.some(k => l.includes(k));
-    const isTele = teleKeywords.some(k => l.includes(k));
+    const isFront = ['front', 'depan', 'user', 'selfie', 'face', 'facing front'].some(k => l.includes(k));
+    const score = isFront ? -200 : scoreCamera(cam);
+    return { cam, score, isFront, originalIndex: idx };
+  });
 
-    if (isFront) {
-      front.push(cam);
-    } else if (isUltra || isTele) {
-      otherRear.push(cam);
-    } else if (l.length > 0) {
-      // Main rear candidate
-      if (l.includes('main') || l.includes('primary') || l.includes('0') || l.includes('back') || l.includes('rear') || l.includes('belakang')) {
-        mainRear.unshift(cam);
-      } else {
-        mainRear.push(cam);
-      }
-    } else {
-      unknown.push(cam);
-    }
-  }
+  scored.sort((a, b) => b.score - a.score);
 
-  return [...mainRear, ...otherRear, ...unknown, ...front];
+  return scored.map(s => s.cam);
 }
 
 /**
@@ -74,19 +104,48 @@ function getFriendlyCameraLabel(cam, index) {
     return `Camera ${index + 1}`;
   }
   const l = cam.label.toLowerCase();
-  if (l.includes('front') || l.includes('depan') || l.includes('user') || l.includes('selfie')) {
+  if (['front', 'depan', 'user', 'selfie', 'face'].some(k => l.includes(k))) {
     return 'Front Camera';
   }
-  if (l.includes('ultra') || l.includes('wide')) {
+  if (['ultra', 'wide', '.5', '0.5', '.6', '0.6'].some(k => l.includes(k))) {
     return 'Rear Camera (Wide)';
   }
-  if (l.includes('tele') || l.includes('zoom')) {
+  if (['tele', 'zoom', '2x', '3x', '5x'].some(k => l.includes(k))) {
     return 'Rear Camera (Zoom)';
   }
-  if (l.includes('back') || l.includes('rear') || l.includes('environment') || l.includes('belakang') || l.includes('main')) {
+  if (['macro', 'depth'].some(k => l.includes(k))) {
+    return 'Macro Camera';
+  }
+  if (l.includes('main') || l.includes('primary') || l.includes('1x') || l.includes('1.0') || l.includes('camera 0') || l.includes('camera2 0')) {
+    return 'Rear Camera (Main 1x)';
+  }
+  if (l.includes('back') || l.includes('rear') || l.includes('environment') || l.includes('belakang')) {
     return 'Rear Camera';
   }
   return cam.label.length > 25 ? `Camera ${index + 1}` : cam.label;
+}
+
+/**
+ * Ensures camera permission is active so camera device labels are populated
+ */
+async function ensureCameraPermissionAndGetDevices() {
+  try {
+    let cameras = await Html5Qrcode.getCameras();
+    const hasLabels = cameras && cameras.some(c => c.label && c.label.trim().length > 0);
+
+    if (!hasLabels && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
+        stream.getTracks().forEach(track => track.stop());
+        cameras = await Html5Qrcode.getCameras();
+      } catch (e) {}
+    }
+    return cameras || [];
+  } catch (err) {
+    return [];
+  }
 }
 
 /**
@@ -139,7 +198,7 @@ export function openCameraScanner(onScanSuccess) {
       <!-- Controls & Status -->
       <div style="text-align:center; display:flex; flex-direction:column; gap:8px;">
         <p style="font-size:12px; color:#94a3b8; margin:0;">Align barcode inside the frame</p>
-        <div id="scanner-error-message" style="font-size:11px; color:#38bdf8; min-height:16px;">Starting camera...</div>
+        <div id="scanner-error-message" style="font-size:11px; color:#38bdf8; min-height:16px;">Detecting best camera...</div>
         <div style="display:flex; justify-content:center; gap:10px;">
           <button id="toggleCameraFacingBtn" class="btn-secondary" style="height:36px; padding:0 16px; font-size:12px; font-weight:700; border-radius:18px; background:rgba(255,255,255,0.08); color:#e2e8f0; border:1px solid rgba(255,255,255,0.15); gap:6px; display:inline-flex; align-items:center; cursor:pointer; outline:none;">
             <span class="material-icons-round" style="font-size:16px;">flip_camera_ios</span>
@@ -203,8 +262,6 @@ export function openCameraScanner(onScanSuccess) {
       errorEl.style.color = '#38bdf8';
 
       // Start scanning
-      // NOTE: Do NOT put videoConstraints in the config object, as html5-qrcode
-      // would completely discard cameraTarget/facingMode if videoConstraints is present!
       await html5Qrcode.start(
         cameraTarget,
         {
@@ -229,7 +286,7 @@ export function openCameraScanner(onScanSuccess) {
       // Apply continuous autofocus if available on this device
       await applyContinuousFocus(html5Qrcode);
 
-      // Now that camera permissions are active, enumerate all available cameras with full labels
+      // Now that camera permissions are active, ensure we have full device labels
       try {
         const rawCameras = await Html5Qrcode.getCameras();
         if (rawCameras && rawCameras.length > 0) {
@@ -297,6 +354,22 @@ export function openCameraScanner(onScanSuccess) {
     }
   });
 
-  // Start with default rear camera
-  startScanning({ facingMode: 'environment' });
+  // Initial startup: enumerate and find the main 1x rear camera
+  (async () => {
+    try {
+      const devices = await ensureCameraPermissionAndGetDevices();
+      if (devices && devices.length > 0) {
+        allCameras = sortCameras(devices);
+        currentCameraIndex = 0;
+        const defaultCam = allCameras[0];
+        if (defaultCam && defaultCam.id) {
+          startScanning(defaultCam.id);
+          return;
+        }
+      }
+    } catch (e) {}
+
+    // Fallback to facingMode: 'environment'
+    startScanning({ facingMode: 'environment' });
+  })();
 }
