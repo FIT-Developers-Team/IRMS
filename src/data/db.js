@@ -1058,7 +1058,7 @@ class DatabaseService {
     const tabMap = {
       home:          [],
       requestPickup: ['requestChecker', 'soData'],
-      pickingTask:   ['pickingTask', 'requestChecker', 'putaway', 'soh'],
+      pickingTask:   ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway', 'soh'],
       lostAndFound:  ['lostAndFound'],
       soh:           ['soh'],
       stockMovement: ['stockMovement', 'stockActivity', 'soh'],

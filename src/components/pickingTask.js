@@ -479,6 +479,7 @@ export function renderPickingTask(container, currentUser) {
         sourceTypeFilter = chip.dataset.sourceType;
         sourceLocationFilter = ''; // reset location when type changes
         renderTasks();
+        db.syncSectionData('pickingTask', { background: true });
       });
     });
 
@@ -1731,13 +1732,15 @@ export function renderPickingTask(container, currentUser) {
     });
   }
 
-  // Filter Tabs Event
+  // Filter Tabs Event (Sub-tab switching)
   filterTabs.forEach(tab => {
     tab.addEventListener('click', () => {
       filterTabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       activeFilter = tab.dataset.filter;
       renderTasks();
+      // Fast background delta sync whenever sub-tab is clicked (especially Waiting List)
+      db.syncSectionData('pickingTask', { background: true });
     });
   });
 

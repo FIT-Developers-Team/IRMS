@@ -222,8 +222,14 @@ export function renderStockMovement(container, currentUser) {
     renderView();
   }
 
-  subtabTasksBtn.addEventListener('click', () => setSubTab('tasks'));
-  subtabActivitiesBtn.addEventListener('click', () => setSubTab('activities'));
+  subtabTasksBtn.addEventListener('click', () => {
+    setSubTab('tasks');
+    db.syncSectionData('stockMovement', { background: true });
+  });
+  subtabActivitiesBtn.addEventListener('click', () => {
+    setSubTab('activities');
+    db.syncSectionData('stockMovement', { background: true });
+  });
 
   // Search input
   searchInput.addEventListener('input', (e) => {
