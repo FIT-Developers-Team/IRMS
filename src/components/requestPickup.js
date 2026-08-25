@@ -576,19 +576,21 @@ export function renderRequestPickup(container, currentUser) {
     }
 
     function renderSoMenu(query) {
-      const filtered = soList.filter(item => 
-        !query || item.soNumber.toLowerCase().includes(query.toLowerCase())
+      const allSos = db.getUniqueSoNumbers();
+      const q = String(query || '').trim().toLowerCase();
+      const filtered = allSos.filter(item => 
+        !q || String(item.soNumber).toLowerCase().includes(q)
       );
 
       if (!filtered.length) {
-        soMenu.innerHTML = `<div class="sku-option-item" style="color: var(--text-muted);">No matching SO numbers</div>`;
+        soMenu.innerHTML = `<div class="sku-option-item" style="color: var(--text-muted);">No matching SO numbers (${allSos.length} loaded)</div>`;
         return;
       }
 
-      soMenu.innerHTML = filtered.map(item => `
-        <div class="sku-option-item" data-so="${item.soNumber}" data-picker="${escapeHtml(item.pickerName || '')}">
-          <span class="sku-code-text">${item.soNumber}</span>
-          <span class="sku-name-text">Picker: ${item.pickerName || 'N/A'}</span>
+      soMenu.innerHTML = filtered.slice(0, 100).map(item => `
+        <div class="sku-option-item" data-so="${escapeHtml(item.soNumber)}" data-picker="${escapeHtml(item.pickerName || '')}">
+          <span class="sku-code-text">${escapeHtml(item.soNumber)}</span>
+          <span class="sku-name-text">Picker: ${escapeHtml(item.pickerName || 'N/A')}${item.status ? ` • Status: ${escapeHtml(item.status)}` : ''}</span>
         </div>
       `).join('');
 
@@ -617,15 +619,22 @@ export function renderRequestPickup(container, currentUser) {
       soMenu.classList.add('open');
     });
 
+    soInput.addEventListener('click', () => {
+      renderSoMenu(soInput.value);
+      soMenu.classList.add('open');
+    });
+
     soInput.addEventListener('input', () => {
       selectedSoNumber = soInput.value.trim();
       renderSoMenu(selectedSoNumber);
       soMenu.classList.add('open');
       updateSkuEnablement();
 
-      const match = soList.find(item => item.soNumber.toLowerCase() === selectedSoNumber.toLowerCase());
+      const allSos = db.getUniqueSoNumbers();
+      const match = allSos.find(item => String(item.soNumber).toLowerCase() === selectedSoNumber.toLowerCase());
       if (match && match.pickerName) {
         pickerNameInput.value = match.pickerName;
+        selectedPickerName = match.pickerName;
       }
     });
 
@@ -642,10 +651,10 @@ export function renderRequestPickup(container, currentUser) {
         return;
       }
 
-      skuMenu.innerHTML = products.map(item => `
-        <div class="sku-option-item" data-sku="${item.skuNumber}" data-name="${escapeHtml(item.productName)}">
-          <span class="sku-code-text">SKU: ${item.skuNumber}</span>
-          <span class="sku-name-text">${item.productName}</span>
+      skuMenu.innerHTML = products.slice(0, 100).map(item => `
+        <div class="sku-option-item" data-sku="${escapeHtml(item.skuNumber)}" data-name="${escapeHtml(item.productName)}">
+          <span class="sku-code-text">SKU: ${escapeHtml(item.skuNumber)}</span>
+          <span class="sku-name-text">${escapeHtml(item.productName)}</span>
         </div>
       `).join('');
 
@@ -665,16 +674,16 @@ export function renderRequestPickup(container, currentUser) {
           selectedSkuDisplay.innerHTML = `
             <div class="autofill-badge success" style="margin-bottom: 8px;">
               <span class="material-icons-round" style="font-size: 16px;">check_circle</span>
-              <span>Selected: <strong>SKU ${skuNumber}</strong> (${productName})</span>
+              <span>Selected: <strong>SKU ${escapeHtml(skuNumber)}</strong> (${escapeHtml(productName)})</span>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
               <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
                 <span class="material-icons-round" style="font-size: 16px;">info</span>
-                <span>SO Status: <strong style="text-transform: uppercase;">${soStatus}</strong></span>
+                <span>SO Status: <strong style="text-transform: uppercase;">${escapeHtml(soStatus)}</strong></span>
               </div>
               <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
                 <span class="material-icons-round" style="font-size: 16px;">layers</span>
-                <span>SO SUM(Qty): <strong>${soOrigQty}</strong></span>
+                <span>SO SUM(Qty): <strong>${escapeHtml(String(soOrigQty))}</strong></span>
               </div>
             </div>
           `;
@@ -683,6 +692,13 @@ export function renderRequestPickup(container, currentUser) {
     }
 
     skuSearchInput.addEventListener('focus', () => {
+      if (!skuSearchInput.disabled) {
+        renderSkuMenu(skuSearchInput.value);
+        skuMenu.classList.add('open');
+      }
+    });
+
+    skuSearchInput.addEventListener('click', () => {
       if (!skuSearchInput.disabled) {
         renderSkuMenu(skuSearchInput.value);
         skuMenu.classList.add('open');

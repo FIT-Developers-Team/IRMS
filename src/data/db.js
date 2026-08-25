@@ -712,26 +712,14 @@ class DatabaseService {
       fetches.push(fetch(userDbUrl, { cache: 'no-store' }).then(r => ({ key: 'userDb', res: r })).catch(() => null));
     }
     if (shouldSync('soData')) {
-      const soDataFetch = (async () => {
-        try {
-          // If we already have cached soData and not forcing full redownload, check if Column A Row 2 timestamp has changed
-          if (!forceRedownload && this.soList && this.soList.length > 0) {
-            const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
-            const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
-            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
-              console.log(`[SO_DATA Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
-              return { key: 'soData', skipped: true };
-            }
-            this._pendingSoDataTimestamp = latestTs;
-          }
-          const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' });
-          return { key: 'soData', res: res };
-        } catch (err) {
-          console.error('soData fetch error:', err);
-          return null;
-        }
-      })();
-      fetches.push(soDataFetch);
+      fetches.push(
+        fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' })
+          .then(r => ({ key: 'soData', res: r }))
+          .catch(err => {
+            console.error('soData fetch error:', err);
+            return null;
+          })
+      );
     }
     if (shouldSync('requestChecker')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(requestCheckerTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'requestChecker', res: r })).catch(() => null));
@@ -1559,16 +1547,17 @@ class DatabaseService {
   getUniqueSoNumbers() {
     this.checkAndRefreshIfExpired();
     const map = new Map();
-    this.soList.forEach(item => {
-      const status = (item.status || '').toLowerCase().trim();
-      const isValidStatus = !status || ['picking', 'packing', 'staging', 'open', 'pending', 'in progress', 'inprogress'].includes(status) || status.includes('pick') || status.includes('pack') || status.includes('stag') || status.includes('open') || status.includes('pend');
-      if (item.soNumber && !map.has(item.soNumber) && isValidStatus) {
-        map.set(item.soNumber, {
-          soNumber: item.soNumber,
-          pickerName: item.pickerName || '',
-          status: item.status || '',
-          wave: item.wave || ''
-        });
+    (this.soList || []).forEach(item => {
+      if (item && item.soNumber) {
+        const soTrimmed = String(item.soNumber).trim();
+        if (soTrimmed && !map.has(soTrimmed.toLowerCase())) {
+          map.set(soTrimmed.toLowerCase(), {
+            soNumber: soTrimmed,
+            pickerName: String(item.pickerName || '').trim(),
+            status: String(item.status || '').trim(),
+            wave: String(item.wave || '').trim()
+          });
+        }
       }
     });
     return Array.from(map.values());
@@ -1576,28 +1565,32 @@ class DatabaseService {
 
   getProductsForSo(soNumber) {
     if (!soNumber) return [];
-    return this.soList.filter(item => item.soNumber === soNumber);
+    const cleanSo = String(soNumber).trim().toLowerCase();
+    return (this.soList || []).filter(item => String(item.soNumber || '').trim().toLowerCase() === cleanSo);
   }
 
   getSoDetails(soNumber, skuNumber) {
     if (!soNumber || !skuNumber) return null;
-    return this.soList.find(item => 
-      item.soNumber === soNumber && 
-      item.skuNumber === skuNumber
+    const cleanSo = String(soNumber).trim().toLowerCase();
+    const cleanSku = String(skuNumber).trim().toLowerCase();
+    return (this.soList || []).find(item => 
+      String(item.soNumber || '').trim().toLowerCase() === cleanSo && 
+      String(item.skuNumber || '').trim().toLowerCase() === cleanSku
     ) || null;
   }
 
   searchProducts(query, soNumber = null) {
-    let list = this.soList;
+    let list = this.soList || [];
     if (soNumber) {
-      list = list.filter(item => item.soNumber === soNumber);
+      const cleanSo = String(soNumber).trim().toLowerCase();
+      list = list.filter(item => String(item.soNumber || '').trim().toLowerCase() === cleanSo);
     }
     if (!query) return list.slice(0, 50);
 
-    const q = query.toLowerCase();
+    const q = String(query).trim().toLowerCase();
     return list.filter(item => 
-      item.skuNumber.toLowerCase().includes(q) || 
-      item.productName.toLowerCase().includes(q)
+      String(item.skuNumber || '').toLowerCase().includes(q) || 
+      String(item.productName || '').toLowerCase().includes(q)
     ).slice(0, 50);
   }
 
