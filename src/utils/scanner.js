@@ -26,107 +26,98 @@ const SUPPORTED_FORMATS = [
 ];
 
 /**
- * Attempts to find the main rear camera, avoiding ultrawide lenses.
- * Strategy:
- *   1. Enumerate all cameras via Html5Qrcode.getCameras()
- *   2. Filter for rear-facing cameras by label keywords
- *   3. Prefer the "main" camera (not ultrawide/telephoto) based on label heuristics
- *   4. Fallback to facingMode constraint if enumeration fails
+ * Finds the best rear camera from a list of camera devices, avoiding ultrawide/telephoto lenses.
+ * If labels are not available (e.g. before permissions are granted), returns null so
+ * the caller can safely fall back to `{ facingMode: 'environment' }`.
  *
- * @returns {Promise<string|{facingMode: string}>} deviceId string or facingMode config
+ * @param {Array<{id: string, label: string}>} cameras
+ * @returns {string|null} deviceId or null
  */
-async function selectMainRearCamera() {
-  try {
-    const cameras = await Html5Qrcode.getCameras();
-    if (!cameras || cameras.length === 0) {
-      return { facingMode: 'environment' };
-    }
+function findBestRearCamera(cameras) {
+  if (!cameras || cameras.length === 0) return null;
 
-    // Normalize labels for matching
-    const labeledCameras = cameras.map((cam, index) => ({
-      ...cam,
-      labelLower: (cam.label || '').toLowerCase(),
-      index,
-    }));
+  // Check if labels are actually populated (before permission, labels are empty strings)
+  const hasLabels = cameras.some(c => c.label && c.label.trim().length > 0);
+  if (!hasLabels) return null;
 
-    // Filter for rear-facing cameras
-    const rearKeywords = ['back', 'rear', 'environment', 'belakang'];
-    const ultraWideKeywords = ['ultra', 'wide angle', 'ultrawide', 'ultra-wide', '0.5x', '0.6x'];
-    const telephotoKeywords = ['telephoto', 'tele', 'zoom', '2x', '3x', '5x', '10x'];
+  const rearKeywords = ['back', 'rear', 'environment', 'belakang', 'facing back', '0, facing back'];
+  const frontKeywords = ['front', 'depan', 'user', 'selfie', 'face', 'facing front', '1, facing front'];
+  const ultraWideKeywords = ['ultra', 'wide-angle', 'ultrawide', 'ultra-wide', '0.5x', '0.6x', 'wide angle'];
+  const teleKeywords = ['telephoto', 'tele', 'zoom', '2x', '3x', '5x', '10x'];
 
-    // Find rear cameras (exclude front-facing)
-    let rearCameras = labeledCameras.filter(cam => {
-      const label = cam.labelLower;
-      // Exclude front cameras
-      if (label.includes('front') || label.includes('depan') || label.includes('user')) {
-        return false;
-      }
-      // Include if it has rear keywords OR if it's unlabeled (could be rear)
-      return rearKeywords.some(k => label.includes(k)) || label === '';
+  // Exclude front-facing cameras
+  const nonFront = cameras.filter(c => {
+    const l = (c.label || '').toLowerCase();
+    return !frontKeywords.some(k => l.includes(k));
+  });
+
+  if (nonFront.length === 0) return null;
+
+  // Filter explicitly for rear keywords
+  const rearCams = nonFront.filter(c => {
+    const l = (c.label || '').toLowerCase();
+    return rearKeywords.some(k => l.includes(k));
+  });
+
+  const candidates = rearCams.length > 0 ? rearCams : nonFront;
+
+  // Find non-ultrawide, non-telephoto camera (the main 1x sensor)
+  const mainCams = candidates.filter(c => {
+    const l = (c.label || '').toLowerCase();
+    return !ultraWideKeywords.some(k => l.includes(k)) && !teleKeywords.some(k => l.includes(k));
+  });
+
+  if (mainCams.length > 0) {
+    // Prefer camera explicitly labeled "main", "primary", or standard "camera 0"
+    const preferred = mainCams.find(c => {
+      const l = (c.label || '').toLowerCase();
+      return l.includes('main') || l.includes('primary') || l.includes('camera 0') || l.includes('camera2 0');
     });
-
-    // If no rear cameras found by label, use all non-front cameras
-    if (rearCameras.length === 0) {
-      rearCameras = labeledCameras.filter(cam => {
-        const label = cam.labelLower;
-        return !label.includes('front') && !label.includes('depan') && !label.includes('user');
-      });
-    }
-
-    // Still nothing? Use all cameras
-    if (rearCameras.length === 0) {
-      rearCameras = labeledCameras;
-    }
-
-    // If only one rear camera, use it
-    if (rearCameras.length === 1) {
-      return rearCameras[0].id;
-    }
-
-    // Among rear cameras, try to find the "main" one (exclude ultrawide and telephoto)
-    const mainCameras = rearCameras.filter(cam => {
-      const label = cam.labelLower;
-      const isUltraWide = ultraWideKeywords.some(k => label.includes(k));
-      const isTelephoto = telephotoKeywords.some(k => label.includes(k));
-      return !isUltraWide && !isTelephoto;
-    });
-
-    if (mainCameras.length > 0) {
-      // Prefer camera with "main" in label, otherwise take the first non-ultra/tele
-      const mainCam = mainCameras.find(c => c.labelLower.includes('main')) || mainCameras[0];
-      return mainCam.id;
-    }
-
-    // If all cameras are ultra/tele, just take the first rear camera
-    // (on some phones camera "0" is typically the main sensor)
-    return rearCameras[0].id;
-  } catch (err) {
-    console.warn('Camera enumeration failed, falling back to facingMode:', err);
-    return { facingMode: 'environment' };
+    return (preferred || mainCams[0]).id;
   }
+
+  return candidates[0].id;
 }
 
 /**
- * Applies advanced camera constraints for better barcode scanning.
- * Requests continuous autofocus, higher resolution, and optimal zoom.
+ * Finds the front camera deviceId if labels are populated.
+ *
+ * @param {Array<{id: string, label: string}>} cameras
+ * @returns {string|null} deviceId or null
+ */
+function findBestFrontCamera(cameras) {
+  if (!cameras || cameras.length === 0) return null;
+  const frontKeywords = ['front', 'depan', 'user', 'selfie', 'face', 'facing front', '1, facing front'];
+  const frontCam = cameras.find(c => {
+    const l = (c.label || '').toLowerCase();
+    return frontKeywords.some(k => l.includes(k));
+  });
+  return frontCam ? frontCam.id : null;
+}
+
+/**
+ * Applies advanced camera constraints (autofocus, zoom) for sharper barcode scanning.
  */
 async function applyAdvancedConstraints(html5Qrcode) {
   try {
     const capabilities = html5Qrcode.getRunningTrackCapabilities();
+    if (!capabilities) return;
+
     const constraints = {};
 
     // Enable continuous autofocus if supported
-    if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+    if (capabilities.focusMode && Array.isArray(capabilities.focusMode) && capabilities.focusMode.includes('continuous')) {
       constraints.focusMode = 'continuous';
     }
 
     // Set zoom to 1.0 (avoid ultrawide distortion) if supported
-    if (capabilities.zoom) {
-      constraints.zoom = capabilities.zoom.min >= 1.0 ? capabilities.zoom.min : 1.0;
+    if (capabilities.zoom && typeof capabilities.zoom === 'object') {
+      const minZoom = capabilities.zoom.min || 1.0;
+      constraints.zoom = Math.max(minZoom, 1.0);
     }
 
     if (Object.keys(constraints).length > 0) {
-      await html5Qrcode.applyVideoConstraints(constraints);
+      await html5Qrcode.applyVideoConstraints(constraints).catch(() => {});
     }
   } catch (err) {
     // Not all browsers/devices support these constraints — silently continue
@@ -153,13 +144,13 @@ export function openCameraScanner(onScanSuccess) {
         </button>
       </div>
 
-      <!-- Preview Box (wider aspect ratio for barcode scanning) -->
+      <!-- Preview Box (4:3 aspect ratio for optimal camera preview) -->
       <div style="position:relative; width:100%; aspect-ratio:4/3; background:#0f172a; border-radius:16px; overflow:hidden; border:1px solid rgba(255,255,255,0.05);">
         <!-- Camera Stream Viewport -->
         <div id="scanner-reader" style="width:100%; height:100%;"></div>
 
         <!-- Scanning Reticle Overlay — rectangular for 1D barcodes -->
-        <div class="scanner-reticle" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:80%; height:30%; border:2px dashed #38bdf8; border-radius:8px; pointer-events:none; box-shadow:0 0 0 100vmax rgba(15,23,42,0.4); display:flex; align-items:center; justify-content:center;">
+        <div class="scanner-reticle" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:80%; height:35%; border:2px dashed #38bdf8; border-radius:8px; pointer-events:none; box-shadow:0 0 0 100vmax rgba(15,23,42,0.4); display:flex; align-items:center; justify-content:center;">
           <!-- Laser Line Animation -->
           <div class="scanner-laser" style="position:absolute; top:0; left:0; width:100%; height:2px; background:linear-gradient(90deg, transparent, #ef4444, transparent); box-shadow:0 0 8px #ef4444; animation: laserScan 2s linear infinite;"></div>
         </div>
@@ -168,11 +159,11 @@ export function openCameraScanner(onScanSuccess) {
       <!-- Controls & Status -->
       <div style="text-align:center; display:flex; flex-direction:column; gap:8px;">
         <p style="font-size:12px; color:#94a3b8; margin:0;">Align barcode horizontally inside the frame</p>
-        <div id="scanner-error-message" style="font-size:11px; color:#f87171; min-height:16px;">Detecting cameras...</div>
+        <div id="scanner-error-message" style="font-size:11px; color:#f87171; min-height:16px;">Starting camera...</div>
         <div style="display:flex; justify-content:center; gap:10px;">
           <button id="toggleCameraFacingBtn" class="btn-secondary" style="height:36px; padding:0 14px; font-size:11px; font-weight:700; border-radius:18px; background:rgba(255,255,255,0.05); color:#e2e8f0; border:1px solid rgba(255,255,255,0.1); gap:4px; display:inline-flex; align-items:center; cursor:pointer; outline:none;">
             <span class="material-icons-round" style="font-size:16px;">flip_camera_ios</span>
-            <span>Switch Camera</span>
+            <span id="toggleCameraLabel">Switch Camera</span>
           </button>
         </div>
       </div>
@@ -201,46 +192,49 @@ export function openCameraScanner(onScanSuccess) {
   const toggleBtn = overlay.querySelector('#toggleCameraFacingBtn');
   
   let html5Qrcode = null;
-  let selectedCameraId = null;
-  let usingFront = false;
+  let currentFacing = 'environment'; // 'environment' (back) | 'user' (front)
+  let allCameras = [];
   let isScanning = false;
 
   async function startScanning() {
     try {
       if (html5Qrcode) {
         await html5Qrcode.stop().catch(() => {});
+        html5Qrcode = null;
       }
       
       const container = overlay.querySelector('#scanner-reader');
       container.innerHTML = '';
 
-      // Create scanner with explicit format support + native barcode API
+      // Create scanner instance with explicit format support + native barcode API
       html5Qrcode = new Html5Qrcode("scanner-reader", {
         formatsToSupport: SUPPORTED_FORMATS,
         useBarCodeDetectorIfSupported: true,
+        verbose: false,
       });
 
       isScanning = true;
       errorEl.textContent = 'Starting camera stream...';
       errorEl.style.color = '#38bdf8';
 
-      // Determine camera source
-      let cameraConfig;
-      if (usingFront) {
-        cameraConfig = { facingMode: 'user' };
-      } else if (selectedCameraId) {
-        // Use the pre-selected main rear camera deviceId
-        cameraConfig = selectedCameraId;
-      } else {
-        // First launch — detect and select the best rear camera
-        errorEl.textContent = 'Selecting best camera...';
-        const selected = await selectMainRearCamera();
-        if (typeof selected === 'string') {
-          selectedCameraId = selected;
-          cameraConfig = selected;
-        } else {
-          cameraConfig = selected; // facingMode fallback
+      // Try to get cameras list if not already retrieved
+      if (allCameras.length === 0) {
+        try {
+          allCameras = await Html5Qrcode.getCameras();
+        } catch (e) {
+          allCameras = [];
         }
+      }
+
+      // Determine camera configuration
+      let cameraConfig;
+      if (currentFacing === 'user') {
+        const frontId = findBestFrontCamera(allCameras);
+        cameraConfig = frontId ? frontId : { facingMode: 'user' };
+      } else {
+        // Rear camera mode — find best rear camera by deviceId, or fallback to facingMode: 'environment'
+        const rearId = findBestRearCamera(allCameras);
+        cameraConfig = rearId ? rearId : { facingMode: 'environment' };
       }
 
       await html5Qrcode.start(
@@ -250,12 +244,12 @@ export function openCameraScanner(onScanSuccess) {
           qrbox: (viewfinderWidth, viewfinderHeight) => {
             // Rectangular scan region optimized for 1D barcodes
             const width = Math.floor(viewfinderWidth * 0.80);
-            const height = Math.floor(Math.min(viewfinderHeight * 0.30, width * 0.45));
+            const height = Math.floor(Math.min(viewfinderHeight * 0.35, width * 0.5));
             return { width, height };
           },
           videoConstraints: {
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
           },
         },
         (decodedText) => {
@@ -269,10 +263,20 @@ export function openCameraScanner(onScanSuccess) {
         }
       );
 
-      // Apply continuous focus + zoom after stream is active
+      // Camera stream is now running, meaning permissions are granted!
+      // Refresh the camera list to obtain full device labels for future toggles
+      const hasLabels = allCameras.some(c => c.label && c.label.trim().length > 0);
+      if (!hasLabels) {
+        try {
+          allCameras = await Html5Qrcode.getCameras();
+        } catch (e) {}
+      }
+
+      // Apply continuous autofocus & optimal zoom
       await applyAdvancedConstraints(html5Qrcode);
 
-      errorEl.textContent = 'Scanning — align barcode in frame';
+      const isFrontActive = (currentFacing === 'user');
+      errorEl.textContent = isFrontActive ? 'Scanning (Front Camera)...' : 'Scanning — align barcode in frame';
       errorEl.style.color = '#34d399';
     } catch (err) {
       console.error('Html5Qrcode start error:', err);
@@ -293,7 +297,9 @@ export function openCameraScanner(onScanSuccess) {
   closeBtn.addEventListener('click', cleanup);
   
   toggleBtn.addEventListener('click', () => {
-    usingFront = !usingFront;
+    currentFacing = (currentFacing === 'environment') ? 'user' : 'environment';
+    errorEl.textContent = 'Switching camera...';
+    errorEl.style.color = '#38bdf8';
     startScanning();
   });
 
