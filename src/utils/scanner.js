@@ -40,45 +40,87 @@ const ALL_SUPPORTED_FORMATS = [
 ];
 
 /**
- * Classify available cameras into rear and front arrays with priority.
- * Back cameras without 'ultra', 'wide-angle', '0.5' get higher priority.
+ * Find the best back camera deviceId using raw navigator.mediaDevices.
+ * 
+ * Strategy:
+ * 1. Request a temporary back-camera stream to trigger permission grant
+ *    and reveal full device labels.
+ * 2. Enumerate all video input devices.
+ * 3. Filter out front cameras and ultra-wide/macro/depth sensors.
+ * 4. Pick the main 1x rear camera.
+ * 5. Stop the temporary stream.
+ * 
+ * Returns the deviceId string, or null if detection fails.
  */
-function classifyCameras(cameras) {
-  const rearCameras = [];
-  const frontCameras = [];
-
-  cameras.forEach((cam, idx) => {
-    const label = (cam.label || '').toLowerCase();
-    const isFront = label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('facing front');
-
-    if (isFront) {
-      frontCameras.push({ ...cam, displayName: cam.label || `Front Camera ${frontCameras.length + 1}` });
-    } else {
-      // Rear camera
-      const isUltraWide = label.includes('ultra') || label.includes('0.5') || label.includes('0.6') || label.includes('wide-angle') || label.includes('wide angle') || label.includes('macro') || label.includes('depth') || label.includes('aux');
-      const isTelephoto = label.includes('telephoto') || label.includes('2x') || label.includes('3x') || label.includes('5x') || label.includes('zoom');
-      const isMain = label.includes('main') || label.includes('primary') || label.includes('1x') || label.includes('standard') || label.includes('camera2 0') || label.includes('back 0') || label.includes('rear 0');
-
-      let displayName = cam.label || `Back Camera ${rearCameras.length + 1}`;
-      if (isMain) displayName = `📷 Main Camera (1x)`;
-      else if (isUltraWide) displayName = `📷 Ultra-Wide (0.5x)`;
-      else if (isTelephoto) displayName = `📷 Telephoto/Zoom`;
-
-      rearCameras.push({
-        ...cam,
-        displayName,
-        isUltraWide,
-        isTelephoto,
-        isMain,
-        priority: isMain ? 3 : (!isUltraWide && !isTelephoto ? 2 : (isTelephoto ? 1 : 0))
+async function findMainBackCameraId() {
+  try {
+    // Step 1: Open a temporary back-camera stream so the browser reveals labels
+    let tempStream;
+    try {
+      tempStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } }
       });
+    } catch (e) {
+      // If even ideal fails, try without constraint
+      tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
     }
-  });
 
-  // Sort rear cameras so standard 1x main back camera is prioritized
-  rearCameras.sort((a, b) => b.priority - a.priority);
+    // Step 2: Enumerate devices (labels are now available after permission)
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
-  return { rearCameras, frontCameras };
+    // Step 3: Stop the temporary stream immediately
+    if (tempStream) {
+      tempStream.getTracks().forEach(t => t.stop());
+    }
+
+    if (videoDevices.length === 0) return null;
+    if (videoDevices.length === 1) return videoDevices[0].deviceId;
+
+    // Step 4: Log all cameras for debugging
+    console.log('[Scanner] Available cameras:', videoDevices.map(d => `${d.label} (${d.deviceId.substring(0, 8)}...)`));
+
+    // Step 5: Classify cameras
+    const FRONT_KEYWORDS = ['front', 'user', 'selfie', 'facing front', 'facingfront'];
+    const ULTRAWIDE_KEYWORDS = ['ultra', '0.5', '0.6', 'wide-angle', 'wide angle', 'macro', 'depth', 'aux'];
+    const TELEPHOTO_KEYWORDS = ['telephoto', '2x', '3x', '5x', '10x'];
+    const MAIN_KEYWORDS = ['main', 'primary', '1x', 'standard'];
+
+    const backCameras = [];
+
+    for (const dev of videoDevices) {
+      const label = (dev.label || '').toLowerCase();
+
+      // Skip front cameras
+      if (FRONT_KEYWORDS.some(kw => label.includes(kw))) continue;
+
+      const isUltraWide = ULTRAWIDE_KEYWORDS.some(kw => label.includes(kw));
+      const isTelephoto = TELEPHOTO_KEYWORDS.some(kw => label.includes(kw));
+      const isMain = MAIN_KEYWORDS.some(kw => label.includes(kw));
+
+      let priority;
+      if (isMain) priority = 100;
+      else if (isUltraWide) priority = -10;
+      else if (isTelephoto) priority = 10;
+      else priority = 50; // Unknown back cam — likely main on most devices
+
+      backCameras.push({ deviceId: dev.deviceId, label: dev.label, priority });
+    }
+
+    if (backCameras.length === 0) {
+      // All cameras were classified as front — just use the last device (often back on Android)
+      return videoDevices[videoDevices.length - 1].deviceId;
+    }
+
+    // Sort by priority descending
+    backCameras.sort((a, b) => b.priority - a.priority);
+    console.log('[Scanner] Selected camera:', backCameras[0].label, `(priority: ${backCameras[0].priority})`);
+    return backCameras[0].deviceId;
+
+  } catch (err) {
+    console.warn('[Scanner] Camera detection failed, will use facingMode fallback:', err);
+    return null;
+  }
 }
 
 export function openCameraScanner(onScanSuccess) {
@@ -108,7 +150,7 @@ export function openCameraScanner(onScanSuccess) {
         <!-- Camera Stream Viewport -->
         <div id="scanner-reader" style="width:100%; height:100%;"></div>
 
-        <!-- Scanning Reticle Overlay (Rectangular for 1D barcodes & 2D codes) -->
+        <!-- Scanning Reticle Overlay -->
         <div class="scanner-reticle" style="position:absolute; width:82%; height:58%; border:2px solid #38bdf8; border-radius:12px; pointer-events:none; box-shadow:0 0 0 9999px rgba(15,23,42,0.45); display:flex; align-items:center; justify-content:center;">
           <!-- Corner Accents -->
           <div style="position:absolute; top:-2px; left:-2px; width:16px; height:16px; border-top:3px solid #38bdf8; border-left:3px solid #38bdf8; border-radius:4px 0 0 0;"></div>
@@ -131,25 +173,10 @@ export function openCameraScanner(onScanSuccess) {
         </div>
       </div>
 
-      <!-- Instructions & Camera Selectors -->
-      <div style="text-align:center; display:flex; flex-direction:column; gap:10px;">
+      <!-- Instructions & Status -->
+      <div style="text-align:center; display:flex; flex-direction:column; gap:8px;">
         <p style="font-size:12px; color:#94a3b8; margin:0;">Align linear barcode (Code 128/EAN) or QR code inside the box</p>
-        <div id="scanner-error-message" style="font-size:11px; color:#38bdf8; min-height:16px; font-weight:500;">Starting back camera...</div>
-        
-        <!-- Controls Toolbar -->
-        <div style="display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap;">
-          <!-- Camera Selection Dropdown -->
-          <div id="cameraSelectContainer" style="display:none; align-items:center;">
-            <select id="scannerCameraSelect" style="height:32px; padding:0 10px; font-size:11px; font-weight:600; border-radius:8px; background:#0f172a; color:#e2e8f0; border:1px solid rgba(255,255,255,0.15); outline:none; cursor:pointer; max-width:200px; text-overflow:ellipsis;">
-            </select>
-          </div>
-
-          <!-- Toggle Front/Back Camera Button -->
-          <button id="toggleCameraFacingBtn" class="btn-secondary" style="height:32px; padding:0 12px; font-size:11px; font-weight:600; border-radius:8px; background:rgba(255,255,255,0.06); color:#e2e8f0; border:1px solid rgba(255,255,255,0.12); gap:4px; display:inline-flex; align-items:center; cursor:pointer; outline:none; transition:background 0.2s;">
-            <span class="material-icons-round" style="font-size:15px;">flip_camera_ios</span>
-            <span id="toggleCameraFacingText">Switch Camera</span>
-          </button>
-        </div>
+        <div id="scanner-error-message" style="font-size:11px; color:#38bdf8; min-height:16px; font-weight:500;">Detecting main camera...</div>
       </div>
 
     </div>
@@ -182,25 +209,17 @@ export function openCameraScanner(onScanSuccess) {
   const errorEl = overlay.querySelector('#scanner-error-message');
   const engineTag = overlay.querySelector('#scanner-engine-tag');
   const closeBtn = overlay.querySelector('#closeScannerBtn');
-  const toggleBtn = overlay.querySelector('#toggleCameraFacingBtn');
-  const cameraSelectContainer = overlay.querySelector('#cameraSelectContainer');
-  const cameraSelect = overlay.querySelector('#scannerCameraSelect');
   const torchBtn = overlay.querySelector('#scannerTorchBtn');
   const zoomBtn = overlay.querySelector('#scannerZoomBtn');
   const zoomLabel = overlay.querySelector('#scannerZoomLabel');
 
   let html5Qrcode = null;
   let isScanning = false;
-  let availableRearCameras = [];
-  let availableFrontCameras = [];
-  let currentSelectedDeviceId = null;
   let activeVideoTrack = null;
   let isTorchOn = false;
   let currentZoom = 1.0;
   let maxZoom = 1.0;
   let minZoom = 1.0;
-  let facingMode = 'environment'; // Always default to environment (back) camera!
-  let camerasEnumerated = false;
 
   // Detect native BarcodeDetector API support
   const hasNativeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
@@ -245,7 +264,7 @@ export function openCameraScanner(onScanSuccess) {
         zoomBtn.style.display = 'none';
       }
     } catch (e) {
-      console.warn('Track capabilities warning:', e);
+      console.warn('[Scanner] Track capabilities warning:', e);
     }
   }
 
@@ -260,7 +279,7 @@ export function openCameraScanner(onScanSuccess) {
       torchBtn.style.background = isTorchOn ? '#eab308' : 'rgba(15,23,42,0.75)';
       torchBtn.style.color = isTorchOn ? '#0f172a' : '#f8fafc';
     } catch (err) {
-      console.warn('Torch toggle error:', err);
+      console.warn('[Scanner] Torch toggle error:', err);
     }
   });
 
@@ -280,79 +299,12 @@ export function openCameraScanner(onScanSuccess) {
       });
       zoomLabel.textContent = `${currentZoom}x`;
     } catch (err) {
-      console.warn('Zoom error:', err);
+      console.warn('[Scanner] Zoom error:', err);
     }
   });
 
-  // Query camera devices after camera stream starts (when labels are revealed by the browser)
-  async function refreshCameraList() {
+  async function startScanning(backCameraDeviceId) {
     try {
-      const devices = await Html5Qrcode.getCameras();
-      if (!devices || devices.length === 0) return;
-
-      const { rearCameras, frontCameras } = classifyCameras(devices);
-      availableRearCameras = rearCameras;
-      availableFrontCameras = frontCameras;
-
-      // Populate camera select dropdown if multiple cameras exist
-      if (devices.length > 1) {
-        cameraSelect.innerHTML = '';
-        
-        if (availableRearCameras.length > 0) {
-          const optGroupRear = document.createElement('optgroup');
-          optGroupRear.label = 'Back Cameras';
-          availableRearCameras.forEach(cam => {
-            const opt = document.createElement('option');
-            opt.value = cam.id;
-            opt.textContent = cam.displayName;
-            optGroupRear.appendChild(opt);
-          });
-          cameraSelect.appendChild(optGroupRear);
-        }
-
-        if (availableFrontCameras.length > 0) {
-          const optGroupFront = document.createElement('optgroup');
-          optGroupFront.label = 'Front Cameras';
-          availableFrontCameras.forEach(cam => {
-            const opt = document.createElement('option');
-            opt.value = cam.id;
-            opt.textContent = cam.displayName;
-            optGroupFront.appendChild(opt);
-          });
-          cameraSelect.appendChild(optGroupFront);
-        }
-
-        // Set select value to active device if known
-        if (currentSelectedDeviceId) {
-          cameraSelect.value = currentSelectedDeviceId;
-        } else if (facingMode === 'environment' && availableRearCameras.length > 0) {
-          cameraSelect.value = availableRearCameras[0].id;
-        } else if (facingMode === 'user' && availableFrontCameras.length > 0) {
-          cameraSelect.value = availableFrontCameras[0].id;
-        }
-
-        cameraSelectContainer.style.display = 'flex';
-      }
-      camerasEnumerated = true;
-    } catch (err) {
-      console.warn('Unable to query camera devices:', err);
-    }
-  }
-
-  cameraSelect.addEventListener('change', () => {
-    currentSelectedDeviceId = cameraSelect.value;
-    const isFront = availableFrontCameras.some(c => c.id === currentSelectedDeviceId);
-    facingMode = isFront ? 'user' : 'environment';
-    startScanning();
-  });
-
-  async function startScanning() {
-    try {
-      if (html5Qrcode && isScanning) {
-        isScanning = false;
-        await html5Qrcode.stop().catch(() => {});
-      }
-      
       const container = overlay.querySelector('#scanner-reader');
       container.innerHTML = '';
 
@@ -366,18 +318,13 @@ export function openCameraScanner(onScanSuccess) {
       });
 
       isScanning = true;
-      errorEl.textContent = facingMode === 'user' ? 'Starting front camera...' : 'Starting back camera...';
+      errorEl.textContent = 'Starting camera...';
       errorEl.style.color = '#38bdf8';
 
-      // Build camera configuration:
-      // If a specific deviceId was explicitly selected, use it.
-      // Otherwise, use { facingMode: 'environment' } (or 'user') which forces the browser to open the correct lens!
-      let cameraConfig;
-      if (currentSelectedDeviceId) {
-        cameraConfig = { deviceId: { exact: currentSelectedDeviceId } };
-      } else {
-        cameraConfig = { facingMode: { exact: facingMode } };
-      }
+      // Camera config: use exact deviceId if we found one, otherwise facingMode fallback
+      const cameraConfig = backCameraDeviceId
+        ? { deviceId: { exact: backCameraDeviceId } }
+        : { facingMode: 'environment' };
 
       // High-resolution video constraints for fine 1D linear barcodes
       const scanConfig = {
@@ -398,38 +345,21 @@ export function openCameraScanner(onScanSuccess) {
         }
       };
 
-      try {
-        await html5Qrcode.start(
-          cameraConfig,
-          scanConfig,
-          handleScanSuccess,
-          () => {}
-        );
-      } catch (exactErr) {
-        // Some mobile browsers reject { exact: 'environment' }. Fallback to standard { facingMode: facingMode }
-        console.warn('Exact facingMode fallback:', exactErr);
-        cameraConfig = { facingMode: facingMode };
-        await html5Qrcode.start(
-          cameraConfig,
-          scanConfig,
-          handleScanSuccess,
-          () => {}
-        );
-      }
+      await html5Qrcode.start(
+        cameraConfig,
+        scanConfig,
+        handleScanSuccess,
+        () => {}
+      );
 
       errorEl.textContent = 'Align barcode inside the frame';
       errorEl.style.color = '#94a3b8';
 
-      // Setup torch/zoom & enumerate cameras once stream is live
-      setTimeout(() => {
-        attachTrackCapabilities();
-        if (!camerasEnumerated) {
-          refreshCameraList();
-        }
-      }, 350);
+      // Setup torch/zoom once stream is live
+      setTimeout(attachTrackCapabilities, 350);
 
     } catch (err) {
-      console.error('Html5Qrcode scanner start error:', err);
+      console.error('[Scanner] Start error:', err);
       errorEl.textContent = 'Camera error: ' + (err.message || err || 'Access denied');
       errorEl.style.color = '#f87171';
       isScanning = false;
@@ -469,33 +399,14 @@ export function openCameraScanner(onScanSuccess) {
   }
 
   closeBtn.addEventListener('click', cleanup);
-  
-  toggleBtn.addEventListener('click', () => {
-    // Switch between environment (back) and user (front)
-    if (facingMode === 'environment') {
-      facingMode = 'user';
-      if (availableFrontCameras.length > 0) {
-        currentSelectedDeviceId = availableFrontCameras[0].id;
-      } else {
-        currentSelectedDeviceId = null;
-      }
+
+  // Main initialization: find back camera first, then start scanning
+  findMainBackCameraId().then(deviceId => {
+    if (deviceId) {
+      console.log('[Scanner] Using deviceId:', deviceId);
     } else {
-      facingMode = 'environment';
-      if (availableRearCameras.length > 0) {
-        currentSelectedDeviceId = availableRearCameras[0].id;
-      } else {
-        currentSelectedDeviceId = null;
-      }
+      console.log('[Scanner] No deviceId found, using facingMode: environment');
     }
-
-    if (cameraSelect && currentSelectedDeviceId) {
-      cameraSelect.value = currentSelectedDeviceId;
-    }
-
-    startScanning();
+    startScanning(deviceId);
   });
-
-  // Start back camera directly
-  startScanning();
 }
-
