@@ -40,28 +40,33 @@ const ALL_SUPPORTED_FORMATS = [
 ];
 
 /**
- * Filter and sort available cameras to prioritize the standard 1x main rear camera.
- * Many mobile phones (Samsung, Xiaomi, Pixel, iPhone) default to the 0.5x Ultra-Wide lens
- * when { facingMode: 'environment' } is used, which cannot focus on 1D barcodes close-up.
+ * Classify available cameras into rear and front arrays with priority.
+ * Back cameras without 'ultra', 'wide-angle', '0.5' get higher priority.
  */
 function classifyCameras(cameras) {
   const rearCameras = [];
   const frontCameras = [];
 
-  cameras.forEach(cam => {
+  cameras.forEach((cam, idx) => {
     const label = (cam.label || '').toLowerCase();
     const isFront = label.includes('front') || label.includes('user') || label.includes('selfie') || label.includes('facing front');
-    
+
     if (isFront) {
-      frontCameras.push(cam);
+      frontCameras.push({ ...cam, displayName: cam.label || `Front Camera ${frontCameras.length + 1}` });
     } else {
-      // It's a rear/environment camera
+      // Rear camera
       const isUltraWide = label.includes('ultra') || label.includes('0.5') || label.includes('0.6') || label.includes('wide-angle') || label.includes('wide angle') || label.includes('macro') || label.includes('depth') || label.includes('aux');
       const isTelephoto = label.includes('telephoto') || label.includes('2x') || label.includes('3x') || label.includes('5x') || label.includes('zoom');
       const isMain = label.includes('main') || label.includes('primary') || label.includes('1x') || label.includes('standard') || label.includes('camera2 0') || label.includes('back 0') || label.includes('rear 0');
 
+      let displayName = cam.label || `Back Camera ${rearCameras.length + 1}`;
+      if (isMain) displayName = `📷 Main Camera (1x)`;
+      else if (isUltraWide) displayName = `📷 Ultra-Wide (0.5x)`;
+      else if (isTelephoto) displayName = `📷 Telephoto/Zoom`;
+
       rearCameras.push({
         ...cam,
+        displayName,
         isUltraWide,
         isTelephoto,
         isMain,
@@ -70,7 +75,7 @@ function classifyCameras(cameras) {
     }
   });
 
-  // Sort rear cameras so main/standard 1x comes first
+  // Sort rear cameras so standard 1x main back camera is prioritized
   rearCameras.sort((a, b) => b.priority - a.priority);
 
   return { rearCameras, frontCameras };
@@ -129,17 +134,17 @@ export function openCameraScanner(onScanSuccess) {
       <!-- Instructions & Camera Selectors -->
       <div style="text-align:center; display:flex; flex-direction:column; gap:10px;">
         <p style="font-size:12px; color:#94a3b8; margin:0;">Align linear barcode (Code 128/EAN) or QR code inside the box</p>
-        <div id="scanner-error-message" style="font-size:11px; color:#38bdf8; min-height:16px; font-weight:500;">Initializing camera...</div>
+        <div id="scanner-error-message" style="font-size:11px; color:#38bdf8; min-height:16px; font-weight:500;">Starting back camera...</div>
         
         <!-- Controls Toolbar -->
         <div style="display:flex; justify-content:center; align-items:center; gap:8px; flex-wrap:wrap;">
-          <!-- Camera Selection Dropdown / Cycle -->
+          <!-- Camera Selection Dropdown -->
           <div id="cameraSelectContainer" style="display:none; align-items:center;">
             <select id="scannerCameraSelect" style="height:32px; padding:0 10px; font-size:11px; font-weight:600; border-radius:8px; background:#0f172a; color:#e2e8f0; border:1px solid rgba(255,255,255,0.15); outline:none; cursor:pointer; max-width:200px; text-overflow:ellipsis;">
             </select>
           </div>
 
-          <!-- Quick Toggle Front/Back Camera Button -->
+          <!-- Toggle Front/Back Camera Button -->
           <button id="toggleCameraFacingBtn" class="btn-secondary" style="height:32px; padding:0 12px; font-size:11px; font-weight:600; border-radius:8px; background:rgba(255,255,255,0.06); color:#e2e8f0; border:1px solid rgba(255,255,255,0.12); gap:4px; display:inline-flex; align-items:center; cursor:pointer; outline:none; transition:background 0.2s;">
             <span class="material-icons-round" style="font-size:15px;">flip_camera_ios</span>
             <span id="toggleCameraFacingText">Switch Camera</span>
@@ -194,7 +199,8 @@ export function openCameraScanner(onScanSuccess) {
   let currentZoom = 1.0;
   let maxZoom = 1.0;
   let minZoom = 1.0;
-  let isUsingFrontCamera = false;
+  let facingMode = 'environment'; // Always default to environment (back) camera!
+  let camerasEnumerated = false;
 
   // Detect native BarcodeDetector API support
   const hasNativeDetector = typeof window !== 'undefined' && 'BarcodeDetector' in window;
@@ -239,7 +245,7 @@ export function openCameraScanner(onScanSuccess) {
         zoomBtn.style.display = 'none';
       }
     } catch (e) {
-      console.warn('Track capabilities detection warning:', e);
+      console.warn('Track capabilities warning:', e);
     }
   }
 
@@ -274,11 +280,12 @@ export function openCameraScanner(onScanSuccess) {
       });
       zoomLabel.textContent = `${currentZoom}x`;
     } catch (err) {
-      console.warn('Zoom change error:', err);
+      console.warn('Zoom error:', err);
     }
   });
 
-  async function populateCameraDevices() {
+  // Query camera devices after camera stream starts (when labels are revealed by the browser)
+  async function refreshCameraList() {
     try {
       const devices = await Html5Qrcode.getCameras();
       if (!devices || devices.length === 0) return;
@@ -287,13 +294,6 @@ export function openCameraScanner(onScanSuccess) {
       availableRearCameras = rearCameras;
       availableFrontCameras = frontCameras;
 
-      // If we have rear cameras, default to the top-priority main standard back camera
-      if (availableRearCameras.length > 0) {
-        currentSelectedDeviceId = availableRearCameras[0].id;
-      } else if (devices.length > 0) {
-        currentSelectedDeviceId = devices[0].id;
-      }
-
       // Populate camera select dropdown if multiple cameras exist
       if (devices.length > 1) {
         cameraSelect.innerHTML = '';
@@ -301,14 +301,10 @@ export function openCameraScanner(onScanSuccess) {
         if (availableRearCameras.length > 0) {
           const optGroupRear = document.createElement('optgroup');
           optGroupRear.label = 'Back Cameras';
-          availableRearCameras.forEach((cam, index) => {
+          availableRearCameras.forEach(cam => {
             const opt = document.createElement('option');
             opt.value = cam.id;
-            let displayLabel = cam.label || `Back Camera ${index + 1}`;
-            if (cam.isMain || index === 0) displayLabel = `📷 Main Camera (1x)`;
-            else if (cam.isUltraWide) displayLabel = `📷 Ultra-Wide (0.5x)`;
-            else if (cam.isTelephoto) displayLabel = `📷 Telephoto/Zoom`;
-            opt.textContent = displayLabel;
+            opt.textContent = cam.displayName;
             optGroupRear.appendChild(opt);
           });
           cameraSelect.appendChild(optGroupRear);
@@ -317,27 +313,36 @@ export function openCameraScanner(onScanSuccess) {
         if (availableFrontCameras.length > 0) {
           const optGroupFront = document.createElement('optgroup');
           optGroupFront.label = 'Front Cameras';
-          availableFrontCameras.forEach((cam, index) => {
+          availableFrontCameras.forEach(cam => {
             const opt = document.createElement('option');
             opt.value = cam.id;
-            opt.textContent = cam.label || `Front Camera ${index + 1}`;
+            opt.textContent = cam.displayName;
             optGroupFront.appendChild(opt);
           });
           cameraSelect.appendChild(optGroupFront);
         }
 
-        cameraSelect.value = currentSelectedDeviceId;
+        // Set select value to active device if known
+        if (currentSelectedDeviceId) {
+          cameraSelect.value = currentSelectedDeviceId;
+        } else if (facingMode === 'environment' && availableRearCameras.length > 0) {
+          cameraSelect.value = availableRearCameras[0].id;
+        } else if (facingMode === 'user' && availableFrontCameras.length > 0) {
+          cameraSelect.value = availableFrontCameras[0].id;
+        }
+
         cameraSelectContainer.style.display = 'flex';
       }
+      camerasEnumerated = true;
     } catch (err) {
-      console.warn('Unable to enumerate camera devices:', err);
+      console.warn('Unable to query camera devices:', err);
     }
   }
 
   cameraSelect.addEventListener('change', () => {
     currentSelectedDeviceId = cameraSelect.value;
     const isFront = availableFrontCameras.some(c => c.id === currentSelectedDeviceId);
-    isUsingFrontCamera = isFront;
+    facingMode = isFront ? 'user' : 'environment';
     startScanning();
   });
 
@@ -361,22 +366,23 @@ export function openCameraScanner(onScanSuccess) {
       });
 
       isScanning = true;
-      errorEl.textContent = 'Starting high-res camera...';
+      errorEl.textContent = facingMode === 'user' ? 'Starting front camera...' : 'Starting back camera...';
       errorEl.style.color = '#38bdf8';
 
-      // Build camera configuration
+      // Build camera configuration:
+      // If a specific deviceId was explicitly selected, use it.
+      // Otherwise, use { facingMode: 'environment' } (or 'user') which forces the browser to open the correct lens!
       let cameraConfig;
       if (currentSelectedDeviceId) {
         cameraConfig = { deviceId: { exact: currentSelectedDeviceId } };
       } else {
-        cameraConfig = { facingMode: isUsingFrontCamera ? 'user' : 'environment' };
+        cameraConfig = { facingMode: { exact: facingMode } };
       }
 
       // High-resolution video constraints for fine 1D linear barcodes
       const scanConfig = {
         fps: 25,
         qrbox: (viewfinderWidth, viewfinderHeight) => {
-          // Rectangular scanning zone optimized for wide linear barcodes and 2D codes
           const boxWidth = Math.floor(Math.min(viewfinderWidth * 0.88, 360));
           const boxHeight = Math.floor(Math.min(viewfinderHeight * 0.58, 200));
           return { width: Math.max(boxWidth, 220), height: Math.max(boxHeight, 140) };
@@ -392,43 +398,35 @@ export function openCameraScanner(onScanSuccess) {
         }
       };
 
-      await html5Qrcode.start(
-        cameraConfig,
-        scanConfig,
-        (decodedText) => {
-          // Successful scan
-          playBeep();
-          if (navigator.vibrate) {
-            navigator.vibrate([60, 40, 60]);
-          }
-
-          // Visual feedback pulse
-          const reticle = overlay.querySelector('.scanner-reticle');
-          if (reticle) {
-            reticle.style.borderColor = '#10b981';
-            reticle.style.boxShadow = '0 0 20px #10b981, 0 0 0 9999px rgba(15,23,42,0.5)';
-          }
-
-          errorEl.textContent = `Scanned: ${decodedText}`;
-          errorEl.style.color = '#34d399';
-
-          setTimeout(() => {
-            cleanup();
-            if (typeof onScanSuccess === 'function') {
-              onScanSuccess(decodedText);
-            }
-          }, 150);
-        },
-        () => {
-          // Ongoing frame evaluation
-        }
-      );
+      try {
+        await html5Qrcode.start(
+          cameraConfig,
+          scanConfig,
+          handleScanSuccess,
+          () => {}
+        );
+      } catch (exactErr) {
+        // Some mobile browsers reject { exact: 'environment' }. Fallback to standard { facingMode: facingMode }
+        console.warn('Exact facingMode fallback:', exactErr);
+        cameraConfig = { facingMode: facingMode };
+        await html5Qrcode.start(
+          cameraConfig,
+          scanConfig,
+          handleScanSuccess,
+          () => {}
+        );
+      }
 
       errorEl.textContent = 'Align barcode inside the frame';
       errorEl.style.color = '#94a3b8';
 
-      // Setup torch/zoom capabilities once camera is active
-      setTimeout(attachTrackCapabilities, 300);
+      // Setup torch/zoom & enumerate cameras once stream is live
+      setTimeout(() => {
+        attachTrackCapabilities();
+        if (!camerasEnumerated) {
+          refreshCameraList();
+        }
+      }, 350);
 
     } catch (err) {
       console.error('Html5Qrcode scanner start error:', err);
@@ -436,6 +434,30 @@ export function openCameraScanner(onScanSuccess) {
       errorEl.style.color = '#f87171';
       isScanning = false;
     }
+  }
+
+  function handleScanSuccess(decodedText) {
+    playBeep();
+    if (navigator.vibrate) {
+      navigator.vibrate([60, 40, 60]);
+    }
+
+    // Visual feedback pulse
+    const reticle = overlay.querySelector('.scanner-reticle');
+    if (reticle) {
+      reticle.style.borderColor = '#10b981';
+      reticle.style.boxShadow = '0 0 20px #10b981, 0 0 0 9999px rgba(15,23,42,0.5)';
+    }
+
+    errorEl.textContent = `Scanned: ${decodedText}`;
+    errorEl.style.color = '#34d399';
+
+    setTimeout(() => {
+      cleanup();
+      if (typeof onScanSuccess === 'function') {
+        onScanSuccess(decodedText);
+      }
+    }, 150);
   }
 
   function cleanup() {
@@ -449,15 +471,16 @@ export function openCameraScanner(onScanSuccess) {
   closeBtn.addEventListener('click', cleanup);
   
   toggleBtn.addEventListener('click', () => {
-    isUsingFrontCamera = !isUsingFrontCamera;
-    
-    if (isUsingFrontCamera) {
+    // Switch between environment (back) and user (front)
+    if (facingMode === 'environment') {
+      facingMode = 'user';
       if (availableFrontCameras.length > 0) {
         currentSelectedDeviceId = availableFrontCameras[0].id;
       } else {
         currentSelectedDeviceId = null;
       }
     } else {
+      facingMode = 'environment';
       if (availableRearCameras.length > 0) {
         currentSelectedDeviceId = availableRearCameras[0].id;
       } else {
@@ -472,9 +495,7 @@ export function openCameraScanner(onScanSuccess) {
     startScanning();
   });
 
-  // Initialize camera list and start scanning
-  populateCameraDevices().then(() => {
-    startScanning();
-  });
+  // Start back camera directly
+  startScanning();
 }
 
