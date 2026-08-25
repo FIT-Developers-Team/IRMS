@@ -483,9 +483,13 @@ export function renderDashboard(container, currentUser, onLogout) {
     else if (tabId === 'admin') renderAdmin(targetArea, currentUser);
     else renderHome(targetArea, currentUser);
 
-    // If section data is expired, run a non-blocking background sync with live indicator
-    if (db.isSectionDataExpired(tabId) && !db.isSyncing) {
-      db.syncSectionData(tabId);
+    // Real-Time & Background sync on tab switch
+    const REALTIME_SECTIONS = ['tsRequest', 'tsTask', 'troubleShoot', 'pickingTask', 'requestPickup', 'lostAndFound', 'stockMovement'];
+    if (REALTIME_SECTIONS.includes(tabId)) {
+      // Always trigger a fast background refresh for operational queues so new tasks reflect immediately
+      db.syncSectionData(tabId, { background: true });
+    } else if (db.isSectionDataExpired(tabId) && !db.isSyncing) {
+      db.syncSectionData(tabId, { background: true });
     }
   }
 

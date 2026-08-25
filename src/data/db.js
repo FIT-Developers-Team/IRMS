@@ -50,10 +50,55 @@ class DatabaseService {
     // Instant 0ms IndexedDB Hydration & Master Data Lifecycle Check
     this.initPromise = this.initStartupSync();
 
-    // Background interval: Check every 30 seconds if active task data needs background refresh
-    this.cacheCheckInterval = setInterval(() => {
-      this.checkAndRefreshIfExpired();
-    }, 30 * 1000);
+    // Setup Real-Time Operational Polling Engine & Visibility Wakeup Handlers
+    this.setupRealtimeEngine();
+  }
+
+  setupRealtimeEngine() {
+    const REALTIME_SECTIONS = ['tsRequest', 'tsTask', 'troubleShoot', 'pickingTask', 'requestPickup', 'lostAndFound', 'stockMovement'];
+
+    // 1. Dynamic Polling Timer (4s for active operational queues, 30s for standard views)
+    this.cacheCheckInterval = setInterval(async () => {
+      // Don't poll if document is hidden in background or if already running a blocking sync
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (this.isSyncing) return;
+
+      const activeTab = window.irmsActiveTab || 'home';
+      const isOperational = REALTIME_SECTIONS.includes(activeTab);
+
+      if (isOperational) {
+        // Fast background delta polling for operational views (4s)
+        await this.syncSectionData(activeTab, { background: true });
+      } else {
+        // Normal TTL check for static / reference views
+        const isExpired = activeTab === 'sohwh' ? this.isSectionDataExpired('sohwh') : this.isDataExpired();
+        if (isExpired) {
+          await this.syncSectionData(activeTab, { background: true });
+        }
+      }
+    }, 4000);
+
+    // 2. Mobile Screen Wakeup & Tab Return Trigger
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.handleAppResume();
+        }
+      });
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', () => {
+        this.handleAppResume();
+      });
+    }
+  }
+
+  async handleAppResume() {
+    if (this.isSyncing) return;
+    const activeTab = window.irmsActiveTab || 'home';
+    console.log(`[Real-Time Engine] App resumed/focused on tab: "${activeTab}". Triggering fast refresh.`);
+    await this.syncSectionData(activeTab, { background: true });
   }
 
   async isMasterDataExpired(storeName) {
@@ -513,14 +558,17 @@ class DatabaseService {
     return match ? match[1] : text.trim();
   }
 
-  async syncGoogleSheets(tabsToSync = null) {
+  async syncGoogleSheets(tabsToSync = null, options = {}) {
+    const isBackground = options.background || false;
     const id = this.spreadsheetId;
     if (!id) {
       this.syncError = 'Missing Google Spreadsheet ID in config';
       return false;
     }
 
-    this.isSyncing = true;
+    if (!isBackground) {
+      this.isSyncing = true;
+    }
     this.syncError = null;
     this.notifyListeners(); // Notify immediately so status bar shows "Syncing…" at start
 
@@ -1006,7 +1054,7 @@ class DatabaseService {
    * Called lazily on navigation (respects expiry). Master reference data (SKUs_DB, Zone, Racks, Checker_Lines)
    * is fetched ONLY on fresh start / browser refresh / login and excluded from navigation syncs.
    */
-  async syncSectionData(tabId) {
+  async syncSectionData(tabId, options = {}) {
     const tabMap = {
       home:          [],
       requestPickup: ['requestChecker', 'soData'],
@@ -1016,7 +1064,7 @@ class DatabaseService {
       stockMovement: ['stockMovement', 'stockActivity', 'soh'],
       admin:         ['userDb'],
       sohwh:         ['sohwh', 'soData'],
-      tsRequest:     ['troubleShoot', 'soData', 'checkerLines'],
+      tsRequest:     ['troubleShoot', 'soData'],
       troubleShoot:  ['troubleShoot', 'soData'],
       tsTask:        ['troubleShoot', 'soData']
     };
@@ -1025,7 +1073,7 @@ class DatabaseService {
       this.lastSectionSyncTime[tabId] = new Date().toISOString();
       return true;
     }
-    const ok = await this.syncGoogleSheets(tabsToSync);
+    const ok = await this.syncGoogleSheets(tabsToSync, options);
     if (ok) {
       this.lastSectionSyncTime[tabId] = new Date().toISOString();
     }
