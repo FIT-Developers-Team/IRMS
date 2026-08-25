@@ -242,6 +242,14 @@ class DatabaseService {
 
     const getTimestampMs = (item) => {
       if (!item) return 0;
+      // 1. Prioritize updateAt / updatedAt if present
+      for (const p of ['updateAt', 'updatedAt', 'update_at', 'updated_at', 'modifiedAt', 'lastModified']) {
+        if (item[p]) {
+          const ms = this.parseTimestampMs(item[p]);
+          if (ms > 0) return ms;
+        }
+      }
+      // 2. Fallback to primary creation timestamp, date, time, etc.
       for (const p of tProps) {
         if (item[p]) {
           const ms = this.parseTimestampMs(item[p]);
@@ -415,15 +423,16 @@ class DatabaseService {
 
     if (result.data && result.data.length > 0) {
       this.soList = result.data.map(row => {
-        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
-        const pickerName = this.findRowValue(row, ['picker_name', 'picker name', 'picker']) || 'N/A';
-        const soNumber = this.findRowValue(row, ['so_number', 'so number', 'so']);
-        const skuNumber = this.findRowValue(row, ['sku_number', 'sku code', 'sku number', 'sku']);
-        const productName = this.findRowValue(row, ['product_name', 'product name', 'product']);
-        const status = this.findRowValue(row, ['status']) || '';
-        const qty = this.findRowValue(row, ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'qty', 'quantity']) || '1';
-        const originRackName = this.findRowValue(row, ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack']) || '';
-        const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name']) || '';
+        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at', 'order date', 'order_date', 'tanggal']) || new Date().toISOString();
+        const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
+        const pickerName = this.findRowValue(row, ['picker_name', 'picker name', 'picker', 'picked by', 'picked_by']) || 'N/A';
+        const soNumber = this.findRowValue(row, ['so_number', 'so number', 'so', 'sonumber', 'order number', 'order_number', 'sales order', 'sales_order']);
+        const skuNumber = this.findRowValue(row, ['sku_number', 'sku code', 'sku number', 'sku_code', 'sku', 'product_sku', 'product sku']);
+        const productName = this.findRowValue(row, ['product_name', 'product name', 'product', 'productname', 'name']);
+        const status = this.findRowValue(row, ['status', 'so status', 'so_status', 'order status', 'order_status']) || '';
+        const qty = this.findRowValue(row, ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'request quantity', 'qty', 'quantity', 'sum(qty)', 'sum_qty', 'stock_quantity']) || '1';
+        const originRackName = this.findRowValue(row, ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack', 'rack_name', 'rack name', 'rack', 'location']) || '';
+        const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name', 'wave_no', 'waveno']) || '';
 
         const sNum = String(soNumber || '').trim();
         const sku = String(skuNumber || '').trim();
@@ -432,6 +441,7 @@ class DatabaseService {
         return {
           id: `${sNum}_${sku}_${tStamp}`,
           timestamp: tStamp,
+          updateAt: String(updateAt || '').trim(),
           pickerName: String(pickerName).trim(),
           soNumber: sNum,
           skuNumber: sku,
@@ -444,7 +454,8 @@ class DatabaseService {
       }).filter(item => item.soNumber);
 
       if (this.soList.length > 0) {
-        const topTs = this._pendingSoDataTimestamp || this.soList[0].timestamp;
+        cacheManager.setStore('soData', this.soList);
+        const topTs = this._pendingSoDataTimestamp || this.soList[0].updateAt || this.soList[0].timestamp;
         if (topTs) {
           cacheManager.setLastSyncTime('soData_timestamp', topTs);
         }
@@ -1550,8 +1561,8 @@ class DatabaseService {
     const map = new Map();
     this.soList.forEach(item => {
       const status = (item.status || '').toLowerCase().trim();
-      const isValidStatus = ['picking', 'packing', 'staging'].includes(status);
-      if (isValidStatus && item.soNumber && !map.has(item.soNumber)) {
+      const isValidStatus = !status || ['picking', 'packing', 'staging', 'open', 'pending', 'in progress', 'inprogress'].includes(status) || status.includes('pick') || status.includes('pack') || status.includes('stag') || status.includes('open') || status.includes('pend');
+      if (item.soNumber && !map.has(item.soNumber) && isValidStatus) {
         map.set(item.soNumber, {
           soNumber: item.soNumber,
           pickerName: item.pickerName || '',
