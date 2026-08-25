@@ -372,9 +372,12 @@ export function openCameraScanner(onScanSuccess) {
       errorEl.textContent = 'Starting camera...';
       errorEl.style.color = '#38bdf8';
 
-      // Camera config: use exact deviceId if we found one, otherwise facingMode fallback
+      // Camera config: html5-qrcode .start() expects either:
+      //   - a plain string deviceId (e.g. "abc123...")
+      //   - or { facingMode: 'environment' }
+      // NOT { deviceId: { exact: ... } } — that gets silently ignored!
       const cameraConfig = backCameraDeviceId
-        ? { deviceId: { exact: backCameraDeviceId } }
+        ? backCameraDeviceId
         : { facingMode: 'environment' };
 
       // High-resolution video constraints for fine 1D linear barcodes
