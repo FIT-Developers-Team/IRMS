@@ -60,7 +60,7 @@ export function renderTsRequest(container, currentUser) {
 
     if (searchQuery) {
       filtered = filtered.filter(t => {
-        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.reason, t.statusTicket, t.originRackName].join(' ').toLowerCase();
+        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.reason, t.statusTicket, t.originRackName, t.requestedBy, t.staffId, t.checkerLine].join(' ').toLowerCase();
         return haystack.includes(searchQuery);
       });
     }
@@ -98,7 +98,7 @@ export function renderTsRequest(container, currentUser) {
             <span><strong>Qty:</strong> ${escapeHtml(t.requestQuantity)}</span>
             <span><strong>Wave:</strong> <span style="color: var(--primary-700); font-weight: 700;">${escapeHtml(t.wave || '-')}</span></span>
             <span><strong>Reason:</strong> <span style="color: #ea580c; font-weight: 700;">${escapeHtml(t.reason)}</span></span>
-            <span style="grid-column: 1 / -1;"><strong>Requested:</strong> ${timeAgo}</span>
+            <span style="grid-column: 1 / -1;"><strong>Requested:</strong> ${timeAgo}${t.requestedBy ? ` • <span style="color: var(--text-primary); font-weight: 600;">${escapeHtml(t.requestedBy)}</span>` : ''}${t.checkerLine ? ` (Line: ${escapeHtml(t.checkerLine)})` : ''}</span>
           </div>
           ${t.assignedTo ? `<div style="margin-top: 6px; font-size: 11px; color: #7c3aed; font-weight: 600;"><strong>Assigned:</strong> ${escapeHtml(t.assignedTo)}</div>` : ''}
           ${t.foundAt ? `<div style="margin-top: 4px; font-size: 11px; color: #10b981; font-weight: 600;"><strong>Found at:</strong> ${escapeHtml(t.foundAt)} (Qty: ${escapeHtml(t.foundQty)})</div>` : ''}

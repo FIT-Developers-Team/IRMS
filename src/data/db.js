@@ -2857,6 +2857,15 @@ class DatabaseService {
   }
 
   getTroubleShootTicketsForUser(currentUser) {
+    if (!currentUser) return [];
+    const role = (currentUser.role || '').trim().toLowerCase();
+    
+    // Roles with full access: Checker, Super, Admin, Superuser, Supervisor
+    const unrestrictedRoles = ['checker', 'super', 'admin', 'superuser', 'supervisor', 'super user'];
+    if (unrestrictedRoles.includes(role)) {
+      return this.getTroubleShootTickets();
+    }
+
     const myName = (currentUser.name || '').trim().toLowerCase();
     const myId = (currentUser.staffId || '').trim().toLowerCase();
     return this.troubleShootTickets.filter(t => {
