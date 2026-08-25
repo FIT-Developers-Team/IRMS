@@ -365,23 +365,17 @@ export function renderDashboard(container, currentUser, onLogout) {
         </p>
 
         <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;">
-          <button id="modalRegularRefreshBtn" class="btn-primary" style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 12px; background: linear-gradient(135deg, #1565c0, #0d47a1) !important; color: #ffffff !important; border: none; cursor: pointer; text-align: center;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="material-icons-round" style="font-size: 20px !important; color: #ffffff !important;">autorenew</span>
-              <span style="color: #ffffff !important; font-weight: 700 !important; font-size: 13px !important;">Regular Refresh (Force Delta Update)</span>
-            </div>
-            <span style="font-size: 10.5px; opacity: 0.85; margin-top: 2px; color: #e0f2fe;">Syncs changed records across all datasets without wiping cache</span>
+          <button id="modalRegularRefreshBtn" class="btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #1565c0, #0d47a1) !important; color: #ffffff !important; border: none; cursor: pointer;">
+            <span class="material-icons-round" style="font-size: 20px !important; color: #ffffff !important;">autorenew</span>
+            <span style="color: #ffffff !important; font-weight: 700 !important; font-size: 14px !important;">Delta Refresh</span>
           </button>
 
-          <button id="modalFlushCacheBtn" class="btn-secondary" style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px 14px; border-radius: 12px; color: #dc2626 !important; border: 1.5px solid #fecaca; background: #fff5f5 !important; cursor: pointer; text-align: center;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="material-icons-round" style="font-size: 20px !important; color: #dc2626 !important;">delete_sweep</span>
-              <span style="color: #dc2626 !important; font-weight: 700 !important; font-size: 13px !important;">Flush Cache & Full Resync</span>
-            </div>
-            <span style="font-size: 10.5px; color: #ef4444; margin-top: 2px;">Purges local cache & redownloads all sheets (excludes Superset API)</span>
+          <button id="modalFlushCacheBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; color: #dc2626 !important; border: 1.5px solid #fecaca; background: #fff5f5 !important; cursor: pointer;">
+            <span class="material-icons-round" style="font-size: 20px !important; color: #dc2626 !important;">delete_sweep</span>
+            <span style="color: #dc2626 !important; font-weight: 700 !important; font-size: 14px !important;">Flush Update</span>
           </button>
 
-          <button id="modalCancelRefreshBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; height: 38px; margin-top: 2px; font-weight: 600; font-size: 13px; border-radius: 10px; color: #475569 !important;">
+          <button id="modalCancelRefreshBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; height: 40px; margin-top: 4px; font-weight: 600; font-size: 13px; border-radius: 10px; color: #475569 !important;">
             Cancel
           </button>
         </div>

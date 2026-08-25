@@ -723,7 +723,9 @@ class DatabaseService {
     if (shouldSync('whPlanogram')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(whPlanogramTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'whPlanogram', res: r })).catch(() => null));
     }
-    if (shouldSync('sohwh')) {
+    // SOHWH (Superset API) is a heavy external query and ONLY syncs when explicitly requested in tabsToSync
+    const shouldSyncSohwh = Boolean(normalizedTabSet && normalizedTabSet.has('sohwh'));
+    if (shouldSyncSohwh) {
       const supersetFetch = (async () => {
         try {
           // 1. Get cached cookie from localStorage or fetch it
@@ -990,18 +992,10 @@ class DatabaseService {
   async clearCacheAndResync() {
     this.updateBlockerMessage('Flushing local cache & redownloading datasets...');
     
-    // 1. Preserve external service cache (SOHWH from Superset API)
-    const savedSohwh = Array.isArray(this.sohwh) ? [...this.sohwh] : [];
+    // 1. Instantly clear all IndexedDB stores EXCEPT external service (sohwh)
+    await cacheManager.clearAllExcept(['sohwh']);
 
-    // 2. Deep purge of IndexedDB
-    await cacheManager.purgeEntireDatabase();
-
-    // 3. Restore external SOHWH back to IndexedDB so Superset cache is kept intact
-    if (savedSohwh.length > 0) {
-      await cacheManager.setStore('sohwh', savedSohwh);
-    }
-
-    // 4. Wipe legacy localStorage keys
+    // 2. Wipe legacy localStorage keys
     const irmsKeys = [
       'irms_pickup_requests',
       'irms_picking_tasks',
@@ -1020,7 +1014,7 @@ class DatabaseService {
       }
     });
 
-    // 5. Reset in-memory state EXCEPT SOHWH
+    // 3. Reset in-memory state EXCEPT SOHWH
     this.requests = [];
     this.pickingTasks = [];
     this.lostAndFound = [];
@@ -1029,7 +1023,7 @@ class DatabaseService {
     this.stockActivities = [];
     this.troubleShootTickets = [];
     this.soh = [];
-    this.sohwh = savedSohwh;
+    // Note: this.sohwh is preserved in RAM
     this.racks = [];
     this.zones = [];
     this.checkerLines = [];
@@ -1038,11 +1032,11 @@ class DatabaseService {
     this.soList = [];
     this.users = [];
     this.lastSyncTime = null;
-    this.lastSectionSyncTime = {};
+    this.lastSectionSyncTime = { sohwh: new Date().toISOString() };
 
     this.notifyListeners();
 
-    // 6. Force a full redownload of all Google Sheets datasets (WITHOUT triggering Superset API)
+    // 4. Force a clean redownload of all Google Sheets datasets (WITHOUT triggering Superset API)
     const sheetsToResync = [
       'userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram',
       'soData', 'requestChecker', 'pickingTask', 'lostAndFound',

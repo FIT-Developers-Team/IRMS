@@ -197,6 +197,26 @@ class CacheManager {
     });
   }
 
+  async clearAllExcept(exceptStores = ['sohwh']) {
+    await this.init();
+    if (!this.db) return true;
+
+    const storeNames = Array.from(this.db.objectStoreNames).filter(name => !exceptStores.includes(name));
+    if (storeNames.length === 0) return true;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction(storeNames, 'readwrite');
+        storeNames.forEach(name => tx.objectStore(name).clear());
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        console.error('Error clearing IndexedDB stores:', e);
+        resolve(false);
+      }
+    });
+  }
+
   async clearAll() {
     await this.init();
     if (!this.db) return true;
