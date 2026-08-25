@@ -8,16 +8,16 @@ class DatabaseService {
   constructor() {
     this.users = [];
     this.soList = [];
-    this.requests = this.loadSavedRequests();
-    this.pickingTasks = this.loadSavedPickingTasks();
+    this.requests = [];
+    this.pickingTasks = [];
     this.racks = [];
     this.zones = [];
     this.checkerLines = [];
-    this.lostAndFound = this.loadSavedLostAndFound();
-    this.putawayRecords = this.loadSavedPutawayRecords();
-    this.stockMovements = this.loadSavedStockMovements();
-    this.stockActivities = this.loadSavedStockActivities();
-    this.troubleShootTickets = this.loadSavedTroubleShoot();
+    this.lostAndFound = [];
+    this.putawayRecords = [];
+    this.stockMovements = [];
+    this.stockActivities = [];
+    this.troubleShootTickets = [];
     this.skus = [];
     this.whPlanograms = [];
     this.soh = [];
@@ -31,6 +31,20 @@ class DatabaseService {
     this.isLoaded = false;
     this.listeners = [];
     this.isRetryingSync = false;
+
+    // Cross-tab Synchronization Channel (0ms inter-tab update propagation)
+    if (typeof window !== 'undefined' && window.BroadcastChannel) {
+      try {
+        this.broadcastChannel = new BroadcastChannel('irms_db_sync');
+        this.broadcastChannel.onmessage = (event) => {
+          if (event.data && event.data.type === 'DATA_UPDATED') {
+            this.handleRemoteTabUpdate(event.data.storeName);
+          }
+        };
+      } catch (e) {
+        this.broadcastChannel = null;
+      }
+    }
     
     // Instant 0ms IndexedDB Hydration
     this.initCache();
@@ -43,6 +57,39 @@ class DatabaseService {
     this.cacheCheckInterval = setInterval(() => {
       this.checkAndRefreshIfExpired();
     }, 30 * 1000);
+  }
+
+  broadcastUpdate(storeName) {
+    if (this.broadcastChannel) {
+      try {
+        this.broadcastChannel.postMessage({ type: 'DATA_UPDATED', storeName, timestamp: Date.now() });
+      } catch (e) {}
+    }
+  }
+
+  async handleRemoteTabUpdate(storeName) {
+    try {
+      const records = await cacheManager.getStore(storeName);
+      if (records) {
+        if (storeName === 'requests') this.requests = records;
+        else if (storeName === 'pickingTasks') this.pickingTasks = records;
+        else if (storeName === 'troubleShoot') this.troubleShootTickets = records;
+        else if (storeName === 'lostAndFound') this.lostAndFound = records;
+        else if (storeName === 'stockMovements') this.stockMovements = records;
+        else if (storeName === 'stockActivity') this.stockActivities = records;
+        else if (storeName === 'putaway') this.putawayRecords = records;
+        else if (storeName === 'soh') this.soh = records;
+        else if (storeName === 'userDb') this.users = records;
+        else if (storeName === 'skusDb') this.skus = records;
+        else if (storeName === 'racks') this.racks = records;
+        else if (storeName === 'zones') this.zones = records;
+        else if (storeName === 'checkerLines') this.checkerLines = records;
+        else if (storeName === 'soData') this.soList = records;
+        this.notifyListeners();
+      }
+    } catch (e) {
+      console.warn('Error handling inter-tab update:', e);
+    }
   }
 
   /**
@@ -827,14 +874,32 @@ class DatabaseService {
   }
 
   async clearCacheAndResync() {
-    await cacheManager.clearAll();
-    localStorage.removeItem('irms_pickup_requests');
-    localStorage.removeItem('irms_picking_tasks');
-    localStorage.removeItem('irms_lost_and_found');
-    localStorage.removeItem('irms_putaway_records');
-    localStorage.removeItem('irms_stock_movements');
-    localStorage.removeItem('irms_stock_activities');
+    this.updateBlockerMessage('Purging cache & performing clean cloud sync...');
+    
+    // 1. Deep purge of IndexedDB
+    await cacheManager.purgeEntireDatabase();
 
+    // 2. Wipe legacy localStorage keys
+    const irmsKeys = [
+      'irms_pickup_requests',
+      'irms_picking_tasks',
+      'irms_lost_and_found',
+      'irms_putaway_records',
+      'irms_stock_movements',
+      'irms_stock_activities',
+      'irms_troubleshoot_tickets',
+      'superset_session_cookie'
+    ];
+    irmsKeys.forEach(k => localStorage.removeItem(k));
+
+    // Also remove any checker line or temporary storage keys except active user session
+    Object.keys(localStorage).forEach(k => {
+      if (k.startsWith('irms_') && !k.startsWith('irms_session_')) {
+        localStorage.removeItem(k);
+      }
+    });
+
+    // 3. Reset in-memory state
     this.requests = [];
     this.pickingTasks = [];
     this.lostAndFound = [];
@@ -848,9 +913,15 @@ class DatabaseService {
     this.zones = [];
     this.checkerLines = [];
     this.skus = [];
+    this.whPlanograms = [];
+    this.soList = [];
+    this.users = [];
     this.lastSyncTime = null;
     this.lastSectionSyncTime = {};
 
+    this.notifyListeners();
+
+    // 4. Force a clean, complete cloud resync
     return await this.syncGoogleSheets(null);
   }
 
@@ -1345,22 +1416,9 @@ class DatabaseService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  loadSavedRequests() {
-    try {
-      const saved = localStorage.getItem('irms_pickup_requests');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
   persistRequests() {
-    try {
-      localStorage.setItem('irms_pickup_requests', JSON.stringify(this.requests));
-      cacheManager.setStore('requests', this.requests);
-    } catch (e) {
-      console.error('Failed to persist requests', e);
-    }
+    cacheManager.setStore('requests', this.requests);
+    this.broadcastUpdate('requests');
   }
 
   async savePickupRequest(requestData) {
@@ -1483,22 +1541,9 @@ class DatabaseService {
     };
   }
 
-  loadSavedPickingTasks() {
-    try {
-      const saved = localStorage.getItem('irms_picking_tasks');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
   persistPickingTasks() {
-    try {
-      localStorage.setItem('irms_picking_tasks', JSON.stringify(this.pickingTasks));
-      cacheManager.setStore('pickingTasks', this.pickingTasks);
-    } catch (e) {
-      console.error('Failed to persist picking tasks', e);
-    }
+    cacheManager.setStore('pickingTasks', this.pickingTasks);
+    this.broadcastUpdate('pickingTasks');
   }
 
   async createPickingTasks(selectedRequests, pickedByName, defaultSourceProcess = 'Request_Checker') {
@@ -1738,22 +1783,9 @@ class DatabaseService {
     this.persistLostAndFound();
   }
 
-  loadSavedLostAndFound() {
-    try {
-      const saved = localStorage.getItem('irms_lost_and_found');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
   persistLostAndFound() {
-    try {
-      localStorage.setItem('irms_lost_and_found', JSON.stringify(this.lostAndFound));
-      cacheManager.setStore('lostAndFound', this.lostAndFound);
-    } catch (e) {
-      console.error('Failed to persist lostAndFound', e);
-    }
+    cacheManager.setStore('lostAndFound', this.lostAndFound);
+    this.broadcastUpdate('lostAndFound');
   }
 
   getRacks() {
@@ -1879,25 +1911,9 @@ class DatabaseService {
     this.persistPutawayRecords();
   }
 
-  loadSavedPutawayRecords() {
-    try {
-      const saved = localStorage.getItem('irms_putaway_records');
-      const records = saved ? JSON.parse(saved) : [];
-      records.forEach(r => {
-        if (!r.syncState) r.syncState = 'synced';
-      });
-      return records;
-    } catch (e) {
-      return [];
-    }
-  }
-
   persistPutawayRecords() {
-    try {
-      localStorage.setItem('irms_putaway_records', JSON.stringify(this.putawayRecords));
-    } catch (e) {
-      console.error('Failed to persist putawayRecords', e);
-    }
+    cacheManager.setStore('putaway', this.putawayRecords);
+    this.broadcastUpdate('putaway');
   }
 
   getPickingTaskRemainingQty(pickingId) {
@@ -2483,38 +2499,14 @@ class DatabaseService {
 
   // ── Stock Movement & Deduction ──────────────────────────────────────────
 
-  loadSavedStockMovements() {
-    try {
-      const saved = localStorage.getItem('irms_stock_movements');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
   persistStockMovements() {
-    try {
-      localStorage.setItem('irms_stock_movements', JSON.stringify(this.stockMovements));
-    } catch (e) {
-      console.error('Failed to persist stockMovements', e);
-    }
-  }
-
-  loadSavedStockActivities() {
-    try {
-      const saved = localStorage.getItem('irms_stock_activities');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
+    cacheManager.setStore('stockMovements', this.stockMovements);
+    this.broadcastUpdate('stockMovements');
   }
 
   persistStockActivities() {
-    try {
-      localStorage.setItem('irms_stock_activities', JSON.stringify(this.stockActivities));
-    } catch (e) {
-      console.error('Failed to persist stockActivities', e);
-    }
+    cacheManager.setStore('stockActivity', this.stockActivities);
+    this.broadcastUpdate('stockActivity');
   }
 
   getStockMovements() {
@@ -2834,22 +2826,9 @@ class DatabaseService {
     this.persistTroubleShoot();
   }
 
-  loadSavedTroubleShoot() {
-    try {
-      const saved = localStorage.getItem('irms_troubleshoot_tickets');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-
   persistTroubleShoot() {
-    try {
-      localStorage.setItem('irms_troubleshoot_tickets', JSON.stringify(this.troubleShootTickets));
-      cacheManager.setStore('troubleShoot', this.troubleShootTickets);
-    } catch (e) {
-      console.error('Failed to persist troubleShootTickets', e);
-    }
+    cacheManager.setStore('troubleShoot', this.troubleShootTickets);
+    this.broadcastUpdate('troubleShoot');
   }
 
   getTroubleShootTickets() {

@@ -179,6 +179,24 @@ class CacheManager {
     });
   }
 
+  async deleteRecord(storeName, key) {
+    await this.init();
+    if (!this.db || key === undefined || key === null) return false;
+
+    return new Promise((resolve) => {
+      try {
+        const tx = this.db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        store.delete(key);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+      } catch (e) {
+        console.error(`Error deleting record from IndexedDB store "${storeName}":`, e);
+        resolve(false);
+      }
+    });
+  }
+
   async clearAll() {
     await this.init();
     if (!this.db) return true;
@@ -197,6 +215,33 @@ class CacheManager {
         resolve(false);
       }
     });
+  }
+
+  /**
+   * Deep Purge: Clears all object stores, closes the connection,
+   * completely deletes the IndexedDB database, and resets the init promise.
+   */
+  async purgeEntireDatabase() {
+    try {
+      if (this.db) {
+        this.db.close();
+        this.db = null;
+      }
+      this.initPromise = null;
+
+      if (window.indexedDB) {
+        await new Promise((resolve) => {
+          const req = indexedDB.deleteDatabase(DB_NAME);
+          req.onsuccess = () => resolve(true);
+          req.onerror = () => resolve(false);
+          req.onblocked = () => resolve(false);
+        });
+      }
+      return true;
+    } catch (e) {
+      console.error('Error purging IndexedDB database:', e);
+      return false;
+    }
   }
 }
 
