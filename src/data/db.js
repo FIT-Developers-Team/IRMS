@@ -560,6 +560,7 @@ class DatabaseService {
 
   async syncGoogleSheets(tabsToSync = null, options = {}) {
     const isBackground = options.background || false;
+    const forceRedownload = options.forceRedownload || false;
     const id = this.spreadsheetId;
     if (!id) {
       this.syncError = 'Missing Google Spreadsheet ID in config';
@@ -606,6 +607,8 @@ class DatabaseService {
         } else if (t === 'pickingTask') {
           normalizedTabSet.add('pickingTask');
           normalizedTabSet.add('requestChecker');
+          normalizedTabSet.add('lostAndFound');
+          normalizedTabSet.add('stockMovement');
           normalizedTabSet.add('putaway');
           normalizedTabSet.add('soh');
         } else if (t === 'lostAndFound') {
@@ -619,7 +622,6 @@ class DatabaseService {
         } else if (t === 'tsRequest') {
           normalizedTabSet.add('troubleShoot');
           normalizedTabSet.add('soData');
-          normalizedTabSet.add('checkerLines');
         } else if (t === 'troubleShoot') {
           normalizedTabSet.add('troubleShoot');
           normalizedTabSet.add('soData');
@@ -627,7 +629,6 @@ class DatabaseService {
           normalizedTabSet.add('troubleShoot');
           normalizedTabSet.add('soData');
           normalizedTabSet.add('soh');
-          normalizedTabSet.add('sohwh');
         } else {
           normalizedTabSet.add(t);
         }
@@ -645,8 +646,8 @@ class DatabaseService {
     if (shouldSync('soData')) {
       const soDataFetch = (async () => {
         try {
-          // If we already have cached soData, check if Column A Row 2 timestamp has changed
-          if (this.soList && this.soList.length > 0) {
+          // If we already have cached soData and not forcing full redownload, check if Column A Row 2 timestamp has changed
+          if (!forceRedownload && this.soList && this.soList.length > 0) {
             const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
             const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
             if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
@@ -688,8 +689,8 @@ class DatabaseService {
     if (shouldSync('skusDb')) {
       const skusDbFetch = (async () => {
         try {
-          // If we already have cached skus, check if Column A Row 2 timestamp has changed
-          if (this.skus && this.skus.length > 0) {
+          // If we already have cached skus and not forcing full redownload, check if Column A Row 2 timestamp has changed
+          if (!forceRedownload && this.skus && this.skus.length > 0) {
             const latestTs = await this.checkLatestSheetTimestamp(skusDbTab);
             const cachedTs = await cacheManager.getLastSyncTime('skusDb_timestamp');
             if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
@@ -967,13 +968,40 @@ class DatabaseService {
     }
   }
 
+  /**
+   * Regular Refresh / Force Update:
+   * Triggers a fast delta sync across all operational & master datasets without full redownload.
+   * Updates local cache and notifies UI listeners.
+   */
+  async forceDeltaSyncAll() {
+    const sheetsToSync = [
+      'userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram',
+      'soData', 'requestChecker', 'pickingTask', 'lostAndFound',
+      'troubleShoot', 'stockMovement', 'stockActivity', 'putaway', 'soh'
+    ];
+    return await this.syncGoogleSheets(sheetsToSync);
+  }
+
+  /**
+   * Flush Cache Refresh:
+   * Wipes local cache in IndexedDB and redownloads all Google Sheets datasets fresh.
+   * IMPORTANT: Preserves external service (Superset API / SOHWH) and does NOT trigger Superset API re-query.
+   */
   async clearCacheAndResync() {
-    this.updateBlockerMessage('Purging cache & performing clean cloud sync...');
+    this.updateBlockerMessage('Flushing local cache & redownloading datasets...');
     
-    // 1. Deep purge of IndexedDB
+    // 1. Preserve external service cache (SOHWH from Superset API)
+    const savedSohwh = Array.isArray(this.sohwh) ? [...this.sohwh] : [];
+
+    // 2. Deep purge of IndexedDB
     await cacheManager.purgeEntireDatabase();
 
-    // 2. Wipe legacy localStorage keys
+    // 3. Restore external SOHWH back to IndexedDB so Superset cache is kept intact
+    if (savedSohwh.length > 0) {
+      await cacheManager.setStore('sohwh', savedSohwh);
+    }
+
+    // 4. Wipe legacy localStorage keys
     const irmsKeys = [
       'irms_pickup_requests',
       'irms_picking_tasks',
@@ -981,8 +1009,7 @@ class DatabaseService {
       'irms_putaway_records',
       'irms_stock_movements',
       'irms_stock_activities',
-      'irms_troubleshoot_tickets',
-      'superset_session_cookie'
+      'irms_troubleshoot_tickets'
     ];
     irmsKeys.forEach(k => localStorage.removeItem(k));
 
@@ -993,7 +1020,7 @@ class DatabaseService {
       }
     });
 
-    // 3. Reset in-memory state
+    // 5. Reset in-memory state EXCEPT SOHWH
     this.requests = [];
     this.pickingTasks = [];
     this.lostAndFound = [];
@@ -1002,7 +1029,7 @@ class DatabaseService {
     this.stockActivities = [];
     this.troubleShootTickets = [];
     this.soh = [];
-    this.sohwh = [];
+    this.sohwh = savedSohwh;
     this.racks = [];
     this.zones = [];
     this.checkerLines = [];
@@ -1015,8 +1042,14 @@ class DatabaseService {
 
     this.notifyListeners();
 
-    // 4. Force a clean, complete cloud resync
-    return await this.syncGoogleSheets(null);
+    // 6. Force a full redownload of all Google Sheets datasets (WITHOUT triggering Superset API)
+    const sheetsToResync = [
+      'userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram',
+      'soData', 'requestChecker', 'pickingTask', 'lostAndFound',
+      'troubleShoot', 'stockMovement', 'stockActivity', 'putaway', 'soh'
+    ];
+
+    return await this.syncGoogleSheets(sheetsToResync, { forceRedownload: true });
   }
 
   isDataExpired() {
