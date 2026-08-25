@@ -334,7 +334,10 @@ class DatabaseService {
       if (cSohwh && cSohwh.length) this.sohwh = cSohwh;
       if (cTs && cTs.length) this.troubleShootTickets = cTs;
       if (cWp && cWp.length) this.whPlanograms = cWp;
-      if (cSo && cSo.length) this.soList = cSo;
+      if (cSo && cSo.length) {
+        this.soList = cSo;
+        this._recomputeUniqueSoList();
+      }
       if (cPutaway && cPutaway.length) this.putawayRecords = cPutaway;
       if (cSa && cSa.length) this.stockActivities = cSa;
 
@@ -343,6 +346,24 @@ class DatabaseService {
     } catch (err) {
       console.warn('IndexedDB hydration fallback:', err);
     }
+  }
+
+  _recomputeUniqueSoList() {
+    const map = new Map();
+    (this.soList || []).forEach(item => {
+      if (item && item.soNumber) {
+        const soTrimmed = String(item.soNumber).trim();
+        if (soTrimmed && !map.has(soTrimmed.toLowerCase())) {
+          map.set(soTrimmed.toLowerCase(), {
+            soNumber: soTrimmed,
+            pickerName: String(item.pickerName || '').trim(),
+            status: String(item.status || '').trim(),
+            wave: String(item.wave || '').trim()
+          });
+        }
+      }
+    });
+    this._uniqueSoList = Array.from(map.values());
   }
 
   subscribe(listener) {
@@ -418,7 +439,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     if (result.data && result.data.length > 0) {
@@ -454,6 +475,7 @@ class DatabaseService {
       }).filter(item => item.soNumber);
 
       if (this.soList.length > 0) {
+        this._recomputeUniqueSoList();
         cacheManager.setStore('soData', this.soList);
         const topTs = this._pendingSoDataTimestamp || this.soList[0].updateAt || this.soList[0].timestamp;
         if (topTs) {
@@ -510,7 +532,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     const remoteReqs = (result.data || []).map(row => {
@@ -560,7 +582,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     const remoteTasks = (result.data || []).map(row => {
@@ -1545,22 +1567,10 @@ class DatabaseService {
   }
 
   getUniqueSoNumbers() {
-    this.checkAndRefreshIfExpired();
-    const map = new Map();
-    (this.soList || []).forEach(item => {
-      if (item && item.soNumber) {
-        const soTrimmed = String(item.soNumber).trim();
-        if (soTrimmed && !map.has(soTrimmed.toLowerCase())) {
-          map.set(soTrimmed.toLowerCase(), {
-            soNumber: soTrimmed,
-            pickerName: String(item.pickerName || '').trim(),
-            status: String(item.status || '').trim(),
-            wave: String(item.wave || '').trim()
-          });
-        }
-      }
-    });
-    return Array.from(map.values());
+    if (!this._uniqueSoList) {
+      this._recomputeUniqueSoList();
+    }
+    return this._uniqueSoList || [];
   }
 
   getProductsForSo(soNumber) {
@@ -2387,59 +2397,29 @@ class DatabaseService {
 
   parseWhPlanogram(csvText) {
     if (!csvText) return;
-    const result = Papa.parse(csvText, { skipEmptyLines: true });
-    const rows = result.data || [];
-    if (rows.length === 0) return;
+    const result = Papa.parse(csvText, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+    });
 
     const list = [];
-    let startIndex = 0;
+    if (result.data && result.data.length > 0) {
+      result.data.forEach((row, i) => {
+        const l1Category = this.findRowValue(row, ['l1_category_name', 'l1 category name', 'l1_category', 'l1 category', 'category']);
+        const zone = this.findRowValue(row, ['zone_suggestion', 'zone suggestion', 'zone', 'target zone']);
+        const aisle = this.findRowValue(row, ['aisle_suggestion', 'aisle suggestion', 'aisle', 'target aisle']);
 
-    // Check if row 0 has concatenated categories or is standard header
-    const firstRow = rows[0] || [];
-    const cell0 = String(firstRow[0] || '').trim();
-    const cell1 = String(firstRow[1] || '').trim();
-    const cell2 = String(firstRow[2] || '').trim();
-
-    if (cell0.toLowerCase().includes('l1 category') && cell0.length > 25) {
-      // Concatenated row 0
-      const knownCats = [
-        'Minuman', 'Snack', 'Biskuit', 'Sarapan', 'Tepung & Bahan Kue',
-        'Susu & Olahan Susu', 'Bahan Masak & Bumbu', 'Kebutuhan Pokok',
-        'Kebutuhan Dapur', 'Kebutuhan Cuci Baju', 'Tata Rumah',
-        'Perlengkapan Pakaian', 'Kebutuhan Ibu & Bayi'
-      ];
-      
-      const zones = cell1.replace(/^zone\s*suggestion\s*/i, '').trim().split(/\s+/);
-      const aisleMatches = cell2.replace(/^aisle\s*suggestion\s*/i, '').trim().match(/\d+(?:\s*-\s*\d+)?/g) || [];
-
-      knownCats.forEach((cat, i) => {
-        list.push({
-          id: `wp_hdr_${i}_${cat}`,
-          l1Category: cat,
-          zoneSuggestion: zones[i] || '',
-          aisleSuggestion: aisleMatches[i] || ''
-        });
+        const l1 = String(l1Category || '').trim();
+        if (l1) {
+          list.push({
+            id: `wp_${i}_${l1}`,
+            l1Category: l1,
+            zoneSuggestion: String(zone || '').trim(),
+            aisleSuggestion: String(aisle || '').trim()
+          });
+        }
       });
-      startIndex = 1;
-    } else if (cell0.toLowerCase() === 'l1 category' || cell0.toLowerCase().includes('category')) {
-      startIndex = 1;
-    }
-
-    // Parse all subsequent rows
-    for (let i = startIndex; i < rows.length; i++) {
-      const r = rows[i];
-      if (!r || r.length < 2) continue;
-      const cat = String(r[0] || '').trim();
-      const zone = String(r[1] || '').trim();
-      const aisle = String(r[2] || '').trim();
-      if (cat && !cat.toLowerCase().startsWith('l1 category')) {
-        list.push({
-          id: `wp_${i}_${cat}`,
-          l1Category: cat,
-          zoneSuggestion: zone,
-          aisleSuggestion: aisle
-        });
-      }
     }
 
     this.whPlanograms = list;
@@ -2485,7 +2465,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     if (result.data && result.data.length > 0) {
@@ -2545,7 +2525,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     if (result.data && result.data.length > 0) {
@@ -2603,7 +2583,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     if (result.data && result.data.length > 0) {
@@ -2652,7 +2632,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     if (result.data && result.data.length > 0) {
@@ -2698,7 +2678,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: h => h.trim()
+      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
     const remoteEntries = (result.data || []).map(row => {
