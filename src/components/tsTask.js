@@ -234,7 +234,6 @@ export function renderTsTask(container, currentUser) {
       btn.classList.add('active');
       activeSubTab = btn.dataset.tab;
       renderList();
-      db.syncSectionData('tsTask', { background: true });
     });
   });
 

@@ -2,23 +2,22 @@ import Papa from 'papaparse';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets.js';
 import { cacheManager } from './cacheManager.js';
 
-export const DATA_EXPIRY_DURATION_MS = 5 * 60 * 1000; // 5 minutes TTL for operational data
-export const MASTER_DATA_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours TTL for static master reference data
+export const DATA_EXPIRY_DURATION_MS = 5 * 60 * 1000; // 5 minutes TTL
 
 class DatabaseService {
   constructor() {
     this.users = [];
     this.soList = [];
-    this.requests = [];
-    this.pickingTasks = [];
+    this.requests = this.loadSavedRequests();
+    this.pickingTasks = this.loadSavedPickingTasks();
     this.racks = [];
     this.zones = [];
     this.checkerLines = [];
-    this.lostAndFound = [];
-    this.putawayRecords = [];
-    this.stockMovements = [];
-    this.stockActivities = [];
-    this.troubleShootTickets = [];
+    this.lostAndFound = this.loadSavedLostAndFound();
+    this.putawayRecords = this.loadSavedPutawayRecords();
+    this.stockMovements = this.loadSavedStockMovements();
+    this.stockActivities = this.loadSavedStockActivities();
+    this.troubleShootTickets = this.loadSavedTroubleShoot();
     this.skus = [];
     this.whPlanograms = [];
     this.soh = [];
@@ -32,229 +31,24 @@ class DatabaseService {
     this.isLoaded = false;
     this.listeners = [];
     this.isRetryingSync = false;
-
-    // Cross-tab Synchronization Channel (0ms inter-tab update propagation)
-    if (typeof window !== 'undefined' && window.BroadcastChannel) {
-      try {
-        this.broadcastChannel = new BroadcastChannel('irms_db_sync');
-        this.broadcastChannel.onmessage = (event) => {
-          if (event.data && event.data.type === 'DATA_UPDATED') {
-            this.handleRemoteTabUpdate(event.data.storeName);
-          }
-        };
-      } catch (e) {
-        this.broadcastChannel = null;
-      }
-    }
     
-    // Instant 0ms IndexedDB Hydration & Master Data Lifecycle Check
-    this.initPromise = this.initStartupSync();
+    // Instant 0ms IndexedDB Hydration
+    this.initCache();
 
-    // Setup Real-Time Operational Polling Engine & Visibility Wakeup Handlers
-    this.setupRealtimeEngine();
-  }
+    // On fresh start / browser refresh (F5) / login: fetch Master Reference Data once.
+    // Master data (skusDb, zones, racks, checkerLines, whPlanogram) is cached in IndexedDB and NOT re-fetched on page navigation.
+    this.initPromise = this.syncGoogleSheets(['userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram']);
 
-  setupRealtimeEngine() {
-    const REALTIME_SECTIONS = ['tsRequest', 'tsTask', 'troubleShoot', 'pickingTask', 'requestPickup', 'lostAndFound', 'stockMovement'];
-
-    // 1. Dynamic Polling Timer (5s for active operational queues with overlap guard)
-    this._isPolling = false;
-    this.cacheCheckInterval = setInterval(async () => {
-      // Don't poll if document is hidden in background or if already running a sync
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (this.isSyncing || this._isPolling) return;
-
-      const activeTab = window.irmsActiveTab || 'home';
-      const isOperational = REALTIME_SECTIONS.includes(activeTab);
-
-      try {
-        this._isPolling = true;
-        if (isOperational) {
-          // Fast background delta polling for operational views (5s)
-          await this.syncSectionData(activeTab, { background: true });
-        } else {
-          // Normal TTL check for static / reference views
-          const isExpired = activeTab === 'sohwh' ? this.isSectionDataExpired('sohwh') : this.isDataExpired();
-          if (isExpired) {
-            await this.syncSectionData(activeTab, { background: true });
-          }
-        }
-      } finally {
-        this._isPolling = false;
-      }
-    }, 5000);
-
-    // 2. Mobile Screen Wakeup & Tab Return Trigger
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          this.handleAppResume();
-        }
-      });
-    }
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('focus', () => {
-        this.handleAppResume();
-      });
-    }
-  }
-
-  async handleAppResume() {
-    if (this.isSyncing) return;
-    const activeTab = window.irmsActiveTab || 'home';
-    console.log(`[Real-Time Engine] App resumed/focused on tab: "${activeTab}". Triggering fast refresh.`);
-    await this.syncSectionData(activeTab, { background: true });
-  }
-
-  async isMasterDataExpired(storeName) {
-    const lastSync = await cacheManager.getLastSyncTime(storeName);
-    if (!lastSync) return true;
-    const ms = new Date(lastSync).getTime();
-    if (isNaN(ms)) return true;
-    return (Date.now() - ms) >= MASTER_DATA_TTL_MS;
-  }
-
-  async initStartupSync() {
-    await this.initCache();
-
-    // Check which master data stores are missing or expired (> 12 hours)
-    const masterStores = [
-      { key: 'userDb', data: this.users },
-      { key: 'skusDb', data: this.skus },
-      { key: 'zones', data: this.zones },
-      { key: 'racks', data: this.racks },
-      { key: 'checkerLines', data: this.checkerLines },
-      { key: 'whPlanogram', data: this.whPlanograms }
-    ];
-
-    const neededTabs = [];
-    for (const m of masterStores) {
-      if (!m.data || m.data.length === 0) {
-        neededTabs.push(m.key);
-      } else {
-        const isExpired = await this.isMasterDataExpired(m.key);
-        if (isExpired) {
-          neededTabs.push(m.key);
-        }
-      }
-    }
-
-    if (neededTabs.length > 0) {
-      console.log(`[Master Data Sync] Fetching missing/expired master datasets: ${neededTabs.join(', ')}`);
-      await this.syncGoogleSheets(neededTabs);
-    } else {
-      console.log(`[Master Data Sync] Master reference data is fully cached in IndexedDB. 0ms instant startup.`);
-      // Fast background user check so role/account changes apply promptly
-      this.syncGoogleSheets(['userDb']).catch(() => {});
-    }
-  }
-
-  broadcastUpdate(storeName) {
-    if (this.broadcastChannel) {
-      try {
-        this.broadcastChannel.postMessage({ type: 'DATA_UPDATED', storeName, timestamp: Date.now() });
-      } catch (e) {}
-    }
-  }
-
-  async handleRemoteTabUpdate(storeName) {
-    try {
-      const records = await cacheManager.getStore(storeName);
-      if (records) {
-        if (storeName === 'requests') this.requests = records;
-        else if (storeName === 'pickingTasks') this.pickingTasks = records;
-        else if (storeName === 'troubleShoot') this.troubleShootTickets = records;
-        else if (storeName === 'lostAndFound') this.lostAndFound = records;
-        else if (storeName === 'stockMovements') this.stockMovements = records;
-        else if (storeName === 'stockActivity') this.stockActivities = records;
-        else if (storeName === 'putaway') this.putawayRecords = records;
-        else if (storeName === 'soh') this.soh = records;
-        else if (storeName === 'userDb') this.users = records;
-        else if (storeName === 'skusDb') this.skus = records;
-        else if (storeName === 'racks') this.racks = records;
-        else if (storeName === 'zones') this.zones = records;
-        else if (storeName === 'checkerLines') this.checkerLines = records;
-        else if (storeName === 'soData') this.soList = records;
-        this.notifyListeners();
-      }
-    } catch (e) {
-      console.warn('Error handling inter-tab update:', e);
-    }
-  }
-
-  subscribe(fn) {
-    if (typeof fn === 'function') {
-      this.listeners.push(fn);
-      return () => {
-        this.listeners = this.listeners.filter(l => l !== fn);
-      };
-    }
-    return () => {};
-  }
-
-  notifyListeners() {
-    this.listeners.forEach(fn => {
-      try {
-        fn();
-      } catch (e) {
-        console.error('Error in db listener:', e);
-      }
-    });
-  }
-
-  /**
-   * Robust Date/Time Parser supporting ISO, GViz Date(...), DD/MM/YYYY, MM/DD/YYYY, and Epoch ms.
-   */
-  parseTimestampMs(val) {
-    if (!val) return 0;
-    if (typeof val === 'number') return isNaN(val) ? 0 : val;
-    const str = String(val).trim();
-    if (!str) return 0;
-
-    // 1. Numeric epoch (seconds or milliseconds)
-    if (/^\d{10,13}$/.test(str)) {
-      const num = parseInt(str, 10);
-      return num < 1e11 ? num * 1000 : num;
-    }
-
-    // 2. GViz Date(yyyy,m,d,h,m,s)
-    const gvizMatch = str.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/i);
-    if (gvizMatch) {
-      const y = parseInt(gvizMatch[1], 10);
-      const m = parseInt(gvizMatch[2], 10); // 0-indexed
-      const d = parseInt(gvizMatch[3], 10);
-      const h = parseInt(gvizMatch[4] || '0', 10);
-      const min = parseInt(gvizMatch[5] || '0', 10);
-      const s = parseInt(gvizMatch[6] || '0', 10);
-      const dt = new Date(y, m, d, h, min, s);
-      return isNaN(dt.getTime()) ? 0 : dt.getTime();
-    }
-
-    // 3. DD/MM/YYYY or DD-MM-YYYY (Indonesian / British standard in Google Sheets)
-    const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
-    if (ddmmyyyy) {
-      const day = parseInt(ddmmyyyy[1], 10);
-      const month = parseInt(ddmmyyyy[2], 10) - 1;
-      const year = parseInt(ddmmyyyy[3], 10);
-      const hour = parseInt(ddmmyyyy[4] || '0', 10);
-      const min = parseInt(ddmmyyyy[5] || '0', 10);
-      const sec = parseInt(ddmmyyyy[6] || '0', 10);
-      const dt = new Date(year, month, day, hour, min, sec);
-      if (!isNaN(dt.getTime()) && dt.getTime() > 0) return dt.getTime();
-    }
-
-    // 4. Direct ISO or YYYY-MM-DD or MM/DD/YYYY
-    const direct = new Date(str).getTime();
-    if (!isNaN(direct) && direct > 0) return direct;
-
-    return 0;
+    // Background interval: Check every 30 seconds if active task data needs background refresh
+    this.cacheCheckInterval = setInterval(() => {
+      this.checkAndRefreshIfExpired();
+    }, 30 * 1000);
   }
 
   /**
    * Universal Delta Sync & Upsert Helper
    * - Appends new records if ID not present in local cache.
-   * - Updates existing record if remote timestamp >= local timestamp (or if equal from sheet).
+   * - Updates existing record if remote timestamp >= local timestamp.
    * - Preserves optimistic local pending changes.
    * - Sorts resulting dataset descending by primary timestamp.
    */
@@ -264,18 +58,10 @@ class DatabaseService {
 
     const getTimestampMs = (item) => {
       if (!item) return 0;
-      // 1. Prioritize updateAt / updatedAt if present
-      for (const p of ['updateAt', 'updatedAt', 'update_at', 'updated_at', 'modifiedAt', 'lastModified']) {
-        if (item[p]) {
-          const ms = this.parseTimestampMs(item[p]);
-          if (ms > 0) return ms;
-        }
-      }
-      // 2. Fallback to primary creation timestamp, date, time, etc.
       for (const p of tProps) {
         if (item[p]) {
-          const ms = this.parseTimestampMs(item[p]);
-          if (ms > 0) return ms;
+          const ms = new Date(item[p]).getTime();
+          if (!isNaN(ms)) return ms;
         }
       }
       return 0;
@@ -310,8 +96,7 @@ class DatabaseService {
             continue;
           }
 
-          // If remote is newer OR has same timestamp (remote from Google Sheets updates local), merge
-          if (remoteTime >= localTime || localTime === 0 || remoteTime === 0) {
+          if (remoteTime >= localTime || localTime === 0) {
             map.set(pk, { ...existing, ...remote });
           }
         }
@@ -535,8 +320,7 @@ class DatabaseService {
     const remoteReqs = (result.data || []).map(row => {
       const ticketId = this.findRowValue(row, ['ticket id', 'ticket_id', 'ticketid', 'uniqueid', 'unique id', 'id']);
       const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline', 'line']);
-      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at', 'request timestamp']) || new Date().toISOString();
-      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
+      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
       const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'picker']) || 'N/A';
       const checkerName = this.findRowValue(row, ['checker name', 'checker_name', 'checker']);
       const soNumber = this.findRowValue(row, ['so number', 'so_number', 'so']);
@@ -546,26 +330,25 @@ class DatabaseService {
       const status = this.findRowValue(row, ['status']) || 'Pending';
       const reason = this.findRowValue(row, ['reason', 'request reason', 'alasan']) || '';
 
-      const tid = String(ticketId || '').trim();
+      const tid = String(ticketId).trim();
       return {
         ticketId: tid,
         uniqueid: tid,
-        checkerLine: String(checkerLine || '').trim(),
-        timestamp: String(timestamp || '').trim(),
-        updateAt: String(updateAt || '').trim(),
-        pickerName: String(pickerName || '').trim(),
-        checkerName: String(checkerName || '').trim(),
-        soNumber: String(soNumber || '').trim(),
-        skuNumber: String(skuNumber || '').trim(),
-        productName: String(productName || '').trim(),
+        checkerLine: String(checkerLine).trim(),
+        timestamp: String(timestamp).trim(),
+        pickerName: String(pickerName).trim(),
+        checkerName: String(checkerName).trim(),
+        soNumber: String(soNumber).trim(),
+        skuNumber: String(skuNumber).trim(),
+        productName: String(productName).trim(),
         qty: parseInt(String(qty).trim() || '1', 10),
-        status: String(status || '').trim(),
-        reason: String(reason || '').trim()
+        status: String(status).trim(),
+        reason: String(reason).trim()
       };
     }).filter(req => req.ticketId || req.soNumber);
 
-    // Delta sync: update existing if newer updateAt/timestamp, append if new row
-    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
+    // Delta sync: update existing if newer timestamp, append if new row
+    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['timestamp', 'date']);
     this.persistRequests();
   }
 
@@ -643,20 +426,16 @@ class DatabaseService {
     return match ? match[1] : text.trim();
   }
 
-  async syncGoogleSheets(tabsToSync = null, options = {}) {
-    const isBackground = options.background || false;
-    const forceRedownload = options.forceRedownload || false;
+  async syncGoogleSheets(tabsToSync = null) {
     const id = this.spreadsheetId;
     if (!id) {
       this.syncError = 'Missing Google Spreadsheet ID in config';
       return false;
     }
 
-    if (!isBackground) {
-      this.isSyncing = true;
-      this.notifyListeners(); // Notify immediately so status bar shows "Syncing…" at start for user clicks
-    }
+    this.isSyncing = true;
     this.syncError = null;
+    this.notifyListeners(); // Notify immediately so status bar shows "Syncing…" at start
 
     const userDbTab = GOOGLE_SHEETS_CONFIG.tabs.userDb;
     const soDataTab = GOOGLE_SHEETS_CONFIG.tabs.soData;
@@ -687,11 +466,11 @@ class DatabaseService {
           normalizedTabSet.add('checkerLines');
         } else if (t === 'requestPickup') {
           normalizedTabSet.add('requestChecker');
+          normalizedTabSet.add('soData');
+          normalizedTabSet.add('checkerLines');
         } else if (t === 'pickingTask') {
           normalizedTabSet.add('pickingTask');
           normalizedTabSet.add('requestChecker');
-          normalizedTabSet.add('lostAndFound');
-          normalizedTabSet.add('stockMovement');
           normalizedTabSet.add('putaway');
           normalizedTabSet.add('soh');
         } else if (t === 'lostAndFound') {
@@ -704,11 +483,16 @@ class DatabaseService {
           normalizedTabSet.add('soh');
         } else if (t === 'tsRequest') {
           normalizedTabSet.add('troubleShoot');
+          normalizedTabSet.add('soData');
+          normalizedTabSet.add('checkerLines');
         } else if (t === 'troubleShoot') {
           normalizedTabSet.add('troubleShoot');
+          normalizedTabSet.add('soData');
         } else if (t === 'tsTask') {
           normalizedTabSet.add('troubleShoot');
+          normalizedTabSet.add('soData');
           normalizedTabSet.add('soh');
+          normalizedTabSet.add('sohwh');
         } else {
           normalizedTabSet.add(t);
         }
@@ -726,16 +510,18 @@ class DatabaseService {
     if (shouldSync('soData')) {
       const soDataFetch = (async () => {
         try {
-          const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
-          const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
-          if (!forceRedownload && this.soList && this.soList.length > 0 && latestTs && cachedTs) {
-            if (String(latestTs).trim() === String(cachedTs).trim()) {
+          // If we already have cached soData, check if Column A Row 2 timestamp has changed
+          if (this.soList && this.soList.length > 0) {
+            const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
+            const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
+            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
+              console.log(`[SO_DATA Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
               return { key: 'soData', skipped: true };
             }
+            this._pendingSoDataTimestamp = latestTs;
           }
-          this._pendingSoDataTimestamp = latestTs;
           const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' });
-          return { key: 'soData', res: res, timestamp: latestTs };
+          return { key: 'soData', res: res };
         } catch (err) {
           console.error('soData fetch error:', err);
           return null;
@@ -767,16 +553,18 @@ class DatabaseService {
     if (shouldSync('skusDb')) {
       const skusDbFetch = (async () => {
         try {
-          const latestTs = await this.checkLatestSheetTimestamp(skusDbTab);
-          const cachedTs = await cacheManager.getLastSyncTime('skusDb_timestamp');
-          if (!forceRedownload && this.skus && this.skus.length > 0 && latestTs && cachedTs) {
-            if (String(latestTs).trim() === String(cachedTs).trim()) {
+          // If we already have cached skus, check if Column A Row 2 timestamp has changed
+          if (this.skus && this.skus.length > 0) {
+            const latestTs = await this.checkLatestSheetTimestamp(skusDbTab);
+            const cachedTs = await cacheManager.getLastSyncTime('skusDb_timestamp');
+            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
+              console.log(`[SKUs_DB Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
               return { key: 'skusDb', skipped: true };
             }
+            this._pendingSkusDbTimestamp = latestTs;
           }
-          this._pendingSkusDbTimestamp = latestTs;
           const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(skusDbTab)}&${cacheBuster}`, { cache: 'no-store' });
-          return { key: 'skusDb', res: res, timestamp: latestTs };
+          return { key: 'skusDb', res: res };
         } catch (err) {
           console.error('skusDb fetch error:', err);
           return null;
@@ -799,9 +587,7 @@ class DatabaseService {
     if (shouldSync('whPlanogram')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(whPlanogramTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'whPlanogram', res: r })).catch(() => null));
     }
-    // SOHWH (Superset API) is a heavy external query and ONLY syncs when explicitly requested in tabsToSync
-    const shouldSyncSohwh = Boolean(normalizedTabSet && normalizedTabSet.has('sohwh'));
-    if (shouldSyncSohwh) {
+    if (shouldSync('sohwh')) {
       const supersetFetch = (async () => {
         try {
           // 1. Get cached cookie from localStorage or fetch it
@@ -961,31 +747,25 @@ class DatabaseService {
             this.parseUsers(text);
           }
           cacheManager.setStore('userDb', this.users);
-          cacheManager.setLastSyncTime('userDb', new Date().toISOString());
         }
         if (item.key === 'soData') {
           this.parseSoData(text);
           cacheManager.setStore('soData', this.soList);
-          const tsToSave = item.timestamp || this._pendingSoDataTimestamp || new Date().toISOString();
-          cacheManager.setLastSyncTime('soData_timestamp', tsToSave);
         }
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
         if (item.key === 'racks') {
           this.parseRacks(text);
           cacheManager.setStore('racks', this.racks);
-          cacheManager.setLastSyncTime('racks', new Date().toISOString());
         }
         if (item.key === 'zones') {
           this.parseZones(text);
           cacheManager.setStore('zones', this.zones);
-          cacheManager.setLastSyncTime('zones', new Date().toISOString());
         }
         if (item.key === 'lostAndFound') this.parseLostAndFound(text);
         if (item.key === 'checkerLines') {
           this.parseCheckerLines(text);
           cacheManager.setStore('checkerLines', this.checkerLines);
-          cacheManager.setLastSyncTime('checkerLines', new Date().toISOString());
         }
         if (item.key === 'putaway') {
           this.parsePutaway(text);
@@ -994,9 +774,6 @@ class DatabaseService {
         if (item.key === 'skusDb') {
           this.parseSkusDb(text);
           cacheManager.setStore('skusDb', this.skus);
-          cacheManager.setLastSyncTime('skusDb', new Date().toISOString());
-          const tsToSave = item.timestamp || this._pendingSkusDbTimestamp || new Date().toISOString();
-          cacheManager.setLastSyncTime('skusDb_timestamp', tsToSave);
         }
         if (item.key === 'soh') {
           this.parseSoh(text);
@@ -1021,7 +798,6 @@ class DatabaseService {
         if (item.key === 'whPlanogram') {
           this.parseWhPlanogram(text);
           cacheManager.setStore('whPlanogram', this.whPlanograms);
-          cacheManager.setLastSyncTime('whPlanogram', new Date().toISOString());
         }
       }
 
@@ -1050,51 +826,15 @@ class DatabaseService {
     }
   }
 
-  /**
-   * Regular Refresh / Force Update:
-   * Triggers a fast delta sync across all operational & master datasets without full redownload.
-   * Updates local cache and notifies UI listeners.
-   */
-  async forceDeltaSyncAll() {
-    const sheetsToSync = [
-      'userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram',
-      'soData', 'requestChecker', 'pickingTask', 'lostAndFound',
-      'troubleShoot', 'stockMovement', 'stockActivity', 'putaway', 'soh'
-    ];
-    return await this.syncGoogleSheets(sheetsToSync);
-  }
-
-  /**
-   * Flush Cache Refresh:
-   * Wipes local cache in IndexedDB and redownloads all Google Sheets datasets fresh.
-   * IMPORTANT: Preserves external service (Superset API / SOHWH) and does NOT trigger Superset API re-query.
-   */
   async clearCacheAndResync() {
-    this.updateBlockerMessage('Flushing local cache & redownloading datasets...');
-    
-    // 1. Instantly clear all IndexedDB stores EXCEPT external service (sohwh)
-    await cacheManager.clearAllExcept(['sohwh']);
+    await cacheManager.clearAll();
+    localStorage.removeItem('irms_pickup_requests');
+    localStorage.removeItem('irms_picking_tasks');
+    localStorage.removeItem('irms_lost_and_found');
+    localStorage.removeItem('irms_putaway_records');
+    localStorage.removeItem('irms_stock_movements');
+    localStorage.removeItem('irms_stock_activities');
 
-    // 2. Wipe legacy localStorage keys
-    const irmsKeys = [
-      'irms_pickup_requests',
-      'irms_picking_tasks',
-      'irms_lost_and_found',
-      'irms_putaway_records',
-      'irms_stock_movements',
-      'irms_stock_activities',
-      'irms_troubleshoot_tickets'
-    ];
-    irmsKeys.forEach(k => localStorage.removeItem(k));
-
-    // Also remove any checker line or temporary storage keys except active user session
-    Object.keys(localStorage).forEach(k => {
-      if (k.startsWith('irms_') && !k.startsWith('irms_session_')) {
-        localStorage.removeItem(k);
-      }
-    });
-
-    // 3. Reset in-memory state EXCEPT SOHWH
     this.requests = [];
     this.pickingTasks = [];
     this.lostAndFound = [];
@@ -1103,27 +843,15 @@ class DatabaseService {
     this.stockActivities = [];
     this.troubleShootTickets = [];
     this.soh = [];
-    // Note: this.sohwh is preserved in RAM
+    this.sohwh = [];
     this.racks = [];
     this.zones = [];
     this.checkerLines = [];
     this.skus = [];
-    this.whPlanograms = [];
-    this.soList = [];
-    this.users = [];
     this.lastSyncTime = null;
-    this.lastSectionSyncTime = { sohwh: new Date().toISOString() };
+    this.lastSectionSyncTime = {};
 
-    this.notifyListeners();
-
-    // 4. Force a clean redownload of all Google Sheets datasets (WITHOUT triggering Superset API)
-    const sheetsToResync = [
-      'userDb', 'skusDb', 'zones', 'racks', 'checkerLines', 'whPlanogram',
-      'soData', 'requestChecker', 'pickingTask', 'lostAndFound',
-      'troubleShoot', 'stockMovement', 'stockActivity', 'putaway', 'soh'
-    ];
-
-    return await this.syncGoogleSheets(sheetsToResync, { forceRedownload: true });
+    return await this.syncGoogleSheets(null);
   }
 
   isDataExpired() {
@@ -1161,17 +889,17 @@ class DatabaseService {
    * Called lazily on navigation (respects expiry). Master reference data (SKUs_DB, Zone, Racks, Checker_Lines)
    * is fetched ONLY on fresh start / browser refresh / login and excluded from navigation syncs.
    */
-  async syncSectionData(tabId, options = {}) {
+  async syncSectionData(tabId) {
     const tabMap = {
       home:          [],
       requestPickup: ['requestChecker', 'soData'],
-      pickingTask:   ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway', 'soh'],
+      pickingTask:   ['pickingTask', 'requestChecker', 'putaway', 'soh'],
       lostAndFound:  ['lostAndFound'],
       soh:           ['soh'],
       stockMovement: ['stockMovement', 'stockActivity', 'soh'],
       admin:         ['userDb'],
       sohwh:         ['sohwh', 'soData'],
-      tsRequest:     ['troubleShoot', 'soData'],
+      tsRequest:     ['troubleShoot', 'soData', 'checkerLines'],
       troubleShoot:  ['troubleShoot', 'soData'],
       tsTask:        ['troubleShoot', 'soData']
     };
@@ -1180,7 +908,7 @@ class DatabaseService {
       this.lastSectionSyncTime[tabId] = new Date().toISOString();
       return true;
     }
-    const ok = await this.syncGoogleSheets(tabsToSync, options);
+    const ok = await this.syncGoogleSheets(tabsToSync);
     if (ok) {
       this.lastSectionSyncTime[tabId] = new Date().toISOString();
     }
@@ -1617,9 +1345,22 @@ class DatabaseService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
+  loadSavedRequests() {
+    try {
+      const saved = localStorage.getItem('irms_pickup_requests');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   persistRequests() {
-    cacheManager.setStore('requests', this.requests);
-    this.broadcastUpdate('requests');
+    try {
+      localStorage.setItem('irms_pickup_requests', JSON.stringify(this.requests));
+      cacheManager.setStore('requests', this.requests);
+    } catch (e) {
+      console.error('Failed to persist requests', e);
+    }
   }
 
   async savePickupRequest(requestData) {
@@ -1742,9 +1483,22 @@ class DatabaseService {
     };
   }
 
+  loadSavedPickingTasks() {
+    try {
+      const saved = localStorage.getItem('irms_picking_tasks');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   persistPickingTasks() {
-    cacheManager.setStore('pickingTasks', this.pickingTasks);
-    this.broadcastUpdate('pickingTasks');
+    try {
+      localStorage.setItem('irms_picking_tasks', JSON.stringify(this.pickingTasks));
+      cacheManager.setStore('pickingTasks', this.pickingTasks);
+    } catch (e) {
+      console.error('Failed to persist picking tasks', e);
+    }
   }
 
   async createPickingTasks(selectedRequests, pickedByName, defaultSourceProcess = 'Request_Checker') {
@@ -1984,9 +1738,22 @@ class DatabaseService {
     this.persistLostAndFound();
   }
 
+  loadSavedLostAndFound() {
+    try {
+      const saved = localStorage.getItem('irms_lost_and_found');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   persistLostAndFound() {
-    cacheManager.setStore('lostAndFound', this.lostAndFound);
-    this.broadcastUpdate('lostAndFound');
+    try {
+      localStorage.setItem('irms_lost_and_found', JSON.stringify(this.lostAndFound));
+      cacheManager.setStore('lostAndFound', this.lostAndFound);
+    } catch (e) {
+      console.error('Failed to persist lostAndFound', e);
+    }
   }
 
   getRacks() {
@@ -2112,9 +1879,25 @@ class DatabaseService {
     this.persistPutawayRecords();
   }
 
+  loadSavedPutawayRecords() {
+    try {
+      const saved = localStorage.getItem('irms_putaway_records');
+      const records = saved ? JSON.parse(saved) : [];
+      records.forEach(r => {
+        if (!r.syncState) r.syncState = 'synced';
+      });
+      return records;
+    } catch (e) {
+      return [];
+    }
+  }
+
   persistPutawayRecords() {
-    cacheManager.setStore('putaway', this.putawayRecords);
-    this.broadcastUpdate('putaway');
+    try {
+      localStorage.setItem('irms_putaway_records', JSON.stringify(this.putawayRecords));
+    } catch (e) {
+      console.error('Failed to persist putawayRecords', e);
+    }
   }
 
   getPickingTaskRemainingQty(pickingId) {
@@ -2700,14 +2483,38 @@ class DatabaseService {
 
   // ── Stock Movement & Deduction ──────────────────────────────────────────
 
+  loadSavedStockMovements() {
+    try {
+      const saved = localStorage.getItem('irms_stock_movements');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   persistStockMovements() {
-    cacheManager.setStore('stockMovements', this.stockMovements);
-    this.broadcastUpdate('stockMovements');
+    try {
+      localStorage.setItem('irms_stock_movements', JSON.stringify(this.stockMovements));
+    } catch (e) {
+      console.error('Failed to persist stockMovements', e);
+    }
+  }
+
+  loadSavedStockActivities() {
+    try {
+      const saved = localStorage.getItem('irms_stock_activities');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
   }
 
   persistStockActivities() {
-    cacheManager.setStore('stockActivity', this.stockActivities);
-    this.broadcastUpdate('stockActivity');
+    try {
+      localStorage.setItem('irms_stock_activities', JSON.stringify(this.stockActivities));
+    } catch (e) {
+      console.error('Failed to persist stockActivities', e);
+    }
   }
 
   getStockMovements() {
@@ -3027,9 +2834,22 @@ class DatabaseService {
     this.persistTroubleShoot();
   }
 
+  loadSavedTroubleShoot() {
+    try {
+      const saved = localStorage.getItem('irms_troubleshoot_tickets');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
   persistTroubleShoot() {
-    cacheManager.setStore('troubleShoot', this.troubleShootTickets);
-    this.broadcastUpdate('troubleShoot');
+    try {
+      localStorage.setItem('irms_troubleshoot_tickets', JSON.stringify(this.troubleShootTickets));
+      cacheManager.setStore('troubleShoot', this.troubleShootTickets);
+    } catch (e) {
+      console.error('Failed to persist troubleShootTickets', e);
+    }
   }
 
   getTroubleShootTickets() {

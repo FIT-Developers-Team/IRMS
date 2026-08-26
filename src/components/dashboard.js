@@ -366,13 +366,13 @@ export function renderDashboard(container, currentUser, onLogout) {
 
         <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; box-sizing: border-box;">
           <button id="modalRegularRefreshBtn" class="btn-primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; background: linear-gradient(135deg, #1565c0, #0d47a1) !important; color: #ffffff !important; border: none; cursor: pointer;">
-            <span class="material-icons-round" style="font-size: 20px !important; color: #ffffff !important;">autorenew</span>
-            <span style="color: #ffffff !important; font-weight: 700 !important; font-size: 14px !important;">Delta Refresh</span>
+            <span class="material-icons-round" style="font-size: 20px !important; color: #ffffff !important; display: inline-block !important; visibility: visible !important;">autorenew</span>
+            <span style="color: #ffffff !important; font-weight: 700 !important; font-size: 13px !important; display: inline-block !important; visibility: visible !important;">Regular Refresh (Fetch Updates)</span>
           </button>
 
           <button id="modalFlushCacheBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 12px; color: #dc2626 !important; border: 1.5px solid #fecaca; background: #fff5f5 !important; cursor: pointer;">
-            <span class="material-icons-round" style="font-size: 20px !important; color: #dc2626 !important;">delete_sweep</span>
-            <span style="color: #dc2626 !important; font-weight: 700 !important; font-size: 14px !important;">Flush Update</span>
+            <span class="material-icons-round" style="font-size: 20px !important; color: #dc2626 !important; display: inline-block !important; visibility: visible !important;">delete_sweep</span>
+            <span style="color: #dc2626 !important; font-weight: 700 !important; font-size: 13px !important; display: inline-block !important; visibility: visible !important;">Flush Cache & Full Resync</span>
           </button>
 
           <button id="modalCancelRefreshBtn" class="btn-secondary" style="width: 100%; display: flex; align-items: center; justify-content: center; height: 40px; margin-top: 4px; font-weight: 600; font-size: 13px; border-radius: 10px; color: #475569 !important;">
@@ -392,14 +392,14 @@ export function renderDashboard(container, currentUser, onLogout) {
 
     modalOverlay.querySelector('#modalRegularRefreshBtn').addEventListener('click', async () => {
       closeModal();
-      showBlockerLock('Running delta sync across all datasets...');
+      showBlockerLock('Fetching latest updates...');
       try {
         if (activeTab === 'sohwh') {
           await db.syncSectionData('sohwh');
         } else {
-          await db.forceDeltaSyncAll();
+          await db.syncGoogleSheets(null);
         }
-        showToast('All datasets delta-synced & cache updated!');
+        showToast('Application data refreshed successfully!');
       } catch (err) {
         showToast('Refresh error: ' + (err.message || err));
       } finally {
@@ -409,10 +409,10 @@ export function renderDashboard(container, currentUser, onLogout) {
 
     modalOverlay.querySelector('#modalFlushCacheBtn').addEventListener('click', async () => {
       closeModal();
-      showBlockerLock('Flushing local cache & redownloading datasets...');
+      showBlockerLock('Flushing local cache & resyncing all data...');
       try {
         await db.clearCacheAndResync();
-        showToast('Local cache flushed & fresh datasets downloaded!');
+        showToast('Local cache flushed & full resync completed!');
         switchTab(activeTab);
       } catch (err) {
         showToast('Flush cache error: ' + (err.message || err));
@@ -483,13 +483,9 @@ export function renderDashboard(container, currentUser, onLogout) {
     else if (tabId === 'admin') renderAdmin(targetArea, currentUser);
     else renderHome(targetArea, currentUser);
 
-    // Real-Time & Background sync on tab switch
-    const REALTIME_SECTIONS = ['tsRequest', 'tsTask', 'troubleShoot', 'pickingTask', 'requestPickup', 'lostAndFound', 'stockMovement'];
-    if (REALTIME_SECTIONS.includes(tabId)) {
-      // Always trigger a fast background refresh for operational queues so new tasks reflect immediately
-      db.syncSectionData(tabId, { background: true });
-    } else if (db.isSectionDataExpired(tabId) && !db.isSyncing) {
-      db.syncSectionData(tabId, { background: true });
+    // If section data is expired, run a non-blocking background sync with live indicator
+    if (db.isSectionDataExpired(tabId) && !db.isSyncing) {
+      db.syncSectionData(tabId);
     }
   }
 
