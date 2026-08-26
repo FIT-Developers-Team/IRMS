@@ -578,41 +578,43 @@ export function renderRequestPickup(container, currentUser) {
     function renderSoMenu(query) {
       const allSos = db.getUniqueSoNumbers();
       const q = String(query || '').trim().toLowerCase();
-      const filtered = allSos.filter(item => 
-        !q || String(item.soNumber).toLowerCase().includes(q)
-      );
+      const filtered = q 
+        ? allSos.filter(item => String(item.soNumber).toLowerCase().includes(q))
+        : allSos;
 
       if (!filtered.length) {
         soMenu.innerHTML = `<div class="sku-option-item" style="color: var(--text-muted);">No matching SO numbers (${allSos.length} loaded)</div>`;
         return;
       }
 
-      soMenu.innerHTML = filtered.slice(0, 100).map(item => `
+      soMenu.innerHTML = filtered.slice(0, 25).map(item => `
         <div class="sku-option-item" data-so="${escapeHtml(item.soNumber)}" data-picker="${escapeHtml(item.pickerName || '')}">
           <span class="sku-code-text">${escapeHtml(item.soNumber)}</span>
           <span class="sku-name-text">Picker: ${escapeHtml(item.pickerName || 'N/A')}${item.status ? ` • Status: ${escapeHtml(item.status)}` : ''}</span>
         </div>
       `).join('');
-
-      soMenu.querySelectorAll('.sku-option-item').forEach(el => {
-        el.addEventListener('click', () => {
-          const so = el.dataset.so;
-          const picker = el.dataset.picker;
-
-          selectedSoNumber = so;
-          soInput.value = so;
-
-          if (picker) {
-            selectedPickerName = picker;
-            pickerNameInput.value = picker;
-          }
-
-          soMenu.classList.remove('open');
-          updateSkuEnablement();
-          renderSkuMenu(skuSearchInput.value);
-        });
-      });
     }
+
+    // Single delegated click listener on soMenu (Zero overhead)
+    soMenu.addEventListener('click', (e) => {
+      const el = e.target.closest('.sku-option-item');
+      if (!el) return;
+      const so = el.dataset.so;
+      const picker = el.dataset.picker;
+      if (!so) return;
+
+      selectedSoNumber = so;
+      soInput.value = so;
+
+      if (picker) {
+        selectedPickerName = picker;
+        pickerNameInput.value = picker;
+      }
+
+      soMenu.classList.remove('open');
+      updateSkuEnablement();
+      renderSkuMenu(skuSearchInput.value);
+    });
 
     soInput.addEventListener('focus', () => {
       renderSoMenu(soInput.value);
@@ -624,18 +626,22 @@ export function renderRequestPickup(container, currentUser) {
       soMenu.classList.add('open');
     });
 
+    let soDebounce = null;
     soInput.addEventListener('input', () => {
-      selectedSoNumber = soInput.value.trim();
-      renderSoMenu(selectedSoNumber);
-      soMenu.classList.add('open');
-      updateSkuEnablement();
+      clearTimeout(soDebounce);
+      soDebounce = setTimeout(() => {
+        selectedSoNumber = soInput.value.trim();
+        renderSoMenu(selectedSoNumber);
+        soMenu.classList.add('open');
+        updateSkuEnablement();
 
-      const allSos = db.getUniqueSoNumbers();
-      const match = allSos.find(item => String(item.soNumber).toLowerCase() === selectedSoNumber.toLowerCase());
-      if (match && match.pickerName) {
-        pickerNameInput.value = match.pickerName;
-        selectedPickerName = match.pickerName;
-      }
+        const allSos = db.getUniqueSoNumbers();
+        const match = allSos.find(item => String(item.soNumber).toLowerCase() === selectedSoNumber.toLowerCase());
+        if (match && match.pickerName) {
+          pickerNameInput.value = match.pickerName;
+          selectedPickerName = match.pickerName;
+        }
+      }, 50);
     });
 
     pickerNameInput.addEventListener('input', () => {
@@ -651,45 +657,47 @@ export function renderRequestPickup(container, currentUser) {
         return;
       }
 
-      skuMenu.innerHTML = products.slice(0, 100).map(item => `
+      skuMenu.innerHTML = products.slice(0, 25).map(item => `
         <div class="sku-option-item" data-sku="${escapeHtml(item.skuNumber)}" data-name="${escapeHtml(item.productName)}">
           <span class="sku-code-text">SKU: ${escapeHtml(item.skuNumber)}</span>
           <span class="sku-name-text">${escapeHtml(item.productName)}</span>
         </div>
       `).join('');
-
-      skuMenu.querySelectorAll('.sku-option-item').forEach(el => {
-        el.addEventListener('click', () => {
-          const skuNumber = el.dataset.sku;
-          const productName = el.dataset.name;
-          selectedSku = { skuNumber, productName };
-
-          skuSearchInput.value = `${skuNumber} - ${productName}`;
-          skuMenu.classList.remove('open');
-
-          const soDetails = db.getSoDetails(selectedSoNumber, skuNumber);
-          const soStatus = soDetails ? soDetails.status : 'N/A';
-          const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
-
-          selectedSkuDisplay.innerHTML = `
-            <div class="autofill-badge success" style="margin-bottom: 8px;">
-              <span class="material-icons-round" style="font-size: 16px;">check_circle</span>
-              <span>Selected: <strong>SKU ${escapeHtml(skuNumber)}</strong> (${escapeHtml(productName)})</span>
-            </div>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-                <span class="material-icons-round" style="font-size: 16px;">info</span>
-                <span>SO Status: <strong style="text-transform: uppercase;">${escapeHtml(soStatus)}</strong></span>
-              </div>
-              <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-                <span class="material-icons-round" style="font-size: 16px;">layers</span>
-                <span>SO SUM(Qty): <strong>${escapeHtml(String(soOrigQty))}</strong></span>
-              </div>
-            </div>
-          `;
-        });
-      });
     }
+
+    // Single delegated click listener on skuMenu (Zero overhead)
+    skuMenu.addEventListener('click', (e) => {
+      const el = e.target.closest('.sku-option-item');
+      if (!el) return;
+      const skuNumber = el.dataset.sku;
+      const productName = el.dataset.name;
+      if (!skuNumber) return;
+
+      selectedSku = { skuNumber, productName };
+      skuSearchInput.value = `${skuNumber} - ${productName}`;
+      skuMenu.classList.remove('open');
+
+      const soDetails = db.getSoDetails(selectedSoNumber, skuNumber);
+      const soStatus = soDetails ? soDetails.status : 'N/A';
+      const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
+
+      selectedSkuDisplay.innerHTML = `
+        <div class="autofill-badge success" style="margin-bottom: 8px;">
+          <span class="material-icons-round" style="font-size: 16px;">check_circle</span>
+          <span>Selected: <strong>SKU ${escapeHtml(skuNumber)}</strong> (${escapeHtml(productName)})</span>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+            <span class="material-icons-round" style="font-size: 16px;">info</span>
+            <span>SO Status: <strong style="text-transform: uppercase;">${escapeHtml(soStatus)}</strong></span>
+          </div>
+          <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+            <span class="material-icons-round" style="font-size: 16px;">layers</span>
+            <span>SO SUM(Qty): <strong>${escapeHtml(String(soOrigQty))}</strong></span>
+          </div>
+        </div>
+      `;
+    });
 
     skuSearchInput.addEventListener('focus', () => {
       if (!skuSearchInput.disabled) {
@@ -705,11 +713,14 @@ export function renderRequestPickup(container, currentUser) {
       }
     });
 
+    let skuDebounce = null;
     skuSearchInput.addEventListener('input', () => {
-      if (!skuSearchInput.disabled) {
+      if (skuSearchInput.disabled) return;
+      clearTimeout(skuDebounce);
+      skuDebounce = setTimeout(() => {
         renderSkuMenu(skuSearchInput.value);
         skuMenu.classList.add('open');
-      }
+      }, 50);
     });
 
     modalOverlay.addEventListener('click', (e) => {

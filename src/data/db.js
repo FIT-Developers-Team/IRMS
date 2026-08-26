@@ -336,7 +336,7 @@ class DatabaseService {
       if (cWp && cWp.length) this.whPlanograms = cWp;
       if (cSo && cSo.length) {
         this.soList = cSo;
-        this._recomputeUniqueSoList();
+        this._recomputeSoIndexes();
       }
       if (cPutaway && cPutaway.length) this.putawayRecords = cPutaway;
       if (cSa && cSa.length) this.stockActivities = cSa;
@@ -348,22 +348,50 @@ class DatabaseService {
     }
   }
 
-  _recomputeUniqueSoList() {
-    const map = new Map();
+  _recomputeSoIndexes() {
+    const soMap = new Map();
+    const soDetailsMap = new Map();
+    const uniqueList = [];
+    const seenSo = new Set();
+
     (this.soList || []).forEach(item => {
-      if (item && item.soNumber) {
-        const soTrimmed = String(item.soNumber).trim();
-        if (soTrimmed && !map.has(soTrimmed.toLowerCase())) {
-          map.set(soTrimmed.toLowerCase(), {
-            soNumber: soTrimmed,
-            pickerName: String(item.pickerName || '').trim(),
-            status: String(item.status || '').trim(),
-            wave: String(item.wave || '').trim()
-          });
+      if (!item || !item.soNumber) return;
+      const soRaw = String(item.soNumber).trim();
+      if (!soRaw) return;
+      const soLower = soRaw.toLowerCase();
+      const skuLower = String(item.skuNumber || '').trim().toLowerCase();
+
+      // 1. Group products by SO
+      let group = soMap.get(soLower);
+      if (!group) {
+        group = [];
+        soMap.set(soLower, group);
+      }
+      group.push(item);
+
+      // 2. Direct O(1) compound key lookup for (soNumber + skuNumber)
+      if (skuLower) {
+        const detailKey = `${soLower}_${skuLower}`;
+        if (!soDetailsMap.has(detailKey)) {
+          soDetailsMap.set(detailKey, item);
         }
       }
+
+      // 3. Unique SOs list
+      if (!seenSo.has(soLower)) {
+        seenSo.add(soLower);
+        uniqueList.push({
+          soNumber: soRaw,
+          pickerName: String(item.pickerName || '').trim(),
+          status: String(item.status || '').trim(),
+          wave: String(item.wave || '').trim()
+        });
+      }
     });
-    this._uniqueSoList = Array.from(map.values());
+
+    this._soMap = soMap;
+    this._soDetailsMap = soDetailsMap;
+    this._uniqueSoList = uniqueList;
   }
 
   subscribe(listener) {
@@ -475,7 +503,7 @@ class DatabaseService {
       }).filter(item => item.soNumber);
 
       if (this.soList.length > 0) {
-        this._recomputeUniqueSoList();
+        this._recomputeSoIndexes();
         cacheManager.setStore('soData', this.soList);
         const topTs = this._pendingSoDataTimestamp || this.soList[0].updateAt || this.soList[0].timestamp;
         if (topTs) {
@@ -1568,40 +1596,47 @@ class DatabaseService {
 
   getUniqueSoNumbers() {
     if (!this._uniqueSoList) {
-      this._recomputeUniqueSoList();
+      this._recomputeSoIndexes();
     }
     return this._uniqueSoList || [];
   }
 
   getProductsForSo(soNumber) {
     if (!soNumber) return [];
+    if (!this._soMap) {
+      this._recomputeSoIndexes();
+    }
     const cleanSo = String(soNumber).trim().toLowerCase();
-    return (this.soList || []).filter(item => String(item.soNumber || '').trim().toLowerCase() === cleanSo);
+    return this._soMap.get(cleanSo) || [];
   }
 
   getSoDetails(soNumber, skuNumber) {
     if (!soNumber || !skuNumber) return null;
+    if (!this._soDetailsMap) {
+      this._recomputeSoIndexes();
+    }
     const cleanSo = String(soNumber).trim().toLowerCase();
     const cleanSku = String(skuNumber).trim().toLowerCase();
-    return (this.soList || []).find(item => 
-      String(item.soNumber || '').trim().toLowerCase() === cleanSo && 
-      String(item.skuNumber || '').trim().toLowerCase() === cleanSku
-    ) || null;
+    return this._soDetailsMap.get(`${cleanSo}_${cleanSku}`) || null;
   }
 
   searchProducts(query, soNumber = null) {
-    let list = this.soList || [];
+    let list = [];
     if (soNumber) {
       const cleanSo = String(soNumber).trim().toLowerCase();
-      list = list.filter(item => String(item.soNumber || '').trim().toLowerCase() === cleanSo);
+      if (!this._soMap) this._recomputeSoIndexes();
+      list = this._soMap.get(cleanSo) || [];
+    } else {
+      list = this.soList || [];
     }
-    if (!query) return list.slice(0, 50);
+
+    if (!query) return list.slice(0, 30);
 
     const q = String(query).trim().toLowerCase();
     return list.filter(item => 
       String(item.skuNumber || '').toLowerCase().includes(q) || 
       String(item.productName || '').toLowerCase().includes(q)
-    ).slice(0, 50);
+    ).slice(0, 30);
   }
 
   generate6DigitId() {
