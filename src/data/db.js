@@ -31,6 +31,7 @@ class DatabaseService {
     this.isLoaded = false;
     this.listeners = [];
     this.isRetryingSync = false;
+    this.isDeltaPolling = false;
     
     // Instant 0ms IndexedDB Hydration
     this.initCache();
@@ -43,6 +44,11 @@ class DatabaseService {
     this.cacheCheckInterval = setInterval(() => {
       this.checkAndRefreshIfExpired();
     }, 30 * 1000);
+
+    // Fast background interval: Real-time delta sync for operational tables every 10 seconds
+    this.deltaPollingInterval = setInterval(() => {
+      this.pollOperationalDeltas();
+    }, 10 * 1000);
   }
 
   /**
@@ -104,6 +110,106 @@ class DatabaseService {
     }
 
     return Array.from(map.values()).sort((a, b) => getTimestampMs(b) - getTimestampMs(a));
+  }
+
+  /**
+   * Fast equality check between two record lists to determine if UI re-render is actually necessary.
+   */
+  areRecordListsEqual(listA, listB, keyProp) {
+    if (!listA && !listB) return true;
+    if (!listA || !listB) return false;
+    if (listA.length !== listB.length) return false;
+
+    for (let i = 0; i < listA.length; i++) {
+      const a = listA[i];
+      const b = listB[i];
+      if (!a || !b) return false;
+      if (a[keyProp] !== b[keyProp]) return false;
+      if (a.status !== b.status) return false;
+      if (a.statusTicket !== b.statusTicket) return false;
+      if (a.updateAt !== b.updateAt) return false;
+      if (a.assignedTo !== b.assignedTo) return false;
+      if (a.foundQty !== b.foundQty) return false;
+      if (a.foundAt !== b.foundAt) return false;
+      if (a.timestamp !== b.timestamp) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Real-time delta poller for operational tables (Request_Checker, Trouble_Shoot, Picking_task, Lost_And_Found).
+   * Runs in the background without UI blocking or intrusive full-screen spinners.
+   * Only triggers notifyListeners() when actual row changes or status transitions occur.
+   */
+  async pollOperationalDeltas() {
+    // 1. Guard against background/inactive tab or offline status
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+    // 2. Guard against in-flight syncs
+    if (this.isSyncing || this.isDeltaPolling) return;
+
+    const id = this.spreadsheetId;
+    if (!id) return;
+
+    this.isDeltaPolling = true;
+    const cacheBuster = `_t=${Date.now()}`;
+
+    const requestCheckerTab = GOOGLE_SHEETS_CONFIG.tabs.requestChecker;
+    const troubleShootTab = GOOGLE_SHEETS_CONFIG.tabs.troubleShoot || 'Trouble_Shoot';
+    const pickingTaskTab = GOOGLE_SHEETS_CONFIG.tabs.pickingTask;
+    const lostAndFoundTab = GOOGLE_SHEETS_CONFIG.tabs.lostAndFound;
+
+    try {
+      const fetchTab = async (tabName, key) => {
+        try {
+          const res = await fetch(
+            `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&${cacheBuster}`,
+            { cache: 'no-store' }
+          );
+          if (!res.ok) return null;
+          const text = await res.text();
+          if (text.includes('<!DOCTYPE html>')) return null;
+          return { key, text };
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const results = await Promise.all([
+        fetchTab(requestCheckerTab, 'requestChecker'),
+        fetchTab(troubleShootTab, 'troubleShoot'),
+        fetchTab(pickingTaskTab, 'pickingTask'),
+        fetchTab(lostAndFoundTab, 'lostAndFound')
+      ]);
+
+      let anyChanged = false;
+
+      for (const item of results) {
+        if (!item || !item.text) continue;
+        if (item.key === 'requestChecker') {
+          if (this.parseRequestChecker(item.text)) anyChanged = true;
+        } else if (item.key === 'troubleShoot') {
+          if (this.parseTroubleShoot(item.text)) anyChanged = true;
+        } else if (item.key === 'pickingTask') {
+          if (this.parsePickingTask(item.text)) anyChanged = true;
+        } else if (item.key === 'lostAndFound') {
+          if (this.parseLostAndFound(item.text)) anyChanged = true;
+        }
+      }
+
+      if (anyChanged) {
+        if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+          window.requestAnimationFrame(() => this.notifyListeners());
+        } else {
+          this.notifyListeners();
+        }
+      }
+    } catch (err) {
+      console.warn('Operational delta poll error:', err);
+    } finally {
+      this.isDeltaPolling = false;
+    }
   }
 
   async initCache() {
@@ -306,9 +412,10 @@ class DatabaseService {
 
   parseRequestChecker(csvText) {
     if (!csvText) {
+      const hadRecords = this.requests.length > 0;
       this.requests = [];
       this.persistRequests();
-      return;
+      return hadRecords;
     }
 
     const result = Papa.parse(csvText, {
@@ -347,16 +454,21 @@ class DatabaseService {
       };
     }).filter(req => req.ticketId || req.soNumber);
 
-    // Delta sync: update existing if newer timestamp, append if new row
-    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['timestamp', 'date']);
-    this.persistRequests();
+    const merged = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['timestamp', 'date']);
+    const hasChanged = !this.areRecordListsEqual(this.requests, merged, 'ticketId');
+    this.requests = merged;
+    if (hasChanged) {
+      this.persistRequests();
+    }
+    return hasChanged;
   }
 
   parsePickingTask(csvText) {
     if (!csvText) {
+      const hadRecords = this.pickingTasks.length > 0;
       this.pickingTasks = [];
       this.persistPickingTasks();
-      return;
+      return hadRecords;
     }
 
     const result = Papa.parse(csvText, {
@@ -387,9 +499,13 @@ class DatabaseService {
       };
     }).filter(task => task.pickingId || task.ticketId);
 
-    // Delta sync: update existing if newer timestamp, append if new row
-    this.pickingTasks = this.mergeDeltaRecords(this.pickingTasks, remoteTasks, 'pickingId', ['timestamp', 'date']);
-    this.persistPickingTasks();
+    const merged = this.mergeDeltaRecords(this.pickingTasks, remoteTasks, 'pickingId', ['timestamp', 'date']);
+    const hasChanged = !this.areRecordListsEqual(this.pickingTasks, merged, 'pickingId');
+    this.pickingTasks = merged;
+    if (hasChanged) {
+      this.persistPickingTasks();
+    }
+    return hasChanged;
   }
 
   findRowValue(row, possibleKeys) {
@@ -1698,9 +1814,10 @@ class DatabaseService {
 
   parseLostAndFound(csvText) {
     if (!csvText) {
+      const hadRecords = this.lostAndFound.length > 0;
       this.lostAndFound = [];
       this.persistLostAndFound();
-      return;
+      return hadRecords;
     }
 
     const result = Papa.parse(csvText, {
@@ -1733,9 +1850,13 @@ class DatabaseService {
       };
     }).filter(e => e.ticketId || e.skuCode);
 
-    // Delta sync: update existing if newer timestamp, append if new row
-    this.lostAndFound = this.mergeDeltaRecords(this.lostAndFound, remoteEntries, 'ticketId', ['timestamp', 'date']);
-    this.persistLostAndFound();
+    const merged = this.mergeDeltaRecords(this.lostAndFound, remoteEntries, 'ticketId', ['timestamp', 'date']);
+    const hasChanged = !this.areRecordListsEqual(this.lostAndFound, merged, 'ticketId');
+    this.lostAndFound = merged;
+    if (hasChanged) {
+      this.persistLostAndFound();
+    }
+    return hasChanged;
   }
 
   loadSavedLostAndFound() {
@@ -2766,9 +2887,10 @@ class DatabaseService {
 
   parseTroubleShoot(csvText) {
     if (!csvText) {
+      const hadRecords = this.troubleShootTickets.length > 0;
       this.troubleShootTickets = [];
       this.persistTroubleShoot();
-      return;
+      return hadRecords;
     }
 
     const result = Papa.parse(csvText, {
@@ -2778,14 +2900,14 @@ class DatabaseService {
     });
 
     const remoteEntries = (result.data || []).map(row => {
-      const id = this.findRowValue(row, ['id', 'ticket id', 'ticket_id', 'ticketid']);
-      const requestTimestamp = this.findRowValue(row, ['request timestamp', 'request_timestamp', 'requesttimestamp', 'timestamp']) || '';
-      const requestedBy = this.findRowValue(row, ['requested by', 'requested_by', 'requestedby']) || '';
+      const id = this.findRowValue(row, ['id', 'ticket id', 'ticket_id', 'ticketid']) || '';
+      const requestTimestamp = this.findRowValue(row, ['request timestamp', 'request_timestamp', 'timestamp', 'date']) || new Date().toISOString();
+      const requestedBy = this.findRowValue(row, ['requested by', 'requested_by', 'requestedby', 'requester', 'checker name', 'checker_name', 'checker']) || '';
       const staffId = this.findRowValue(row, ['staff id', 'staff_id', 'staffid']) || '';
-      const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline']) || '';
-      const photo = this.findRowValue(row, ['photo', 'image', 'photo_url']) || '';
-      const reason = this.findRowValue(row, ['reason', 'reasons']) || '';
-      const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'pickername']) || '';
+      const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline', 'line']) || '';
+      const photo = this.findRowValue(row, ['photo', 'photo url', 'image']) || '';
+      const reason = this.findRowValue(row, ['reason', 'troubleshoot reason', 'reasons', 'alasan']) || '';
+      const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'picker']) || '';
       const soNumber = this.findRowValue(row, ['so number', 'so_number', 'sonumber']) || '';
       const skuNumber = this.findRowValue(row, ['sku number', 'sku_number', 'skunumber', 'sku code', 'sku_code']) || '';
       const productName = this.findRowValue(row, ['product name', 'product_name', 'productname']) || '';
@@ -2829,9 +2951,14 @@ class DatabaseService {
       };
     }).filter(e => e.id);
 
-    this.troubleShootTickets = this.mergeDeltaRecords(this.troubleShootTickets, remoteEntries, 'id', ['updateAt', 'requestTimestamp', 'timestamp']);
-    this.troubleShootTickets.sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
-    this.persistTroubleShoot();
+    const merged = this.mergeDeltaRecords(this.troubleShootTickets, remoteEntries, 'id', ['updateAt', 'requestTimestamp', 'timestamp']);
+    merged.sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+    const hasChanged = !this.areRecordListsEqual(this.troubleShootTickets, merged, 'id');
+    this.troubleShootTickets = merged;
+    if (hasChanged) {
+      this.persistTroubleShoot();
+    }
+    return hasChanged;
   }
 
   loadSavedTroubleShoot() {
