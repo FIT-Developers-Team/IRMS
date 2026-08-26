@@ -762,14 +762,23 @@ class DatabaseService {
       fetches.push(fetch(userDbUrl, { cache: 'no-store' }).then(r => ({ key: 'userDb', res: r })).catch(() => null));
     }
     if (shouldSync('soData')) {
-      fetches.push(
-        fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' })
-          .then(r => ({ key: 'soData', res: r }))
-          .catch(err => {
-            console.error('soData fetch error:', err);
-            return null;
-          })
-      );
+      const soDataFetch = (async () => {
+        try {
+          // If we already have SO_DATA in memory and it was synced within 5 minutes, skip downloading huge CSV
+          const lastSoSync = await cacheManager.getLastSyncTime('soData_lastSync');
+          const isFresh = lastSoSync && (Date.now() - new Date(lastSoSync).getTime() < 5 * 60 * 1000);
+          if (!forceRedownload && this.soList && this.soList.length > 0 && isFresh && !options.forceSoData) {
+            return { key: 'soData', skipped: true };
+          }
+
+          const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' });
+          return { key: 'soData', res: res };
+        } catch (err) {
+          console.error('soData fetch error:', err);
+          return null;
+        }
+      })();
+      fetches.push(soDataFetch);
     }
     if (shouldSync('requestChecker')) {
       fetches.push(fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(requestCheckerTab)}&${cacheBuster}`, { cache: 'no-store' }).then(r => ({ key: 'requestChecker', res: r })).catch(() => null));
@@ -996,6 +1005,7 @@ class DatabaseService {
         if (item.key === 'soData') {
           this.parseSoData(text);
           cacheManager.setStore('soData', this.soList);
+          cacheManager.setLastSyncTime('soData_lastSync', new Date().toISOString());
         }
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
@@ -1188,18 +1198,19 @@ class DatabaseService {
    * is fetched ONLY on fresh start / browser refresh / login and excluded from navigation syncs.
    */
   async syncSectionData(tabId, options = {}) {
+    const isBg = !!options.background;
     const tabMap = {
       home:          [],
-      requestPickup: ['requestChecker', 'soData'],
-      pickingTask:   ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway', 'soh'],
+      requestPickup: isBg ? ['requestChecker'] : ['requestChecker', 'soData'],
+      pickingTask:   isBg ? ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway'] : ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway', 'soh'],
       lostAndFound:  ['lostAndFound'],
       soh:           ['soh'],
-      stockMovement: ['stockMovement', 'stockActivity', 'soh'],
+      stockMovement: isBg ? ['stockMovement', 'stockActivity'] : ['stockMovement', 'stockActivity', 'soh'],
       admin:         ['userDb'],
-      sohwh:         ['sohwh', 'soData'],
-      tsRequest:     ['troubleShoot', 'soData'],
-      troubleShoot:  ['troubleShoot', 'soData'],
-      tsTask:        ['troubleShoot', 'soData']
+      sohwh:         isBg ? [] : ['sohwh', 'soData'],
+      tsRequest:     isBg ? ['troubleShoot'] : ['troubleShoot', 'soData'],
+      troubleShoot:  isBg ? ['troubleShoot'] : ['troubleShoot', 'soData'],
+      tsTask:        isBg ? ['troubleShoot'] : ['troubleShoot', 'soData']
     };
     const tabsToSync = tabMap[tabId];
     if (!tabsToSync || tabsToSync.length === 0) {
