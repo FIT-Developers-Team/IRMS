@@ -57,26 +57,32 @@ class DatabaseService {
   setupRealtimeEngine() {
     const REALTIME_SECTIONS = ['tsRequest', 'tsTask', 'troubleShoot', 'pickingTask', 'requestPickup', 'lostAndFound', 'stockMovement'];
 
-    // 1. Dynamic Polling Timer (4s for active operational queues, 30s for standard views)
+    // 1. Dynamic Polling Timer (5s for active operational queues with overlap guard)
+    this._isPolling = false;
     this.cacheCheckInterval = setInterval(async () => {
-      // Don't poll if document is hidden in background or if already running a blocking sync
+      // Don't poll if document is hidden in background or if already running a sync
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (this.isSyncing) return;
+      if (this.isSyncing || this._isPolling) return;
 
       const activeTab = window.irmsActiveTab || 'home';
       const isOperational = REALTIME_SECTIONS.includes(activeTab);
 
-      if (isOperational) {
-        // Fast background delta polling for operational views (4s)
-        await this.syncSectionData(activeTab, { background: true });
-      } else {
-        // Normal TTL check for static / reference views
-        const isExpired = activeTab === 'sohwh' ? this.isSectionDataExpired('sohwh') : this.isDataExpired();
-        if (isExpired) {
+      try {
+        this._isPolling = true;
+        if (isOperational) {
+          // Fast background delta polling for operational views (5s)
           await this.syncSectionData(activeTab, { background: true });
+        } else {
+          // Normal TTL check for static / reference views
+          const isExpired = activeTab === 'sohwh' ? this.isSectionDataExpired('sohwh') : this.isDataExpired();
+          if (isExpired) {
+            await this.syncSectionData(activeTab, { background: true });
+          }
         }
+      } finally {
+        this._isPolling = false;
       }
-    }, 4000);
+    }, 5000);
 
     // 2. Mobile Screen Wakeup & Tab Return Trigger
     if (typeof document !== 'undefined') {
@@ -648,9 +654,9 @@ class DatabaseService {
 
     if (!isBackground) {
       this.isSyncing = true;
+      this.notifyListeners(); // Notify immediately so status bar shows "Syncing…" at start for user clicks
     }
     this.syncError = null;
-    this.notifyListeners(); // Notify immediately so status bar shows "Syncing…" at start
 
     const userDbTab = GOOGLE_SHEETS_CONFIG.tabs.userDb;
     const soDataTab = GOOGLE_SHEETS_CONFIG.tabs.soData;
@@ -681,8 +687,6 @@ class DatabaseService {
           normalizedTabSet.add('checkerLines');
         } else if (t === 'requestPickup') {
           normalizedTabSet.add('requestChecker');
-          normalizedTabSet.add('soData');
-          normalizedTabSet.add('checkerLines');
         } else if (t === 'pickingTask') {
           normalizedTabSet.add('pickingTask');
           normalizedTabSet.add('requestChecker');
@@ -700,13 +704,10 @@ class DatabaseService {
           normalizedTabSet.add('soh');
         } else if (t === 'tsRequest') {
           normalizedTabSet.add('troubleShoot');
-          normalizedTabSet.add('soData');
         } else if (t === 'troubleShoot') {
           normalizedTabSet.add('troubleShoot');
-          normalizedTabSet.add('soData');
         } else if (t === 'tsTask') {
           normalizedTabSet.add('troubleShoot');
-          normalizedTabSet.add('soData');
           normalizedTabSet.add('soh');
         } else {
           normalizedTabSet.add(t);
@@ -725,18 +726,16 @@ class DatabaseService {
     if (shouldSync('soData')) {
       const soDataFetch = (async () => {
         try {
-          // If we already have cached soData and not forcing full redownload, check if Column A Row 2 timestamp has changed
-          if (!forceRedownload && this.soList && this.soList.length > 0) {
-            const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
-            const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
-            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
-              console.log(`[SO_DATA Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
+          const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
+          const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
+          if (!forceRedownload && this.soList && this.soList.length > 0 && latestTs && cachedTs) {
+            if (String(latestTs).trim() === String(cachedTs).trim()) {
               return { key: 'soData', skipped: true };
             }
-            this._pendingSoDataTimestamp = latestTs;
           }
+          this._pendingSoDataTimestamp = latestTs;
           const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' });
-          return { key: 'soData', res: res };
+          return { key: 'soData', res: res, timestamp: latestTs };
         } catch (err) {
           console.error('soData fetch error:', err);
           return null;
@@ -768,18 +767,16 @@ class DatabaseService {
     if (shouldSync('skusDb')) {
       const skusDbFetch = (async () => {
         try {
-          // If we already have cached skus and not forcing full redownload, check if Column A Row 2 timestamp has changed
-          if (!forceRedownload && this.skus && this.skus.length > 0) {
-            const latestTs = await this.checkLatestSheetTimestamp(skusDbTab);
-            const cachedTs = await cacheManager.getLastSyncTime('skusDb_timestamp');
-            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
-              console.log(`[SKUs_DB Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
+          const latestTs = await this.checkLatestSheetTimestamp(skusDbTab);
+          const cachedTs = await cacheManager.getLastSyncTime('skusDb_timestamp');
+          if (!forceRedownload && this.skus && this.skus.length > 0 && latestTs && cachedTs) {
+            if (String(latestTs).trim() === String(cachedTs).trim()) {
               return { key: 'skusDb', skipped: true };
             }
-            this._pendingSkusDbTimestamp = latestTs;
           }
+          this._pendingSkusDbTimestamp = latestTs;
           const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(skusDbTab)}&${cacheBuster}`, { cache: 'no-store' });
-          return { key: 'skusDb', res: res };
+          return { key: 'skusDb', res: res, timestamp: latestTs };
         } catch (err) {
           console.error('skusDb fetch error:', err);
           return null;
@@ -969,6 +966,8 @@ class DatabaseService {
         if (item.key === 'soData') {
           this.parseSoData(text);
           cacheManager.setStore('soData', this.soList);
+          const tsToSave = item.timestamp || this._pendingSoDataTimestamp || new Date().toISOString();
+          cacheManager.setLastSyncTime('soData_timestamp', tsToSave);
         }
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
@@ -996,6 +995,8 @@ class DatabaseService {
           this.parseSkusDb(text);
           cacheManager.setStore('skusDb', this.skus);
           cacheManager.setLastSyncTime('skusDb', new Date().toISOString());
+          const tsToSave = item.timestamp || this._pendingSkusDbTimestamp || new Date().toISOString();
+          cacheManager.setLastSyncTime('skusDb_timestamp', tsToSave);
         }
         if (item.key === 'soh') {
           this.parseSoh(text);
