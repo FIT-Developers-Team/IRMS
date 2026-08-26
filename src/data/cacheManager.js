@@ -102,11 +102,6 @@ class CacheManager {
     await this.init();
     if (!this.db || !Array.isArray(records)) return;
 
-    // For large datasets (>1000 rows), write asynchronously in chunks to avoid blocking UI
-    if (records.length > 1000) {
-      return this._setStoreBatched(storeName, records);
-    }
-
     return new Promise((resolve) => {
       try {
         const tx = this.db.transaction(storeName, 'readwrite');
@@ -125,61 +120,6 @@ class CacheManager {
         resolve(false);
       }
     });
-  }
-
-  /**
-   * Writes large datasets (>1000 rows) to IndexedDB in batched transactions.
-   * Each batch writes up to 500 items, then yields to the event loop via setTimeout(0),
-   * preventing long tasks from blocking the main thread and freezing the UI.
-   */
-  async _setStoreBatched(storeName, records) {
-    const BATCH_SIZE = 500;
-
-    // 1. Clear the store first
-    await new Promise((resolve) => {
-      try {
-        const tx = this.db.transaction(storeName, 'readwrite');
-        tx.objectStore(storeName).clear();
-        tx.oncomplete = () => resolve(true);
-        tx.onerror = () => resolve(false);
-      } catch (e) {
-        resolve(false);
-      }
-    });
-
-    // 2. Write in batches, yielding between each
-    const kp = (() => {
-      try {
-        const tx = this.db.transaction(storeName, 'readonly');
-        return tx.objectStore(storeName).keyPath;
-      } catch { return 'id'; }
-    })();
-
-    for (let offset = 0; offset < records.length; offset += BATCH_SIZE) {
-      const chunk = records.slice(offset, offset + BATCH_SIZE);
-      await new Promise((resolve) => {
-        try {
-          const tx = this.db.transaction(storeName, 'readwrite');
-          const store = tx.objectStore(storeName);
-          chunk.forEach(item => {
-            if (item && item[kp] !== undefined && item[kp] !== null && String(item[kp]).trim() !== '') {
-              store.put(item);
-            }
-          });
-          tx.oncomplete = () => resolve(true);
-          tx.onerror = () => resolve(false);
-        } catch (e) {
-          resolve(false);
-        }
-      });
-
-      // Yield to the event loop so UI events (clicks, scrolls) are processed
-      if (offset + BATCH_SIZE < records.length) {
-        await new Promise(r => setTimeout(r, 0));
-      }
-    }
-
-    return true;
   }
 
   async upsertRecords(storeName, records) {

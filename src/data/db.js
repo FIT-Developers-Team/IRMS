@@ -57,7 +57,7 @@ class DatabaseService {
   setupRealtimeEngine() {
     const REALTIME_SECTIONS = ['tsRequest', 'tsTask', 'troubleShoot', 'pickingTask', 'requestPickup', 'lostAndFound', 'stockMovement'];
 
-    // 1. Dynamic Polling Timer (15s for active operational queues, TTL-based for standard views)
+    // 1. Dynamic Polling Timer (4s for active operational queues, 30s for standard views)
     this.cacheCheckInterval = setInterval(async () => {
       // Don't poll if document is hidden in background or if already running a blocking sync
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
@@ -67,7 +67,7 @@ class DatabaseService {
       const isOperational = REALTIME_SECTIONS.includes(activeTab);
 
       if (isOperational) {
-        // Background delta polling for operational views (15s)
+        // Fast background delta polling for operational views (4s)
         await this.syncSectionData(activeTab, { background: true });
       } else {
         // Normal TTL check for static / reference views
@@ -76,7 +76,7 @@ class DatabaseService {
           await this.syncSectionData(activeTab, { background: true });
         }
       }
-    }, 15000);
+    }, 4000);
 
     // 2. Mobile Screen Wakeup & Tab Return Trigger
     if (typeof document !== 'undefined') {
@@ -178,61 +178,9 @@ class DatabaseService {
   }
 
   /**
-   * Robust Date/Time Parser supporting ISO, GViz Date(...), DD/MM/YYYY, MM/DD/YYYY, and Epoch ms.
-   */
-  parseTimestampMs(val) {
-    if (!val) return 0;
-    if (typeof val === 'number') return isNaN(val) ? 0 : val;
-    const str = String(val).trim();
-    if (!str) return 0;
-
-    // 1. Numeric epoch (seconds or milliseconds)
-    if (/^\d{10,13}$/.test(str)) {
-      const num = parseInt(str, 10);
-      return num < 1e11 ? num * 1000 : num;
-    }
-
-    // 2. GViz Date(yyyy,m,d,h,m,s)
-    const gvizMatch = str.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/i);
-    if (gvizMatch) {
-      const y = parseInt(gvizMatch[1], 10);
-      const m = parseInt(gvizMatch[2], 10); // 0-indexed
-      const d = parseInt(gvizMatch[3], 10);
-      const h = parseInt(gvizMatch[4] || '0', 10);
-      const min = parseInt(gvizMatch[5] || '0', 10);
-      const s = parseInt(gvizMatch[6] || '0', 10);
-      const dt = new Date(y, m, d, h, min, s);
-      return isNaN(dt.getTime()) ? 0 : dt.getTime();
-    }
-
-    // 3. Direct ISO or YYYY-MM-DD
-    if (/^\d{4}[-/]/.test(str)) {
-      const direct = new Date(str).getTime();
-      if (!isNaN(direct) && direct > 0) return direct;
-    }
-
-    // 4. DD/MM/YYYY or DD-MM-YYYY (Indonesian / British standard in Google Sheets)
-    const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
-    if (ddmmyyyy) {
-      const day = parseInt(ddmmyyyy[1], 10);
-      const month = parseInt(ddmmyyyy[2], 10) - 1;
-      const year = parseInt(ddmmyyyy[3], 10);
-      const hour = parseInt(ddmmyyyy[4] || '0', 10);
-      const min = parseInt(ddmmyyyy[5] || '0', 10);
-      const sec = parseInt(ddmmyyyy[6] || '0', 10);
-      const dt = new Date(year, month, day, hour, min, sec);
-      if (!isNaN(dt.getTime()) && dt.getTime() > 0) return dt.getTime();
-    }
-
-    // 5. General fallback
-    const fallback = new Date(str).getTime();
-    return (!isNaN(fallback) && fallback > 0) ? fallback : 0;
-  }
-
-  /**
    * Universal Delta Sync & Upsert Helper
    * - Appends new records if ID not present in local cache.
-   * - Updates existing record if remote timestamp >= local timestamp (or if equal/newer from sheet).
+   * - Updates existing record if remote timestamp >= local timestamp.
    * - Preserves optimistic local pending changes.
    * - Sorts resulting dataset descending by primary timestamp.
    */
@@ -242,18 +190,10 @@ class DatabaseService {
 
     const getTimestampMs = (item) => {
       if (!item) return 0;
-      // 1. Prioritize updateAt / updatedAt if present
-      for (const p of ['updateAt', 'updatedAt', 'update_at', 'updated_at', 'modifiedAt', 'lastModified']) {
-        if (item[p]) {
-          const ms = this.parseTimestampMs(item[p]);
-          if (ms > 0) return ms;
-        }
-      }
-      // 2. Fallback to primary creation timestamp, date, time, etc.
       for (const p of tProps) {
         if (item[p]) {
-          const ms = this.parseTimestampMs(item[p]);
-          if (ms > 0) return ms;
+          const ms = new Date(item[p]).getTime();
+          if (!isNaN(ms)) return ms;
         }
       }
       return 0;
@@ -288,8 +228,7 @@ class DatabaseService {
             continue;
           }
 
-          // If remote is newer OR has same timestamp (remote from Google Sheets updates local), merge
-          if (remoteTime >= localTime || localTime === 0 || remoteTime === 0) {
+          if (remoteTime >= localTime || localTime === 0) {
             map.set(pk, { ...existing, ...remote });
           }
         }
@@ -334,10 +273,7 @@ class DatabaseService {
       if (cSohwh && cSohwh.length) this.sohwh = cSohwh;
       if (cTs && cTs.length) this.troubleShootTickets = cTs;
       if (cWp && cWp.length) this.whPlanograms = cWp;
-      if (cSo && cSo.length) {
-        this.soList = cSo;
-        this._recomputeSoIndexes();
-      }
+      if (cSo && cSo.length) this.soList = cSo;
       if (cPutaway && cPutaway.length) this.putawayRecords = cPutaway;
       if (cSa && cSa.length) this.stockActivities = cSa;
 
@@ -348,52 +284,6 @@ class DatabaseService {
     }
   }
 
-  _recomputeSoIndexes() {
-    const soMap = new Map();
-    const soDetailsMap = new Map();
-    const uniqueList = [];
-    const seenSo = new Set();
-
-    (this.soList || []).forEach(item => {
-      if (!item || !item.soNumber) return;
-      const soRaw = String(item.soNumber).trim();
-      if (!soRaw) return;
-      const soLower = soRaw.toLowerCase();
-      const skuLower = String(item.skuNumber || '').trim().toLowerCase();
-
-      // 1. Group products by SO
-      let group = soMap.get(soLower);
-      if (!group) {
-        group = [];
-        soMap.set(soLower, group);
-      }
-      group.push(item);
-
-      // 2. Direct O(1) compound key lookup for (soNumber + skuNumber)
-      if (skuLower) {
-        const detailKey = `${soLower}_${skuLower}`;
-        if (!soDetailsMap.has(detailKey)) {
-          soDetailsMap.set(detailKey, item);
-        }
-      }
-
-      // 3. Unique SOs list
-      if (!seenSo.has(soLower)) {
-        seenSo.add(soLower);
-        uniqueList.push({
-          soNumber: soRaw,
-          pickerName: String(item.pickerName || '').trim(),
-          status: String(item.status || '').trim(),
-          wave: String(item.wave || '').trim()
-        });
-      }
-    });
-
-    this._soMap = soMap;
-    this._soDetailsMap = soDetailsMap;
-    this._uniqueSoList = uniqueList;
-  }
-
   subscribe(listener) {
     this.listeners.push(listener);
     return () => {
@@ -402,22 +292,6 @@ class DatabaseService {
   }
 
   notifyListeners() {
-    // Throttle: max 1 re-render per second to prevent DOM thrash during rapid sync cycles
-    const now = Date.now();
-    if (this._lastNotify && (now - this._lastNotify) < 1000) {
-      // Coalesce: schedule one final update after the throttle window
-      if (!this._pendingNotify) {
-        this._pendingNotify = setTimeout(() => {
-          this._pendingNotify = null;
-          this._lastNotify = Date.now();
-          this.listeners.forEach(fn => {
-            try { fn(); } catch (e) { console.error('Listener error:', e); }
-          });
-        }, 1000 - (now - this._lastNotify));
-      }
-      return;
-    }
-    this._lastNotify = now;
     this.listeners.forEach(fn => {
       try { fn(); } catch (e) { console.error('Listener error:', e); }
     });
@@ -478,105 +352,49 @@ class DatabaseService {
     }).filter(u => u.staffId && u.staffId.length > 0);
   }
 
-  _createHeaderMapper(sampleRow, fieldDefinitions) {
-    if (!sampleRow) return () => '';
-    const keys = Object.keys(sampleRow);
-    const normalizedKeysMap = new Map();
-    keys.forEach(k => {
-      normalizedKeysMap.set(k.toLowerCase().replace(/[^a-z0-9]/g, ''), k);
-    });
-
-    const resolvedKeys = {};
-    for (const [fieldName, possibleKeys] of Object.entries(fieldDefinitions)) {
-      for (let i = 0; i < possibleKeys.length; i++) {
-        const pKey = possibleKeys[i];
-        // 1. Direct match
-        if (sampleRow[pKey] !== undefined) {
-          resolvedKeys[fieldName] = pKey;
-          break;
-        }
-        // 2. Normalized alphanumeric match
-        const clean = pKey.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (normalizedKeysMap.has(clean)) {
-          resolvedKeys[fieldName] = normalizedKeysMap.get(clean);
-          break;
-        }
-      }
-    }
-
-    return (row, fieldName) => {
-      const actualKey = resolvedKeys[fieldName];
-      if (actualKey && row[actualKey] !== undefined && row[actualKey] !== null) {
-        return String(row[actualKey]).trim();
-      }
-      return '';
-    };
-  }
-
   parseSoData(csvText) {
     if (!csvText) return;
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+      transformHeader: h => h.trim()
     });
 
-    const rows = result.data || [];
-    if (rows.length === 0) return;
+    if (result.data && result.data.length > 0) {
+      this.soList = result.data.map(row => {
+        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
+        const pickerName = this.findRowValue(row, ['picker_name', 'picker name', 'picker']) || 'N/A';
+        const soNumber = this.findRowValue(row, ['so_number', 'so number', 'so']);
+        const skuNumber = this.findRowValue(row, ['sku_number', 'sku code', 'sku number', 'sku']);
+        const productName = this.findRowValue(row, ['product_name', 'product name', 'product']);
+        const status = this.findRowValue(row, ['status']) || '';
+        const qty = this.findRowValue(row, ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'qty', 'quantity']) || '1';
+        const originRackName = this.findRowValue(row, ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack']) || '';
+        const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name']) || '';
 
-    const getValue = this._createHeaderMapper(rows[0], {
-      timestamp: ['timestamp', 'date', 'time', 'created at', 'created_at', 'order date', 'order_date', 'tanggal'],
-      updateAt: ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified'],
-      pickerName: ['picker_name', 'picker name', 'picker', 'picked by', 'picked_by'],
-      soNumber: ['so_number', 'so number', 'so', 'sonumber', 'order number', 'order_number', 'sales order', 'sales_order'],
-      skuNumber: ['sku_number', 'sku code', 'sku number', 'sku_code', 'sku', 'product_sku', 'product sku'],
-      productName: ['product_name', 'product name', 'product', 'productname', 'name'],
-      status: ['status', 'so status', 'so_status', 'order status', 'order_status'],
-      qty: ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'request quantity', 'qty', 'quantity', 'sum(qty)', 'sum_qty', 'stock_quantity'],
-      originRackName: ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack', 'rack_name', 'rack name', 'rack', 'location'],
-      wave: ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name', 'wave_no', 'waveno']
-    });
+        const sNum = String(soNumber || '').trim();
+        const sku = String(skuNumber || '').trim();
+        const tStamp = String(timestamp || '').trim();
 
-    const parsedList = [];
-    const defaultNow = new Date().toISOString();
+        return {
+          id: `${sNum}_${sku}_${tStamp}`,
+          timestamp: tStamp,
+          pickerName: String(pickerName).trim(),
+          soNumber: sNum,
+          skuNumber: sku,
+          productName: String(productName).trim(),
+          status: String(status).trim(),
+          requestQty: parseInt(String(qty).trim() || '1', 10),
+          originRackName: String(originRackName).trim(),
+          wave: String(wave).trim()
+        };
+      }).filter(item => item.soNumber);
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      const sNum = getValue(row, 'soNumber');
-      if (!sNum) continue;
-
-      const timestamp = getValue(row, 'timestamp') || defaultNow;
-      const updateAt = getValue(row, 'updateAt');
-      const pickerName = getValue(row, 'pickerName') || 'N/A';
-      const sku = getValue(row, 'skuNumber');
-      const productName = getValue(row, 'productName');
-      const status = getValue(row, 'status');
-      const qtyStr = getValue(row, 'qty');
-      const originRackName = getValue(row, 'originRackName');
-      const wave = getValue(row, 'wave');
-
-      parsedList.push({
-        id: `${sNum}_${sku}_${timestamp}`,
-        timestamp,
-        updateAt,
-        pickerName,
-        soNumber: sNum,
-        skuNumber: sku,
-        productName,
-        status,
-        requestQty: parseInt(qtyStr || '1', 10) || 1,
-        originRackName,
-        wave
-      });
-    }
-
-    if (parsedList.length > 0) {
-      this.soList = parsedList;
-      this._recomputeSoIndexes();
-      cacheManager.setStore('soData', this.soList);
-      const topTs = this._pendingSoDataTimestamp || this.soList[0].updateAt || this.soList[0].timestamp;
-      if (topTs) {
-        cacheManager.setLastSyncTime('soData_timestamp', topTs);
+      if (this.soList.length > 0) {
+        const topTs = this._pendingSoDataTimestamp || this.soList[0].timestamp;
+        if (topTs) {
+          cacheManager.setLastSyncTime('soData_timestamp', topTs);
+        }
       }
     }
   }
@@ -628,14 +446,13 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+      transformHeader: h => h.trim()
     });
 
     const remoteReqs = (result.data || []).map(row => {
       const ticketId = this.findRowValue(row, ['ticket id', 'ticket_id', 'ticketid', 'uniqueid', 'unique id', 'id']);
       const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline', 'line']);
-      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at', 'request timestamp']) || new Date().toISOString();
-      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
+      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
       const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'picker']) || 'N/A';
       const checkerName = this.findRowValue(row, ['checker name', 'checker_name', 'checker']);
       const soNumber = this.findRowValue(row, ['so number', 'so_number', 'so']);
@@ -651,7 +468,6 @@ class DatabaseService {
         uniqueid: tid,
         checkerLine: String(checkerLine).trim(),
         timestamp: String(timestamp).trim(),
-        updateAt: String(updateAt || '').trim(),
         pickerName: String(pickerName).trim(),
         checkerName: String(checkerName).trim(),
         soNumber: String(soNumber).trim(),
@@ -663,8 +479,8 @@ class DatabaseService {
       };
     }).filter(req => req.ticketId || req.soNumber);
 
-    // Delta sync: update existing if newer updateAt/timestamp, append if new row
-    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
+    // Delta sync: update existing if newer timestamp, append if new row
+    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['timestamp', 'date']);
     this.persistRequests();
   }
 
@@ -678,7 +494,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+      transformHeader: h => h.trim()
     });
 
     const remoteTasks = (result.data || []).map(row => {
@@ -690,7 +506,6 @@ class DatabaseService {
       const qty = this.findRowValue(row, ['qty', 'quantity']) || '1';
       const status = this.findRowValue(row, ['status']) || 'Picking';
       const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'timestamp']) || new Date().toISOString();
-      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
 
       return {
         pickingId: String(pickingId).trim(),
@@ -700,39 +515,24 @@ class DatabaseService {
         productName: String(productName).trim(),
         qty: parseInt(String(qty).trim() || '1', 10),
         status: String(status).trim(),
-        timestamp: String(timestamp).trim(),
-        updateAt: String(updateAt || '').trim()
+        timestamp: String(timestamp).trim()
       };
     }).filter(task => task.pickingId || task.ticketId);
 
-    // Delta sync: update existing if newer updateAt/timestamp, append if new row
-    this.pickingTasks = this.mergeDeltaRecords(this.pickingTasks, remoteTasks, 'pickingId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
+    // Delta sync: update existing if newer timestamp, append if new row
+    this.pickingTasks = this.mergeDeltaRecords(this.pickingTasks, remoteTasks, 'pickingId', ['timestamp', 'date']);
     this.persistPickingTasks();
   }
 
   findRowValue(row, possibleKeys) {
     if (!row) return '';
-    // 1. Fast direct property check (O(1))
-    for (let i = 0; i < possibleKeys.length; i++) {
-      const k = possibleKeys[i];
-      if (row[k] !== undefined && row[k] !== null) {
-        const val = String(row[k]).trim();
-        if (val) return val;
-      }
-    }
-
-    // 2. Fast normalized check without per-iteration regex allocations
     const keys = Object.keys(row);
-    for (let i = 0; i < possibleKeys.length; i++) {
-      const cleanKey = possibleKeys[i].toLowerCase().replace(/[^a-z0-9]/g, '');
-      for (let j = 0; j < keys.length; j++) {
-        const actualKey = keys[j];
-        if (actualKey.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanKey) {
-          if (row[actualKey] !== undefined && row[actualKey] !== null) {
-            const val = String(row[actualKey]).trim();
-            if (val) return val;
-          }
-        }
+    for (const key of possibleKeys) {
+      const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const matchedKey = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanKey);
+      if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
+        const val = String(row[matchedKey]).trim();
+        if (val) return val;
       }
     }
     return '';
@@ -846,13 +646,16 @@ class DatabaseService {
     if (shouldSync('soData')) {
       const soDataFetch = (async () => {
         try {
-          // If we already have SO_DATA in memory and it was synced within 5 minutes, skip downloading huge CSV
-          const lastSoSync = await cacheManager.getLastSyncTime('soData_lastSync');
-          const isFresh = lastSoSync && (Date.now() - new Date(lastSoSync).getTime() < 5 * 60 * 1000);
-          if (!forceRedownload && this.soList && this.soList.length > 0 && isFresh && !options.forceSoData) {
-            return { key: 'soData', skipped: true };
+          // If we already have cached soData and not forcing full redownload, check if Column A Row 2 timestamp has changed
+          if (!forceRedownload && this.soList && this.soList.length > 0) {
+            const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
+            const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
+            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
+              console.log(`[SO_DATA Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
+              return { key: 'soData', skipped: true };
+            }
+            this._pendingSoDataTimestamp = latestTs;
           }
-
           const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' });
           return { key: 'soData', res: res };
         } catch (err) {
@@ -1087,7 +890,6 @@ class DatabaseService {
         if (item.key === 'soData') {
           this.parseSoData(text);
           cacheManager.setStore('soData', this.soList);
-          cacheManager.setLastSyncTime('soData_lastSync', new Date().toISOString());
         }
         if (item.key === 'requestChecker') this.parseRequestChecker(text);
         if (item.key === 'pickingTask') this.parsePickingTask(text);
@@ -1280,19 +1082,18 @@ class DatabaseService {
    * is fetched ONLY on fresh start / browser refresh / login and excluded from navigation syncs.
    */
   async syncSectionData(tabId, options = {}) {
-    const isBg = !!options.background;
     const tabMap = {
       home:          [],
-      requestPickup: isBg ? ['requestChecker'] : ['requestChecker', 'soData'],
-      pickingTask:   isBg ? ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway'] : ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway', 'soh'],
+      requestPickup: ['requestChecker', 'soData'],
+      pickingTask:   ['pickingTask', 'requestChecker', 'lostAndFound', 'stockMovement', 'putaway', 'soh'],
       lostAndFound:  ['lostAndFound'],
       soh:           ['soh'],
-      stockMovement: isBg ? ['stockMovement', 'stockActivity'] : ['stockMovement', 'stockActivity', 'soh'],
+      stockMovement: ['stockMovement', 'stockActivity', 'soh'],
       admin:         ['userDb'],
-      sohwh:         isBg ? [] : ['sohwh', 'soData'],
-      tsRequest:     isBg ? ['troubleShoot'] : ['troubleShoot', 'soData'],
-      troubleShoot:  isBg ? ['troubleShoot'] : ['troubleShoot', 'soData'],
-      tsTask:        isBg ? ['troubleShoot'] : ['troubleShoot', 'soData']
+      sohwh:         ['sohwh', 'soData'],
+      tsRequest:     ['troubleShoot', 'soData'],
+      troubleShoot:  ['troubleShoot', 'soData'],
+      tsTask:        ['troubleShoot', 'soData']
     };
     const tabsToSync = tabMap[tabId];
     if (!tabsToSync || tabsToSync.length === 0) {
@@ -1688,48 +1489,48 @@ class DatabaseService {
   }
 
   getUniqueSoNumbers() {
-    if (!this._uniqueSoList) {
-      this._recomputeSoIndexes();
-    }
-    return this._uniqueSoList || [];
+    this.checkAndRefreshIfExpired();
+    const map = new Map();
+    this.soList.forEach(item => {
+      const status = (item.status || '').toLowerCase().trim();
+      const isValidStatus = ['picking', 'packing', 'staging'].includes(status);
+      if (isValidStatus && item.soNumber && !map.has(item.soNumber)) {
+        map.set(item.soNumber, {
+          soNumber: item.soNumber,
+          pickerName: item.pickerName || '',
+          status: item.status || '',
+          wave: item.wave || ''
+        });
+      }
+    });
+    return Array.from(map.values());
   }
 
   getProductsForSo(soNumber) {
     if (!soNumber) return [];
-    if (!this._soMap) {
-      this._recomputeSoIndexes();
-    }
-    const cleanSo = String(soNumber).trim().toLowerCase();
-    return this._soMap.get(cleanSo) || [];
+    return this.soList.filter(item => item.soNumber === soNumber);
   }
 
   getSoDetails(soNumber, skuNumber) {
     if (!soNumber || !skuNumber) return null;
-    if (!this._soDetailsMap) {
-      this._recomputeSoIndexes();
-    }
-    const cleanSo = String(soNumber).trim().toLowerCase();
-    const cleanSku = String(skuNumber).trim().toLowerCase();
-    return this._soDetailsMap.get(`${cleanSo}_${cleanSku}`) || null;
+    return this.soList.find(item => 
+      item.soNumber === soNumber && 
+      item.skuNumber === skuNumber
+    ) || null;
   }
 
   searchProducts(query, soNumber = null) {
-    let list = [];
+    let list = this.soList;
     if (soNumber) {
-      const cleanSo = String(soNumber).trim().toLowerCase();
-      if (!this._soMap) this._recomputeSoIndexes();
-      list = this._soMap.get(cleanSo) || [];
-    } else {
-      list = this.soList || [];
+      list = list.filter(item => item.soNumber === soNumber);
     }
+    if (!query) return list.slice(0, 50);
 
-    if (!query) return list.slice(0, 30);
-
-    const q = String(query).trim().toLowerCase();
+    const q = query.toLowerCase();
     return list.filter(item => 
-      String(item.skuNumber || '').toLowerCase().includes(q) || 
-      String(item.productName || '').toLowerCase().includes(q)
-    ).slice(0, 30);
+      item.skuNumber.toLowerCase().includes(q) || 
+      item.productName.toLowerCase().includes(q)
+    ).slice(0, 50);
   }
 
   generate6DigitId() {
@@ -2076,20 +1877,18 @@ class DatabaseService {
 
     const remoteEntries = (result.data || []).map(row => {
       const ticketId = this.findRowValue(row, ['ticket id', 'ticket_id', 'ticketid', 'uniqueid', 'unique id', 'id']);
-      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at']) || new Date().toISOString();
-      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
-      const btiStaff = this.findRowValue(row, ['bti staff', 'bti_staff', 'checker name', 'checker_name', 'picker name', 'picker_name', 'staff name', 'staff_name', 'staff']);
+      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
+      const btiStaff = this.findRowValue(row, ['bti staff', 'bti_staff', 'checker name', 'checker_name', 'picker name', 'picker_name']);
       const skuCode = this.findRowValue(row, ['sku code', 'sku_code', 'sku number', 'sku_number', 'sku']);
       const productName = this.findRowValue(row, ['product name', 'product_name', 'product']);
       const qty = this.findRowValue(row, ['qty', 'quantity']) || '1';
-      const foundAt = this.findRowValue(row, ['found at', 'found_at', 'rack', 'rack name', 'rack_name', 'location']);
+      const foundAt = this.findRowValue(row, ['found at', 'found_at', 'rack', 'rack name', 'rack_name']);
       const status = this.findRowValue(row, ['status']) || 'Pending';
       const reason = this.findRowValue(row, ['reason', 'reasons', 'cause']);
 
       return {
         ticketId: String(ticketId).trim(),
         timestamp: String(timestamp).trim(),
-        updateAt: String(updateAt || '').trim(),
         btiStaff: String(btiStaff).trim(),
         skuCode: String(skuCode).trim(),
         productName: String(productName).trim(),
@@ -2100,9 +1899,8 @@ class DatabaseService {
       };
     }).filter(e => e.ticketId || e.skuCode);
 
-    // Delta sync: update existing if newer updateAt/timestamp, append if new row
-    this.lostAndFound = this.mergeDeltaRecords(this.lostAndFound, remoteEntries, 'ticketId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
-    this.persistLostAndFound();
+    // Delta sync: update existing if newer timestamp, append if new row
+    this.lostAndFound = this.mergeDeltaRecords(this.lostAndFound, remoteEntries, 'ticketId', ['timestamp', 'date']);
     this.persistLostAndFound();
   }
 
@@ -2214,8 +2012,7 @@ class DatabaseService {
       const qtyPut = this.findRowValue(row, ['qty put', 'qty_put', 'quantity put', 'quantity_put', 'qty', 'quantity']);
       const location = this.findRowValue(row, ['location', 'loc', 'storage location']);
       const staffName = this.findRowValue(row, ['staff name', 'staff_name', 'staff', 'operator']);
-      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at']) || new Date().toISOString();
-      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
+      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
 
       return {
         putawayId: String(putawayId).trim(),
@@ -2226,13 +2023,12 @@ class DatabaseService {
         qtyPut: parseInt(String(qtyPut).trim() || '0', 10),
         location: String(location).trim(),
         staffName: String(staffName).trim(),
-        timestamp: String(timestamp).trim(),
-        updateAt: String(updateAt || '').trim()
+        timestamp: String(timestamp).trim()
       };
     }).filter(e => e.putawayId || e.pickingId);
 
     // Delta sync: merge remote putaway records with local pending putaways
-    this.putawayRecords = this.mergeDeltaRecords(this.putawayRecords, remoteEntries, 'putawayId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
+    this.putawayRecords = this.mergeDeltaRecords(this.putawayRecords, remoteEntries, 'putawayId', ['timestamp', 'date']);
     this.persistPutawayRecords();
   }
 
@@ -2525,29 +2321,59 @@ class DatabaseService {
 
   parseWhPlanogram(csvText) {
     if (!csvText) return;
-    const result = Papa.parse(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
-    });
+    const result = Papa.parse(csvText, { skipEmptyLines: true });
+    const rows = result.data || [];
+    if (rows.length === 0) return;
 
     const list = [];
-    if (result.data && result.data.length > 0) {
-      result.data.forEach((row, i) => {
-        const l1Category = this.findRowValue(row, ['l1_category_name', 'l1 category name', 'l1_category', 'l1 category', 'category']);
-        const zone = this.findRowValue(row, ['zone_suggestion', 'zone suggestion', 'zone', 'target zone']);
-        const aisle = this.findRowValue(row, ['aisle_suggestion', 'aisle suggestion', 'aisle', 'target aisle']);
+    let startIndex = 0;
 
-        const l1 = String(l1Category || '').trim();
-        if (l1) {
-          list.push({
-            id: `wp_${i}_${l1}`,
-            l1Category: l1,
-            zoneSuggestion: String(zone || '').trim(),
-            aisleSuggestion: String(aisle || '').trim()
-          });
-        }
+    // Check if row 0 has concatenated categories or is standard header
+    const firstRow = rows[0] || [];
+    const cell0 = String(firstRow[0] || '').trim();
+    const cell1 = String(firstRow[1] || '').trim();
+    const cell2 = String(firstRow[2] || '').trim();
+
+    if (cell0.toLowerCase().includes('l1 category') && cell0.length > 25) {
+      // Concatenated row 0
+      const knownCats = [
+        'Minuman', 'Snack', 'Biskuit', 'Sarapan', 'Tepung & Bahan Kue',
+        'Susu & Olahan Susu', 'Bahan Masak & Bumbu', 'Kebutuhan Pokok',
+        'Kebutuhan Dapur', 'Kebutuhan Cuci Baju', 'Tata Rumah',
+        'Perlengkapan Pakaian', 'Kebutuhan Ibu & Bayi'
+      ];
+      
+      const zones = cell1.replace(/^zone\s*suggestion\s*/i, '').trim().split(/\s+/);
+      const aisleMatches = cell2.replace(/^aisle\s*suggestion\s*/i, '').trim().match(/\d+(?:\s*-\s*\d+)?/g) || [];
+
+      knownCats.forEach((cat, i) => {
+        list.push({
+          id: `wp_hdr_${i}_${cat}`,
+          l1Category: cat,
+          zoneSuggestion: zones[i] || '',
+          aisleSuggestion: aisleMatches[i] || ''
+        });
       });
+      startIndex = 1;
+    } else if (cell0.toLowerCase() === 'l1 category' || cell0.toLowerCase().includes('category')) {
+      startIndex = 1;
+    }
+
+    // Parse all subsequent rows
+    for (let i = startIndex; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r || r.length < 2) continue;
+      const cat = String(r[0] || '').trim();
+      const zone = String(r[1] || '').trim();
+      const aisle = String(r[2] || '').trim();
+      if (cat && !cat.toLowerCase().startsWith('l1 category')) {
+        list.push({
+          id: `wp_${i}_${cat}`,
+          l1Category: cat,
+          zoneSuggestion: zone,
+          aisleSuggestion: aisle
+        });
+      }
     }
 
     this.whPlanograms = list;
@@ -2593,7 +2419,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+      transformHeader: h => h.trim()
     });
 
     if (result.data && result.data.length > 0) {
@@ -2601,7 +2427,7 @@ class DatabaseService {
         const skuCode = this.findRowValue(row, ['sku_number', 'sku number', 'sku code', 'sku_code', 'sku']);
         const rackLocation = this.findRowValue(row, ['rack_location', 'rack location', 'location', 'rack']);
         const qtySoh = this.findRowValue(row, ['qty soh', 'qty_soh', 'quantity SOH', 'quantity_soh', 'qty', 'quantity']);
-        const updatedAt = this.findRowValue(row, ['updated_at', 'updated at', 'update at', 'update_at', 'updateat', 'updatedat', 'timestamp', 'date', 'time']) || new Date().toISOString();
+        const updatedAt = this.findRowValue(row, ['updated_at', 'updated at', 'timestamp', 'date', 'time']) || new Date().toISOString();
 
         const qtyOnSo = this.findRowValue(row, ['qty on so', 'qty_on_so', 'qtyonso', 'qty_so', 'qty on sales order']);
         const countSo = this.findRowValue(row, ['count so', 'count_so', 'countso', 'count_so', 'count sales order']);
@@ -2628,7 +2454,7 @@ class DatabaseService {
       }).filter(s => s.skuCode);
 
       // Delta sync for SOH by unique SKU + Location key
-      this.soh = this.mergeDeltaRecords(this.soh, remoteSoh, 'id', ['updatedAt', 'updateAt', 'timestamp', 'date', 'time']);
+      this.soh = this.mergeDeltaRecords(this.soh, remoteSoh, 'id', ['updatedAt', 'timestamp', 'date']);
       cacheManager.setStore('soh', this.soh);
     }
   }
@@ -2653,7 +2479,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+      transformHeader: h => h.trim()
     });
 
     if (result.data && result.data.length > 0) {
@@ -2711,14 +2537,13 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+      transformHeader: h => h.trim()
     });
 
     if (result.data && result.data.length > 0) {
       const remoteMovements = result.data.map(row => {
-        const movementId = this.findRowValue(row, ['movement id', 'movement_id', 'movementid', 'id', 'ticket id', 'ticket_id']);
-        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at']) || new Date().toISOString();
-        const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'completed at', 'completed_at', 'updateat', 'updatedat']);
+        const movementId = this.findRowValue(row, ['movement id', 'movement_id', 'movementid', 'id']);
+        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
         const assignedBy = this.findRowValue(row, ['assigned by', 'assigned_by', 'assignedby']);
         const staffName = this.findRowValue(row, ['staff name', 'staff_name', 'staffname', 'staff']);
         const skuCode = this.findRowValue(row, ['sku code', 'sku_code', 'skucode', 'sku number', 'sku']);
@@ -2734,7 +2559,6 @@ class DatabaseService {
         return {
           movementId: String(movementId).trim(),
           timestamp: String(timestamp).trim(),
-          updateAt: String(updateAt || '').trim(),
           assignedBy: String(assignedBy).trim(),
           staffName: String(staffName).trim(),
           skuCode: String(skuCode).trim(),
@@ -2750,7 +2574,7 @@ class DatabaseService {
       }).filter(m => m.movementId);
 
       // Delta sync: update existing movement status if newer, append if new movement
-      this.stockMovements = this.mergeDeltaRecords(this.stockMovements, remoteMovements, 'movementId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
+      this.stockMovements = this.mergeDeltaRecords(this.stockMovements, remoteMovements, 'movementId', ['timestamp', 'date']);
       this.persistStockMovements();
     }
   }
@@ -2760,7 +2584,7 @@ class DatabaseService {
     const result = Papa.parse(csvText, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
+      transformHeader: h => h.trim()
     });
 
     if (result.data && result.data.length > 0) {
@@ -2770,11 +2594,10 @@ class DatabaseService {
         const skuCode = this.findRowValue(row, ['sku code', 'sku_code', 'skucode', 'sku']);
         const productName = this.findRowValue(row, ['product name', 'product_name', 'productname', 'product']);
         const qty = this.findRowValue(row, ['qty', 'quantity']);
-        const operator = this.findRowValue(row, ['operator', 'staff', 'staff name', 'staff_name']);
+        const operator = this.findRowValue(row, ['operator']);
         const fromLocation = this.findRowValue(row, ['from location', 'from_location', 'fromlocation']);
         const toLocation = this.findRowValue(row, ['to location', 'to_location', 'tolocation']);
-        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at']) || new Date().toISOString();
-        const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat']);
+        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
 
         return {
           activityId: String(activityId).trim(),
@@ -2785,85 +2608,14 @@ class DatabaseService {
           operator: String(operator).trim(),
           fromLocation: String(fromLocation).trim(),
           toLocation: String(toLocation).trim(),
-          timestamp: String(timestamp).trim(),
-          updateAt: String(updateAt || '').trim()
+          timestamp: String(timestamp).trim()
         };
       }).filter(a => a.activityId);
 
       // Delta sync: append/update stock activity logs
-      this.stockActivities = this.mergeDeltaRecords(this.stockActivities, remoteActs, 'activityId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
+      this.stockActivities = this.mergeDeltaRecords(this.stockActivities, remoteActs, 'activityId', ['timestamp', 'date']);
       this.persistStockActivities();
     }
-  }
-
-  parseTroubleShoot(csvText) {
-    if (!csvText) {
-      this.troubleShootTickets = [];
-      this.persistTroubleShoot();
-      return;
-    }
-
-    const result = Papa.parse(csvText, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
-    });
-
-    const remoteEntries = (result.data || []).map(row => {
-      const id = this.findRowValue(row, ['id', 'ticket id', 'ticket_id', 'ticketid']);
-      const requestTimestamp = this.findRowValue(row, ['request timestamp', 'request_timestamp', 'requesttimestamp', 'timestamp']) || '';
-      const requestedBy = this.findRowValue(row, ['requested by', 'requested_by', 'requestedby']) || '';
-      const staffId = this.findRowValue(row, ['staff id', 'staff_id', 'staffid']) || '';
-      const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline']) || '';
-      const photo = this.findRowValue(row, ['photo', 'image', 'photo_url']) || '';
-      const reason = this.findRowValue(row, ['reason', 'reasons']) || '';
-      const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'pickername']) || '';
-      const soNumber = this.findRowValue(row, ['so number', 'so_number', 'sonumber']) || '';
-      const skuNumber = this.findRowValue(row, ['sku number', 'sku_number', 'skunumber', 'sku code', 'sku_code']) || '';
-      const productName = this.findRowValue(row, ['product name', 'product_name', 'productname']) || '';
-      const originRackName = this.findRowValue(row, ['origin rack name', 'origin_rack_name', 'originrackname']) || '';
-      const requestQuantity = this.findRowValue(row, ['request quantity', 'request_quantity', 'requestquantity', 'qty']) || '1';
-      const assignedBy = this.findRowValue(row, ['assigned by', 'assigned_by', 'assignedby']) || '';
-      const assignedTo = this.findRowValue(row, ['assigned to', 'assigned_to', 'assignedto']) || '';
-      const statusTicket = this.findRowValue(row, ['status ticket', 'status_ticket', 'statusticket', 'status']) || 'Open';
-      const troubleshootEvidence = this.findRowValue(row, ['troubleshoot evidence', 'troubleshoot_evidence', 'troubleshootevidence', 'evidence']) || '';
-      const foundQty = this.findRowValue(row, ['found qty', 'found_qty', 'foundqty']) || '0';
-      const foundAt = this.findRowValue(row, ['found at', 'found_at', 'foundat']) || '';
-      const deliveredAt = this.findRowValue(row, ['delivered at', 'delivered_at', 'deliveredat']) || '';
-      const pickedBy = this.findRowValue(row, ['picked by', 'picked_by', 'pickedby']) || '';
-      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updateat', 'updated at', 'updated_at']) || '';
-      const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name']) || '';
-
-      return {
-        id: String(id).trim(),
-        requestTimestamp: String(requestTimestamp).trim(),
-        requestedBy: String(requestedBy).trim(),
-        staffId: String(staffId).trim(),
-        checkerLine: String(checkerLine).trim(),
-        photo: String(photo).trim(),
-        reason: String(reason).trim(),
-        pickerName: String(pickerName).trim(),
-        soNumber: String(soNumber).trim(),
-        skuNumber: String(skuNumber).trim(),
-        productName: String(productName).trim(),
-        originRackName: String(originRackName).trim(),
-        requestQuantity: parseInt(String(requestQuantity).trim() || '1', 10),
-        assignedBy: String(assignedBy).trim(),
-        assignedTo: String(assignedTo).trim(),
-        statusTicket: String(statusTicket).trim(),
-        troubleshootEvidence: String(troubleshootEvidence).trim(),
-        foundQty: parseInt(String(foundQty).trim() || '0', 10),
-        foundAt: String(foundAt).trim(),
-        deliveredAt: String(deliveredAt).trim(),
-        pickedBy: String(pickedBy).trim(),
-        updateAt: String(updateAt).trim(),
-        wave: String(wave).trim()
-      };
-    }).filter(e => e.id);
-
-    this.troubleShootTickets = this.mergeDeltaRecords(this.troubleShootTickets, remoteEntries, 'id', ['updateAt', 'updatedAt', 'requestTimestamp', 'timestamp', 'date', 'time']);
-    this.troubleShootTickets.sort((a, b) => (this.parseTimestampMs(b.requestTimestamp || b.timestamp) - this.parseTimestampMs(a.requestTimestamp || a.timestamp)));
-    this.persistTroubleShoot();
   }
 
   // ── Stock Movement & Deduction ──────────────────────────────────────────

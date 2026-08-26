@@ -96,12 +96,6 @@ export function renderRequestPickup(container, currentUser) {
         reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
       }
 
-      const statusLower = (req.status || 'Pending').toLowerCase();
-      let statusClass = 'pending';
-      if (statusLower === 'completed' || statusLower === 'done') statusClass = 'completed';
-      else if (statusLower === 'picking' || statusLower === 'in progress') statusClass = 'picking';
-      else if (statusLower === 'cancelled' || statusLower === 'rejected') statusClass = 'cancelled';
-
       return `
         <tr>
           <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
@@ -122,7 +116,7 @@ export function renderRequestPickup(container, currentUser) {
           <td><strong style="font-size: 14px;">${req.qty}</strong></td>
           <td><span class="status-badge" style="font-size: 11px; padding: 2px 8px; background: #e2e8f0; color: #475569; font-weight: 700; text-transform: uppercase;">${soStatus}</span></td>
           <td><strong style="font-size: 14px;">${soOrigQty}</strong></td>
-          <td><span class="status-badge ${statusClass}">${escapeHtml(req.status || 'Pending')}</span></td>
+          <td><span class="status-badge pending">${req.status}</span></td>
         </tr>
       `;
     }).join('');
@@ -142,17 +136,11 @@ export function renderRequestPickup(container, currentUser) {
         reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
       }
 
-      const statusLower = (req.status || 'Pending').toLowerCase();
-      let statusClass = 'pending';
-      if (statusLower === 'completed' || statusLower === 'done') statusClass = 'completed';
-      else if (statusLower === 'picking' || statusLower === 'in progress') statusClass = 'picking';
-      else if (statusLower === 'cancelled' || statusLower === 'rejected') statusClass = 'cancelled';
-
       return `
         <div class="mobile-task-card">
           <div class="card-header-row">
             <span class="picking-id-label">#${req.ticketId || req.uniqueid}</span>
-            <span class="status-badge ${statusClass}">${escapeHtml(req.status || 'Pending')}</span>
+            <span class="status-badge pending">${req.status}</span>
           </div>
           
           <div class="card-body-content">
@@ -576,84 +564,57 @@ export function renderRequestPickup(container, currentUser) {
     }
 
     function renderSoMenu(query) {
-      const allSos = db.getUniqueSoNumbers();
-      const q = String(query || '').trim().toLowerCase();
-      
-      let filtered = [];
-      if (!q) {
-        filtered = allSos.slice(0, 25);
-      } else {
-        for (let i = 0; i < allSos.length; i++) {
-          const item = allSos[i];
-          if (String(item.soNumber).toLowerCase().includes(q)) {
-            filtered.push(item);
-            if (filtered.length >= 25) break; // Early break for instant UI response
-          }
-        }
-      }
+      const filtered = soList.filter(item => 
+        !query || item.soNumber.toLowerCase().includes(query.toLowerCase())
+      );
 
       if (!filtered.length) {
-        soMenu.innerHTML = `<div class="sku-option-item" style="color: var(--text-muted);">No matching SO numbers (${allSos.length} loaded)</div>`;
+        soMenu.innerHTML = `<div class="sku-option-item" style="color: var(--text-muted);">No matching SO numbers</div>`;
         return;
       }
 
       soMenu.innerHTML = filtered.map(item => `
-        <div class="sku-option-item" data-so="${escapeHtml(item.soNumber)}" data-picker="${escapeHtml(item.pickerName || '')}">
-          <span class="sku-code-text">${escapeHtml(item.soNumber)}</span>
-          <span class="sku-name-text">Picker: ${escapeHtml(item.pickerName || 'N/A')}${item.status ? ` • Status: ${escapeHtml(item.status)}` : ''}</span>
+        <div class="sku-option-item" data-so="${item.soNumber}" data-picker="${escapeHtml(item.pickerName || '')}">
+          <span class="sku-code-text">${item.soNumber}</span>
+          <span class="sku-name-text">Picker: ${item.pickerName || 'N/A'}</span>
         </div>
       `).join('');
+
+      soMenu.querySelectorAll('.sku-option-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const so = el.dataset.so;
+          const picker = el.dataset.picker;
+
+          selectedSoNumber = so;
+          soInput.value = so;
+
+          if (picker) {
+            selectedPickerName = picker;
+            pickerNameInput.value = picker;
+          }
+
+          soMenu.classList.remove('open');
+          updateSkuEnablement();
+          renderSkuMenu(skuSearchInput.value);
+        });
+      });
     }
-
-    // Single delegated click listener on soMenu (Zero overhead)
-    soMenu.addEventListener('click', (e) => {
-      const el = e.target.closest('.sku-option-item');
-      if (!el) return;
-      const so = el.dataset.so;
-      const picker = el.dataset.picker;
-      if (!so) return;
-
-      selectedSoNumber = so;
-      soInput.value = so;
-
-      if (picker) {
-        selectedPickerName = picker;
-        pickerNameInput.value = picker;
-      }
-
-      soMenu.classList.remove('open');
-      updateSkuEnablement();
-      renderSkuMenu(skuSearchInput.value);
-    });
 
     soInput.addEventListener('focus', () => {
       renderSoMenu(soInput.value);
       soMenu.classList.add('open');
     });
 
-    soInput.addEventListener('click', () => {
-      renderSoMenu(soInput.value);
-      soMenu.classList.add('open');
-    });
-
-    let soDebounce = null;
     soInput.addEventListener('input', () => {
-      clearTimeout(soDebounce);
-      soDebounce = setTimeout(() => {
-        selectedSoNumber = soInput.value.trim();
-        renderSoMenu(selectedSoNumber);
-        soMenu.classList.add('open');
-        updateSkuEnablement();
+      selectedSoNumber = soInput.value.trim();
+      renderSoMenu(selectedSoNumber);
+      soMenu.classList.add('open');
+      updateSkuEnablement();
 
-        // Instant O(1) picker lookup for typed SO
-        if (selectedSoNumber) {
-          const prods = db.getProductsForSo(selectedSoNumber);
-          if (prods && prods.length > 0 && prods[0].pickerName) {
-            pickerNameInput.value = prods[0].pickerName;
-            selectedPickerName = prods[0].pickerName;
-          }
-        }
-      }, 50);
+      const match = soList.find(item => item.soNumber.toLowerCase() === selectedSoNumber.toLowerCase());
+      if (match && match.pickerName) {
+        pickerNameInput.value = match.pickerName;
+      }
     });
 
     pickerNameInput.addEventListener('input', () => {
@@ -669,47 +630,45 @@ export function renderRequestPickup(container, currentUser) {
         return;
       }
 
-      skuMenu.innerHTML = products.slice(0, 25).map(item => `
-        <div class="sku-option-item" data-sku="${escapeHtml(item.skuNumber)}" data-name="${escapeHtml(item.productName)}">
-          <span class="sku-code-text">SKU: ${escapeHtml(item.skuNumber)}</span>
-          <span class="sku-name-text">${escapeHtml(item.productName)}</span>
+      skuMenu.innerHTML = products.map(item => `
+        <div class="sku-option-item" data-sku="${item.skuNumber}" data-name="${escapeHtml(item.productName)}">
+          <span class="sku-code-text">SKU: ${item.skuNumber}</span>
+          <span class="sku-name-text">${item.productName}</span>
         </div>
       `).join('');
+
+      skuMenu.querySelectorAll('.sku-option-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const skuNumber = el.dataset.sku;
+          const productName = el.dataset.name;
+          selectedSku = { skuNumber, productName };
+
+          skuSearchInput.value = `${skuNumber} - ${productName}`;
+          skuMenu.classList.remove('open');
+
+          const soDetails = db.getSoDetails(selectedSoNumber, skuNumber);
+          const soStatus = soDetails ? soDetails.status : 'N/A';
+          const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
+
+          selectedSkuDisplay.innerHTML = `
+            <div class="autofill-badge success" style="margin-bottom: 8px;">
+              <span class="material-icons-round" style="font-size: 16px;">check_circle</span>
+              <span>Selected: <strong>SKU ${skuNumber}</strong> (${productName})</span>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons-round" style="font-size: 16px;">info</span>
+                <span>SO Status: <strong style="text-transform: uppercase;">${soStatus}</strong></span>
+              </div>
+              <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons-round" style="font-size: 16px;">layers</span>
+                <span>SO SUM(Qty): <strong>${soOrigQty}</strong></span>
+              </div>
+            </div>
+          `;
+        });
+      });
     }
-
-    // Single delegated click listener on skuMenu (Zero overhead)
-    skuMenu.addEventListener('click', (e) => {
-      const el = e.target.closest('.sku-option-item');
-      if (!el) return;
-      const skuNumber = el.dataset.sku;
-      const productName = el.dataset.name;
-      if (!skuNumber) return;
-
-      selectedSku = { skuNumber, productName };
-      skuSearchInput.value = `${skuNumber} - ${productName}`;
-      skuMenu.classList.remove('open');
-
-      const soDetails = db.getSoDetails(selectedSoNumber, skuNumber);
-      const soStatus = soDetails ? soDetails.status : 'N/A';
-      const soOrigQty = soDetails ? soDetails.requestQty : 'N/A';
-
-      selectedSkuDisplay.innerHTML = `
-        <div class="autofill-badge success" style="margin-bottom: 8px;">
-          <span class="material-icons-round" style="font-size: 16px;">check_circle</span>
-          <span>Selected: <strong>SKU ${escapeHtml(skuNumber)}</strong> (${escapeHtml(productName)})</span>
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-            <span class="material-icons-round" style="font-size: 16px;">info</span>
-            <span>SO Status: <strong style="text-transform: uppercase;">${escapeHtml(soStatus)}</strong></span>
-          </div>
-          <div class="autofill-badge info" style="background: var(--primary-50); color: var(--primary-700); border: 1px solid var(--primary-200); padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
-            <span class="material-icons-round" style="font-size: 16px;">layers</span>
-            <span>SO SUM(Qty): <strong>${escapeHtml(String(soOrigQty))}</strong></span>
-          </div>
-        </div>
-      `;
-    });
 
     skuSearchInput.addEventListener('focus', () => {
       if (!skuSearchInput.disabled) {
@@ -718,21 +677,11 @@ export function renderRequestPickup(container, currentUser) {
       }
     });
 
-    skuSearchInput.addEventListener('click', () => {
+    skuSearchInput.addEventListener('input', () => {
       if (!skuSearchInput.disabled) {
         renderSkuMenu(skuSearchInput.value);
         skuMenu.classList.add('open');
       }
-    });
-
-    let skuDebounce = null;
-    skuSearchInput.addEventListener('input', () => {
-      if (skuSearchInput.disabled) return;
-      clearTimeout(skuDebounce);
-      skuDebounce = setTimeout(() => {
-        renderSkuMenu(skuSearchInput.value);
-        skuMenu.classList.add('open');
-      }, 50);
     });
 
     modalOverlay.addEventListener('click', (e) => {
