@@ -147,22 +147,17 @@ class DatabaseService {
 
   /**
    * Real-time delta poller for operational tables (Request_Checker, Trouble_Shoot, Picking_task, Lost_And_Found).
-   * Runs in the background without UI blocking or intrusive full-screen spinners.
-   * Only triggers notifyListeners() when actual row changes or status transitions occur.
+   * Runs directly inside the client's browser without UI blocking or intrusive spinners.
+   * Uses strong anti-caching headers and query parameters to bypass any CDN/proxy caches on production VPS.
    */
   async pollOperationalDeltas() {
-    // 1. Guard against background/inactive tab or offline status
-    if (typeof document !== 'undefined' && document.hidden) return;
     if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-
-    // 2. Guard against in-flight syncs
-    if (this.isSyncing || this.isDeltaPolling) return;
+    if (this.isDeltaPolling) return;
 
     const id = this.spreadsheetId;
     if (!id) return;
 
     this.isDeltaPolling = true;
-    const cacheBuster = `_t=${Date.now()}`;
 
     const requestCheckerTab = GOOGLE_SHEETS_CONFIG.tabs.requestChecker;
     const troubleShootTab = GOOGLE_SHEETS_CONFIG.tabs.troubleShoot || 'Trouble_Shoot';
@@ -171,16 +166,27 @@ class DatabaseService {
 
     try {
       const fetchTab = async (tabName, key) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+
         try {
-          const res = await fetch(
-            `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}&${cacheBuster}`,
-            { cache: 'no-store' }
-          );
+          const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&tq=${encodeURIComponent('select *')}&sheet=${encodeURIComponent(tabName)}&headers=1&_cb=${Date.now()}_${Math.random()}`;
+          const res = await fetch(url, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
           if (!res.ok) return null;
           const text = await res.text();
-          if (text.includes('<!DOCTYPE html>')) return null;
+          if (text.includes('<!DOCTYPE html>') || !text.trim()) return null;
           return { key, text };
         } catch (e) {
+          clearTimeout(timeoutId);
           return null;
         }
       };
@@ -208,6 +214,7 @@ class DatabaseService {
       }
 
       if (anyChanged) {
+        console.log('[IRMS Delta Sync] Client browser detected operational changes, updating UI view.');
         if (typeof window !== 'undefined' && window.requestAnimationFrame) {
           window.requestAnimationFrame(() => this.notifyListeners());
         } else {
