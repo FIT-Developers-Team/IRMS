@@ -45,10 +45,19 @@ class DatabaseService {
       this.checkAndRefreshIfExpired();
     }, 30 * 1000);
 
-    // Fast background interval: Real-time delta sync for operational tables every 10 seconds
+    // Fast background interval: Real-time delta sync for operational tables every 4 seconds
     this.deltaPollingInterval = setInterval(() => {
       this.pollOperationalDeltas();
-    }, 10 * 1000);
+    }, 4 * 1000);
+
+    // Instant delta refresh when user focuses or unlocks phone
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          this.pollOperationalDeltas();
+        }
+      });
+    }
   }
 
   /**
