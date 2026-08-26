@@ -462,6 +462,41 @@ class DatabaseService {
     }).filter(u => u.staffId && u.staffId.length > 0);
   }
 
+  _createHeaderMapper(sampleRow, fieldDefinitions) {
+    if (!sampleRow) return () => '';
+    const keys = Object.keys(sampleRow);
+    const normalizedKeysMap = new Map();
+    keys.forEach(k => {
+      normalizedKeysMap.set(k.toLowerCase().replace(/[^a-z0-9]/g, ''), k);
+    });
+
+    const resolvedKeys = {};
+    for (const [fieldName, possibleKeys] of Object.entries(fieldDefinitions)) {
+      for (let i = 0; i < possibleKeys.length; i++) {
+        const pKey = possibleKeys[i];
+        // 1. Direct match
+        if (sampleRow[pKey] !== undefined) {
+          resolvedKeys[fieldName] = pKey;
+          break;
+        }
+        // 2. Normalized alphanumeric match
+        const clean = pKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normalizedKeysMap.has(clean)) {
+          resolvedKeys[fieldName] = normalizedKeysMap.get(clean);
+          break;
+        }
+      }
+    }
+
+    return (row, fieldName) => {
+      const actualKey = resolvedKeys[fieldName];
+      if (actualKey && row[actualKey] !== undefined && row[actualKey] !== null) {
+        return String(row[actualKey]).trim();
+      }
+      return '';
+    };
+  }
+
   parseSoData(csvText) {
     if (!csvText) return;
     const result = Papa.parse(csvText, {
@@ -470,45 +505,62 @@ class DatabaseService {
       transformHeader: (h, idx) => (h || '').trim() || `_col_${idx}`
     });
 
-    if (result.data && result.data.length > 0) {
-      this.soList = result.data.map(row => {
-        const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at', 'order date', 'order_date', 'tanggal']) || new Date().toISOString();
-        const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
-        const pickerName = this.findRowValue(row, ['picker_name', 'picker name', 'picker', 'picked by', 'picked_by']) || 'N/A';
-        const soNumber = this.findRowValue(row, ['so_number', 'so number', 'so', 'sonumber', 'order number', 'order_number', 'sales order', 'sales_order']);
-        const skuNumber = this.findRowValue(row, ['sku_number', 'sku code', 'sku number', 'sku_code', 'sku', 'product_sku', 'product sku']);
-        const productName = this.findRowValue(row, ['product_name', 'product name', 'product', 'productname', 'name']);
-        const status = this.findRowValue(row, ['status', 'so status', 'so_status', 'order status', 'order_status']) || '';
-        const qty = this.findRowValue(row, ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'request quantity', 'qty', 'quantity', 'sum(qty)', 'sum_qty', 'stock_quantity']) || '1';
-        const originRackName = this.findRowValue(row, ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack', 'rack_name', 'rack name', 'rack', 'location']) || '';
-        const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name', 'wave_no', 'waveno']) || '';
+    const rows = result.data || [];
+    if (rows.length === 0) return;
 
-        const sNum = String(soNumber || '').trim();
-        const sku = String(skuNumber || '').trim();
-        const tStamp = String(timestamp || '').trim();
+    const getValue = this._createHeaderMapper(rows[0], {
+      timestamp: ['timestamp', 'date', 'time', 'created at', 'created_at', 'order date', 'order_date', 'tanggal'],
+      updateAt: ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified'],
+      pickerName: ['picker_name', 'picker name', 'picker', 'picked by', 'picked_by'],
+      soNumber: ['so_number', 'so number', 'so', 'sonumber', 'order number', 'order_number', 'sales order', 'sales_order'],
+      skuNumber: ['sku_number', 'sku code', 'sku number', 'sku_code', 'sku', 'product_sku', 'product sku'],
+      productName: ['product_name', 'product name', 'product', 'productname', 'name'],
+      status: ['status', 'so status', 'so_status', 'order status', 'order_status'],
+      qty: ['sum(request_quantity)', 'sum_request_quantity', 'request_quantity', 'request quantity', 'qty', 'quantity', 'sum(qty)', 'sum_qty', 'stock_quantity'],
+      originRackName: ['origin_rack_name', 'origin rack name', 'origin_rack', 'origin rack', 'rack_name', 'rack name', 'rack', 'location'],
+      wave: ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name', 'wave_no', 'waveno']
+    });
 
-        return {
-          id: `${sNum}_${sku}_${tStamp}`,
-          timestamp: tStamp,
-          updateAt: String(updateAt || '').trim(),
-          pickerName: String(pickerName).trim(),
-          soNumber: sNum,
-          skuNumber: sku,
-          productName: String(productName).trim(),
-          status: String(status).trim(),
-          requestQty: parseInt(String(qty).trim() || '1', 10),
-          originRackName: String(originRackName).trim(),
-          wave: String(wave).trim()
-        };
-      }).filter(item => item.soNumber);
+    const parsedList = [];
+    const defaultNow = new Date().toISOString();
 
-      if (this.soList.length > 0) {
-        this._recomputeSoIndexes();
-        cacheManager.setStore('soData', this.soList);
-        const topTs = this._pendingSoDataTimestamp || this.soList[0].updateAt || this.soList[0].timestamp;
-        if (topTs) {
-          cacheManager.setLastSyncTime('soData_timestamp', topTs);
-        }
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const sNum = getValue(row, 'soNumber');
+      if (!sNum) continue;
+
+      const timestamp = getValue(row, 'timestamp') || defaultNow;
+      const updateAt = getValue(row, 'updateAt');
+      const pickerName = getValue(row, 'pickerName') || 'N/A';
+      const sku = getValue(row, 'skuNumber');
+      const productName = getValue(row, 'productName');
+      const status = getValue(row, 'status');
+      const qtyStr = getValue(row, 'qty');
+      const originRackName = getValue(row, 'originRackName');
+      const wave = getValue(row, 'wave');
+
+      parsedList.push({
+        id: `${sNum}_${sku}_${timestamp}`,
+        timestamp,
+        updateAt,
+        pickerName,
+        soNumber: sNum,
+        skuNumber: sku,
+        productName,
+        status,
+        requestQty: parseInt(qtyStr || '1', 10) || 1,
+        originRackName,
+        wave
+      });
+    }
+
+    if (parsedList.length > 0) {
+      this.soList = parsedList;
+      this._recomputeSoIndexes();
+      cacheManager.setStore('soData', this.soList);
+      const topTs = this._pendingSoDataTimestamp || this.soList[0].updateAt || this.soList[0].timestamp;
+      if (topTs) {
+        cacheManager.setLastSyncTime('soData_timestamp', topTs);
       }
     }
   }
@@ -644,13 +696,27 @@ class DatabaseService {
 
   findRowValue(row, possibleKeys) {
     if (!row) return '';
-    const keys = Object.keys(row);
-    for (const key of possibleKeys) {
-      const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const matchedKey = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanKey);
-      if (matchedKey && row[matchedKey] !== undefined && row[matchedKey] !== null) {
-        const val = String(row[matchedKey]).trim();
+    // 1. Fast direct property check (O(1))
+    for (let i = 0; i < possibleKeys.length; i++) {
+      const k = possibleKeys[i];
+      if (row[k] !== undefined && row[k] !== null) {
+        const val = String(row[k]).trim();
         if (val) return val;
+      }
+    }
+
+    // 2. Fast normalized check without per-iteration regex allocations
+    const keys = Object.keys(row);
+    for (let i = 0; i < possibleKeys.length; i++) {
+      const cleanKey = possibleKeys[i].toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (let j = 0; j < keys.length; j++) {
+        const actualKey = keys[j];
+        if (actualKey.toLowerCase().replace(/[^a-z0-9]/g, '') === cleanKey) {
+          if (row[actualKey] !== undefined && row[actualKey] !== null) {
+            const val = String(row[actualKey]).trim();
+            if (val) return val;
+          }
+        }
       }
     }
     return '';

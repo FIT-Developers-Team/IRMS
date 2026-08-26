@@ -578,16 +578,26 @@ export function renderRequestPickup(container, currentUser) {
     function renderSoMenu(query) {
       const allSos = db.getUniqueSoNumbers();
       const q = String(query || '').trim().toLowerCase();
-      const filtered = q 
-        ? allSos.filter(item => String(item.soNumber).toLowerCase().includes(q))
-        : allSos;
+      
+      let filtered = [];
+      if (!q) {
+        filtered = allSos.slice(0, 25);
+      } else {
+        for (let i = 0; i < allSos.length; i++) {
+          const item = allSos[i];
+          if (String(item.soNumber).toLowerCase().includes(q)) {
+            filtered.push(item);
+            if (filtered.length >= 25) break; // Early break for instant UI response
+          }
+        }
+      }
 
       if (!filtered.length) {
         soMenu.innerHTML = `<div class="sku-option-item" style="color: var(--text-muted);">No matching SO numbers (${allSos.length} loaded)</div>`;
         return;
       }
 
-      soMenu.innerHTML = filtered.slice(0, 25).map(item => `
+      soMenu.innerHTML = filtered.map(item => `
         <div class="sku-option-item" data-so="${escapeHtml(item.soNumber)}" data-picker="${escapeHtml(item.pickerName || '')}">
           <span class="sku-code-text">${escapeHtml(item.soNumber)}</span>
           <span class="sku-name-text">Picker: ${escapeHtml(item.pickerName || 'N/A')}${item.status ? ` • Status: ${escapeHtml(item.status)}` : ''}</span>
@@ -635,11 +645,13 @@ export function renderRequestPickup(container, currentUser) {
         soMenu.classList.add('open');
         updateSkuEnablement();
 
-        const allSos = db.getUniqueSoNumbers();
-        const match = allSos.find(item => String(item.soNumber).toLowerCase() === selectedSoNumber.toLowerCase());
-        if (match && match.pickerName) {
-          pickerNameInput.value = match.pickerName;
-          selectedPickerName = match.pickerName;
+        // Instant O(1) picker lookup for typed SO
+        if (selectedSoNumber) {
+          const prods = db.getProductsForSo(selectedSoNumber);
+          if (prods && prods.length > 0 && prods[0].pickerName) {
+            pickerNameInput.value = prods[0].pickerName;
+            selectedPickerName = prods[0].pickerName;
+          }
         }
       }, 50);
     });
