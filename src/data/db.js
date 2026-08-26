@@ -57,7 +57,7 @@ class DatabaseService {
   setupRealtimeEngine() {
     const REALTIME_SECTIONS = ['tsRequest', 'tsTask', 'troubleShoot', 'pickingTask', 'requestPickup', 'lostAndFound', 'stockMovement'];
 
-    // 1. Dynamic Polling Timer (4s for active operational queues, 30s for standard views)
+    // 1. Dynamic Polling Timer (15s for active operational queues, TTL-based for standard views)
     this.cacheCheckInterval = setInterval(async () => {
       // Don't poll if document is hidden in background or if already running a blocking sync
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
@@ -67,7 +67,7 @@ class DatabaseService {
       const isOperational = REALTIME_SECTIONS.includes(activeTab);
 
       if (isOperational) {
-        // Fast background delta polling for operational views (4s)
+        // Background delta polling for operational views (15s)
         await this.syncSectionData(activeTab, { background: true });
       } else {
         // Normal TTL check for static / reference views
@@ -76,7 +76,7 @@ class DatabaseService {
           await this.syncSectionData(activeTab, { background: true });
         }
       }
-    }, 4000);
+    }, 15000);
 
     // 2. Mobile Screen Wakeup & Tab Return Trigger
     if (typeof document !== 'undefined') {
@@ -402,6 +402,22 @@ class DatabaseService {
   }
 
   notifyListeners() {
+    // Throttle: max 1 re-render per second to prevent DOM thrash during rapid sync cycles
+    const now = Date.now();
+    if (this._lastNotify && (now - this._lastNotify) < 1000) {
+      // Coalesce: schedule one final update after the throttle window
+      if (!this._pendingNotify) {
+        this._pendingNotify = setTimeout(() => {
+          this._pendingNotify = null;
+          this._lastNotify = Date.now();
+          this.listeners.forEach(fn => {
+            try { fn(); } catch (e) { console.error('Listener error:', e); }
+          });
+        }, 1000 - (now - this._lastNotify));
+      }
+      return;
+    }
+    this._lastNotify = now;
     this.listeners.forEach(fn => {
       try { fn(); } catch (e) { console.error('Listener error:', e); }
     });
