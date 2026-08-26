@@ -96,11 +96,17 @@ export function renderRequestPickup(container, currentUser) {
         reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
       }
 
+      let statusClass = 'pending';
+      const st = (req.status || '').toLowerCase();
+      if (st === 'picked' || st === 'completed') statusClass = 'completed';
+      else if (st === 'picking' || st === 'in progress') statusClass = 'in-progress';
+      else if (st === 'cancelled') statusClass = 'cancelled';
+
       return `
         <tr>
           <td><strong style="color: var(--primary-700); font-family: monospace;">#${req.ticketId || req.uniqueid}</strong></td>
           <td><span style="font-weight: 600; color: var(--primary-800);">${escapeHtml(req.checkerLine || '-')}</span></td>
-          <td style="font-size: 12px; color: var(--text-secondary);">${new Date(req.timestamp).toLocaleString()}</td>
+          <td style="font-size: 12px; color: var(--text-secondary);">${formatDisplayDate(req.timestamp)}</td>
           <td>
             <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; ${reasonBadgeStyle}">
               ${escapeHtml(req.reason || '-')}
@@ -116,7 +122,7 @@ export function renderRequestPickup(container, currentUser) {
           <td><strong style="font-size: 14px;">${req.qty}</strong></td>
           <td><span class="status-badge" style="font-size: 11px; padding: 2px 8px; background: #e2e8f0; color: #475569; font-weight: 700; text-transform: uppercase;">${soStatus}</span></td>
           <td><strong style="font-size: 14px;">${soOrigQty}</strong></td>
-          <td><span class="status-badge pending">${req.status}</span></td>
+          <td><span class="status-badge ${statusClass}">${req.status}</span></td>
         </tr>
       `;
     }).join('');
@@ -136,11 +142,17 @@ export function renderRequestPickup(container, currentUser) {
         reasonBadgeStyle = 'background: #ede9fe; color: #6d28d9; border: 1px solid #ddd6fe;';
       }
 
+      let statusClass = 'pending';
+      const st = (req.status || '').toLowerCase();
+      if (st === 'picked' || st === 'completed') statusClass = 'completed';
+      else if (st === 'picking' || st === 'in progress') statusClass = 'in-progress';
+      else if (st === 'cancelled') statusClass = 'cancelled';
+
       return `
         <div class="mobile-task-card">
           <div class="card-header-row">
             <span class="picking-id-label">#${req.ticketId || req.uniqueid}</span>
-            <span class="status-badge pending">${req.status}</span>
+            <span class="status-badge ${statusClass}">${req.status}</span>
           </div>
           
           <div class="card-body-content">
@@ -161,7 +173,7 @@ export function renderRequestPickup(container, currentUser) {
               <div>Line: <strong>${escapeHtml(req.checkerLine || '-')}</strong> • SO: <strong>${escapeHtml(req.soNumber)}</strong></div>
               <div style="margin-top: 2px;">SO Status: <span class="status-badge" style="font-size: 10px; padding: 1px 6px; background: #e2e8f0; color: #475569; font-weight: 700;">${soStatus}</span> • SUM(Qty): <strong>${soOrigQty}</strong></div>
               <div style="margin-top: 2px;">Picker: ${escapeHtml(req.pickerName || 'N/A')} • Checker: <strong>${escapeHtml(req.checkerName)}</strong></div>
-              <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${new Date(req.timestamp).toLocaleString()}</div>
+              <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">${formatDisplayDate(req.timestamp)}</div>
             </div>
             <div class="qty-badge">Qty: <strong>${req.qty}</strong></div>
           </div>
@@ -767,6 +779,24 @@ export function renderRequestPickup(container, currentUser) {
 
 function escapeHtml(str) {
   return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatDisplayDate(val) {
+  if (!val) return '-';
+  const str = String(val).trim();
+  const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+  if (ddmmyyyy) {
+    const day = parseInt(ddmmyyyy[1], 10);
+    const month = parseInt(ddmmyyyy[2], 10) - 1;
+    const year = parseInt(ddmmyyyy[3], 10);
+    const hour = parseInt(ddmmyyyy[4] || '0', 10);
+    const min = parseInt(ddmmyyyy[5] || '0', 10);
+    const sec = parseInt(ddmmyyyy[6] || '0', 10);
+    const dt = new Date(year, month, day, hour, min, sec);
+    if (!isNaN(dt.getTime())) return dt.toLocaleString();
+  }
+  const dt = new Date(val);
+  return !isNaN(dt.getTime()) ? dt.toLocaleString() : str;
 }
 
 

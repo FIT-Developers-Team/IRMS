@@ -177,10 +177,78 @@ class DatabaseService {
     }
   }
 
+  subscribe(fn) {
+    if (typeof fn === 'function') {
+      this.listeners.push(fn);
+      return () => {
+        this.listeners = this.listeners.filter(l => l !== fn);
+      };
+    }
+    return () => {};
+  }
+
+  notifyListeners() {
+    this.listeners.forEach(fn => {
+      try {
+        fn();
+      } catch (e) {
+        console.error('Error in db listener:', e);
+      }
+    });
+  }
+
+  /**
+   * Robust Date/Time Parser supporting ISO, GViz Date(...), DD/MM/YYYY, MM/DD/YYYY, and Epoch ms.
+   */
+  parseTimestampMs(val) {
+    if (!val) return 0;
+    if (typeof val === 'number') return isNaN(val) ? 0 : val;
+    const str = String(val).trim();
+    if (!str) return 0;
+
+    // 1. Numeric epoch (seconds or milliseconds)
+    if (/^\d{10,13}$/.test(str)) {
+      const num = parseInt(str, 10);
+      return num < 1e11 ? num * 1000 : num;
+    }
+
+    // 2. GViz Date(yyyy,m,d,h,m,s)
+    const gvizMatch = str.match(/^Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+),(\d+))?\)$/i);
+    if (gvizMatch) {
+      const y = parseInt(gvizMatch[1], 10);
+      const m = parseInt(gvizMatch[2], 10); // 0-indexed
+      const d = parseInt(gvizMatch[3], 10);
+      const h = parseInt(gvizMatch[4] || '0', 10);
+      const min = parseInt(gvizMatch[5] || '0', 10);
+      const s = parseInt(gvizMatch[6] || '0', 10);
+      const dt = new Date(y, m, d, h, min, s);
+      return isNaN(dt.getTime()) ? 0 : dt.getTime();
+    }
+
+    // 3. DD/MM/YYYY or DD-MM-YYYY (Indonesian / British standard in Google Sheets)
+    const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (ddmmyyyy) {
+      const day = parseInt(ddmmyyyy[1], 10);
+      const month = parseInt(ddmmyyyy[2], 10) - 1;
+      const year = parseInt(ddmmyyyy[3], 10);
+      const hour = parseInt(ddmmyyyy[4] || '0', 10);
+      const min = parseInt(ddmmyyyy[5] || '0', 10);
+      const sec = parseInt(ddmmyyyy[6] || '0', 10);
+      const dt = new Date(year, month, day, hour, min, sec);
+      if (!isNaN(dt.getTime()) && dt.getTime() > 0) return dt.getTime();
+    }
+
+    // 4. Direct ISO or YYYY-MM-DD or MM/DD/YYYY
+    const direct = new Date(str).getTime();
+    if (!isNaN(direct) && direct > 0) return direct;
+
+    return 0;
+  }
+
   /**
    * Universal Delta Sync & Upsert Helper
    * - Appends new records if ID not present in local cache.
-   * - Updates existing record if remote timestamp >= local timestamp.
+   * - Updates existing record if remote timestamp >= local timestamp (or if equal from sheet).
    * - Preserves optimistic local pending changes.
    * - Sorts resulting dataset descending by primary timestamp.
    */
@@ -190,10 +258,18 @@ class DatabaseService {
 
     const getTimestampMs = (item) => {
       if (!item) return 0;
+      // 1. Prioritize updateAt / updatedAt if present
+      for (const p of ['updateAt', 'updatedAt', 'update_at', 'updated_at', 'modifiedAt', 'lastModified']) {
+        if (item[p]) {
+          const ms = this.parseTimestampMs(item[p]);
+          if (ms > 0) return ms;
+        }
+      }
+      // 2. Fallback to primary creation timestamp, date, time, etc.
       for (const p of tProps) {
         if (item[p]) {
-          const ms = new Date(item[p]).getTime();
-          if (!isNaN(ms)) return ms;
+          const ms = this.parseTimestampMs(item[p]);
+          if (ms > 0) return ms;
         }
       }
       return 0;
@@ -228,7 +304,8 @@ class DatabaseService {
             continue;
           }
 
-          if (remoteTime >= localTime || localTime === 0) {
+          // If remote is newer OR has same timestamp (remote from Google Sheets updates local), merge
+          if (remoteTime >= localTime || localTime === 0 || remoteTime === 0) {
             map.set(pk, { ...existing, ...remote });
           }
         }
@@ -452,7 +529,8 @@ class DatabaseService {
     const remoteReqs = (result.data || []).map(row => {
       const ticketId = this.findRowValue(row, ['ticket id', 'ticket_id', 'ticketid', 'uniqueid', 'unique id', 'id']);
       const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline', 'line']);
-      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time']) || new Date().toISOString();
+      const timestamp = this.findRowValue(row, ['timestamp', 'date', 'time', 'created at', 'created_at', 'request timestamp']) || new Date().toISOString();
+      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updated at', 'updated_at', 'updateat', 'updatedat', 'modified at', 'last modified']);
       const pickerName = this.findRowValue(row, ['picker name', 'picker_name', 'picker']) || 'N/A';
       const checkerName = this.findRowValue(row, ['checker name', 'checker_name', 'checker']);
       const soNumber = this.findRowValue(row, ['so number', 'so_number', 'so']);
@@ -462,25 +540,26 @@ class DatabaseService {
       const status = this.findRowValue(row, ['status']) || 'Pending';
       const reason = this.findRowValue(row, ['reason', 'request reason', 'alasan']) || '';
 
-      const tid = String(ticketId).trim();
+      const tid = String(ticketId || '').trim();
       return {
         ticketId: tid,
         uniqueid: tid,
-        checkerLine: String(checkerLine).trim(),
-        timestamp: String(timestamp).trim(),
-        pickerName: String(pickerName).trim(),
-        checkerName: String(checkerName).trim(),
-        soNumber: String(soNumber).trim(),
-        skuNumber: String(skuNumber).trim(),
-        productName: String(productName).trim(),
+        checkerLine: String(checkerLine || '').trim(),
+        timestamp: String(timestamp || '').trim(),
+        updateAt: String(updateAt || '').trim(),
+        pickerName: String(pickerName || '').trim(),
+        checkerName: String(checkerName || '').trim(),
+        soNumber: String(soNumber || '').trim(),
+        skuNumber: String(skuNumber || '').trim(),
+        productName: String(productName || '').trim(),
         qty: parseInt(String(qty).trim() || '1', 10),
-        status: String(status).trim(),
-        reason: String(reason).trim()
+        status: String(status || '').trim(),
+        reason: String(reason || '').trim()
       };
     }).filter(req => req.ticketId || req.soNumber);
 
-    // Delta sync: update existing if newer timestamp, append if new row
-    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['timestamp', 'date']);
+    // Delta sync: update existing if newer updateAt/timestamp, append if new row
+    this.requests = this.mergeDeltaRecords(this.requests, remoteReqs, 'ticketId', ['updateAt', 'updatedAt', 'timestamp', 'date', 'time']);
     this.persistRequests();
   }
 
