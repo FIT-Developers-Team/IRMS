@@ -1460,17 +1460,111 @@ class DatabaseService {
   }
 
   searchProducts(query, soNumber = null) {
-    let list = this.soList;
-    if (soNumber) {
-      list = list.filter(item => item.soNumber === soNumber);
-    }
-    if (!query) return list.slice(0, 50);
+    const q = (query || '').toLowerCase().trim();
+    const results = [];
+    const seenSkus = new Set();
 
-    const q = query.toLowerCase();
-    return list.filter(item => 
-      item.skuNumber.toLowerCase().includes(q) || 
-      item.productName.toLowerCase().includes(q)
-    ).slice(0, 50);
+    // 1. Prioritize items matching the specified SO Number (if provided)
+    if (soNumber) {
+      const cleanSo = String(soNumber).trim().toLowerCase();
+      const soItems = (this.soList || []).filter(item => 
+        String(item.soNumber || '').trim().toLowerCase() === cleanSo
+      );
+      for (const item of soItems) {
+        const sku = String(item.skuNumber || item.skuCode || '').trim();
+        const name = String(item.productName || '').trim();
+        if (!sku) continue;
+        if (!q || sku.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
+          if (!seenSkus.has(sku.toLowerCase())) {
+            seenSkus.add(sku.toLowerCase());
+            results.push({
+              skuNumber: sku,
+              skuCode: sku,
+              productName: name,
+              inSo: true,
+              soNumber: item.soNumber,
+              status: item.status || 'N/A',
+              requestQty: item.requestQty !== undefined ? item.requestQty : 'N/A',
+              expiredDate: item.expiredDate || ''
+            });
+          }
+        }
+      }
+    }
+
+    // 2. Search Master Catalog (SKUs_DB)
+    if (this.skus && this.skus.length > 0) {
+      for (const item of this.skus) {
+        const sku = String(item.skuCode || item.skuNumber || '').trim();
+        const name = String(item.productName || '').trim();
+        if (!sku) continue;
+        if (seenSkus.has(sku.toLowerCase())) continue;
+        if (!q || sku.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
+          seenSkus.add(sku.toLowerCase());
+          results.push({
+            skuNumber: sku,
+            skuCode: sku,
+            productName: name,
+            inSo: false,
+            soNumber: null,
+            status: 'N/A',
+            requestQty: 'N/A',
+            expiredDate: ''
+          });
+          if (results.length >= 60) break;
+        }
+      }
+    }
+
+    // 3. Search SOH (Stock on Hand) items if not already included
+    if (this.soh && this.soh.length > 0 && results.length < 60) {
+      for (const item of this.soh) {
+        const sku = String(item.skuCode || item.skuNumber || '').trim();
+        const name = String(item.productName || '').trim();
+        if (!sku) continue;
+        if (seenSkus.has(sku.toLowerCase())) continue;
+        if (!q || sku.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
+          seenSkus.add(sku.toLowerCase());
+          results.push({
+            skuNumber: sku,
+            skuCode: sku,
+            productName: name,
+            inSo: false,
+            soNumber: null,
+            status: 'N/A',
+            requestQty: 'N/A',
+            expiredDate: item.expiredDate || ''
+          });
+          if (results.length >= 60) break;
+        }
+      }
+    }
+
+    // 4. Fallback: Search other SO_DATA items if not already included
+    if (this.soList && this.soList.length > 0 && results.length < 60) {
+      for (const item of this.soList) {
+        const sku = String(item.skuNumber || item.skuCode || '').trim();
+        const name = String(item.productName || '').trim();
+        if (!sku) continue;
+        if (seenSkus.has(sku.toLowerCase())) continue;
+        if (!q || sku.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
+          seenSkus.add(sku.toLowerCase());
+          results.push({
+            skuNumber: sku,
+            skuCode: sku,
+            productName: name,
+            inSo: false,
+            soNumber: null,
+            status: 'N/A',
+            requestQty: 'N/A',
+            expiredDate: item.expiredDate || ''
+          });
+          if (results.length >= 60) break;
+        }
+      }
+    }
+
+    return results.slice(0, 60);
   }
 
   generate6DigitId() {
