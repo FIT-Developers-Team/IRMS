@@ -375,12 +375,27 @@ export function renderTsRequest(container, currentUser) {
                 <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">Auto-populated from SO_DATA</div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; color: var(--text-secondary);">
                   <div><strong>SKU:</strong> <span id="tsAutoSku">-</span></div>
-                  <div><strong>Qty:</strong> <span id="tsAutoQty">-</span></div>
+                  <div><strong>SO Qty:</strong> <span id="tsAutoQty">-</span></div>
                   <div><strong>Wave:</strong> <span id="tsAutoWave">-</span></div>
                   <div><strong>Rack:</strong> <span id="tsAutoRack">-</span></div>
                   <div style="grid-column: 1 / -1;"><strong>Product:</strong> <span id="tsAutoProduct">-</span></div>
                   <div><strong>Picker:</strong> <span id="tsAutoPicker">-</span></div>
                 </div>
+              </div>
+
+              <!-- Request Quantity Input (User Defined) -->
+              <div class="form-field-wrapper">
+                <label class="form-label">Request Quantity *</label>
+                <input 
+                  type="number" 
+                  id="tsCreateRequestQuantity" 
+                  class="text-control" 
+                  min="1" 
+                  value="1" 
+                  placeholder="Enter qty..." 
+                  required 
+                  style="font-weight: 700; width: 100%;"
+                />
               </div>
 
               <!-- Checker Line (hidden for picker) -->
@@ -971,10 +986,16 @@ export function renderTsRequest(container, currentUser) {
     overlay.querySelector('#tsCreateSubmitBtn').addEventListener('click', async () => {
       const soNumber = soInput.value.trim();
       const reason = reasonInput.value;
+      const reqQtyInput = overlay.querySelector('#tsCreateRequestQuantity');
+      const reqQtyVal = reqQtyInput ? reqQtyInput.value.trim() : '';
+      const requestQuantity = parseInt(reqQtyVal, 10);
 
       // Validation
       if (!soNumber) return alert('SO Number is required');
       if (!soData) return alert('Please select a product from the SO Number.');
+      if (!reqQtyVal || isNaN(requestQuantity) || requestQuantity < 1) {
+        return alert('Please enter a valid Request Quantity (at least 1)');
+      }
       if (!reason) return alert('Reason is required');
       if (isPicker && !photoBase64) return alert('Photo is required for Picker role');
 
@@ -990,7 +1011,7 @@ export function renderTsRequest(container, currentUser) {
           skuNumber: soData.skuNumber,
           productName: soData.productName,
           originRackName: soData.originRackName,
-          requestQuantity: soData.requestQty,
+          requestQuantity: requestQuantity,
           pickerName: soData.pickerName,
           wave: soData.wave || '',
           reason,
