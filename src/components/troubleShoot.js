@@ -482,39 +482,52 @@ export function renderTroubleShoot(container, currentUser) {
     overlay.style.cssText = 'display:flex; align-items:center; justify-content:center; z-index:9999;';
 
     overlay.innerHTML = `
-      <div class="modal-card" style="width: 90%; max-width: 420px; padding: 20px; border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,0.15);">
-        <h3 style="margin: 0 0 16px 0; font-size: 15px; display: flex; align-items: center; gap: 8px; color: var(--text-primary);">
-          <span class="material-icons-round" style="color: #7c3aed; font-size: 22px;">person_add</span>
-          Assign Ticket: <span style="color: var(--primary-600);">${escapeHtml(ticketId)}</span>
-        </h3>
+      <div class="modal-card" style="width: 90%; max-width: 440px; padding: 22px; border-radius: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.2); overflow: visible !important;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; color: var(--text-primary);">
+            <span class="material-icons-round" style="color: #7c3aed; font-size: 24px;">person_add</span>
+            Assign Ticket: <span style="color: var(--primary-600);">${escapeHtml(ticketId)}</span>
+          </h3>
+          <button type="button" id="tsAssignCloseIconBtn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center;" title="Close">
+            <span class="material-icons-round" style="font-size: 20px;">close</span>
+          </button>
+        </div>
         
-        <div style="margin-bottom: 20px;">
-          <label style="font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; display: block;">Select Troubleshooter</label>
+        <div style="margin-bottom: 22px;">
+          <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: block;">Select Troubleshooter</label>
           <input type="hidden" id="tsAssignSelect" value="">
-          <div class="custom-dropdown-container" id="dropdown-assign-troubleshooter" style="width: 100%;">
-            <button type="button" class="custom-dropdown-trigger text-control" style="height: 42px; border-radius: 10px; padding: 0 14px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; background: #ffffff; border: 1.5px solid var(--border-light); width: 100%; box-sizing: border-box;">
-              <span class="trigger-label" style="color: var(--text-muted);">Choose a troubleshooter...</span>
-              <span class="material-icons-round trigger-icon" style="font-size: 18px; color: var(--text-muted); transition: transform 0.2s;">expand_more</span>
-            </button>
-            <div class="custom-dropdown-menu" style="z-index: 3000; max-height: 220px; overflow-y: auto;">
-              ${assignableUsers.length > 0 ? assignableUsers.map(u => `
-                <div class="custom-dropdown-option" data-value="${escapeHtml(u.name)}" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px;">
-                  <span style="font-weight: 600; color: var(--text-primary);">${escapeHtml(u.name)}</span>
-                  <span style="font-size: 11px; color: var(--text-muted);">${escapeHtml(u.staffId || '')}</span>
-                </div>
-              `).join('') : `
-                <div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 12px;">
-                  No staff with Troubleshooter role found.<br><span style="font-size: 11px; color: var(--primary-600);">Please set Troubleshooter role in Admin panel.</span>
-                </div>
-              `}
+          
+          <div class="custom-dropdown-container" id="dropdown-assign-troubleshooter" style="position: relative; width: 100%;">
+            <div style="position: relative; width: 100%; display: flex; align-items: center;">
+              <span class="material-icons-round" style="position: absolute; left: 12px; font-size: 18px; color: var(--text-muted); pointer-events: none; z-index: 5;">search</span>
+              <input 
+                type="text" 
+                id="tsAssignSearchInput" 
+                class="text-control" 
+                placeholder="Search or select troubleshooter..." 
+                autocomplete="off"
+                style="height: 42px; border-radius: 12px; padding: 0 40px 0 38px; font-size: 13px; font-weight: 600; background: #ffffff; border: 1.5px solid var(--border-light); width: 100%; box-sizing: border-box; outline: none;"
+              />
+              <button 
+                type="button" 
+                id="tsAssignDropdownToggleBtn" 
+                tabindex="-1"
+                style="position: absolute; right: 8px; background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; padding: 0;"
+                title="Toggle List"
+              >
+                <span class="material-icons-round trigger-icon" style="font-size: 20px; transition: transform 0.2s;">expand_more</span>
+              </button>
+            </div>
+
+            <div class="custom-dropdown-menu" id="tsAssignDropdownMenu" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 9999; max-height: 220px; overflow-y: auto !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 6px; border-radius: 12px; border: 1.5px solid var(--border-light); background: #ffffff; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);">
             </div>
           </div>
         </div>
 
-        <div style="display: flex; gap: 8px; justify-content: flex-end;">
-          <button id="tsAssignCancelBtn" class="btn-secondary" style="padding: 8px 16px; border-radius: 10px; font-size: 12px;">Cancel</button>
-          <button id="tsAssignConfirmBtn" class="btn-primary" style="padding: 8px 16px; border-radius: 10px; font-size: 12px; display: flex; align-items: center; gap: 4px;">
-            <span class="material-icons-round" style="font-size: 16px;">check</span> Assign
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+          <button id="tsAssignCancelBtn" class="btn-secondary" style="padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 700;">Cancel</button>
+          <button id="tsAssignConfirmBtn" class="btn-primary" style="padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+            <span class="material-icons-round" style="font-size: 18px;">check</span> Assign Ticket
           </button>
         </div>
       </div>
@@ -523,52 +536,124 @@ export function renderTroubleShoot(container, currentUser) {
     document.body.appendChild(overlay);
 
     const assignInput = overlay.querySelector('#tsAssignSelect');
-    const assignDropdownContainer = overlay.querySelector('#dropdown-assign-troubleshooter');
-    const assignDropdownTrigger = assignDropdownContainer.querySelector('.custom-dropdown-trigger');
+    const containerEl = overlay.querySelector('#dropdown-assign-troubleshooter');
+    const searchInput = overlay.querySelector('#tsAssignSearchInput');
+    const toggleBtn = overlay.querySelector('#tsAssignDropdownToggleBtn');
+    const menuEl = overlay.querySelector('#tsAssignDropdownMenu');
 
-    const onAssignDocClick = (e) => {
-      if (!assignDropdownContainer.contains(e.target)) {
-        assignDropdownContainer.classList.remove('open');
-        document.removeEventListener('click', onAssignDocClick);
+    const renderDropdownOptions = (query = '') => {
+      const q = query.toLowerCase().trim();
+      const filtered = assignableUsers.filter(u => 
+        (u.name || '').toLowerCase().includes(q) || 
+        (u.staffId || '').toLowerCase().includes(q)
+      );
+
+      if (filtered.length === 0) {
+        if (assignableUsers.length === 0) {
+          menuEl.innerHTML = `
+            <div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 12px;">
+              No staff with Troubleshooter role found.<br><span style="font-size: 11px; color: var(--primary-600); font-weight: 600;">Please set Troubleshooter role in Admin panel.</span>
+            </div>
+          `;
+        } else {
+          menuEl.innerHTML = `
+            <div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 12px;">
+              No troubleshooter found matching "<strong>${escapeHtml(query)}</strong>"
+            </div>
+          `;
+        }
+        return;
+      }
+
+      menuEl.innerHTML = filtered.map(u => {
+        const isSelected = assignInput.value === u.name;
+        return `
+          <div class="custom-dropdown-option ${isSelected ? 'active' : ''}" data-value="${escapeHtml(u.name)}" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer; border-radius: 8px; margin-bottom: 2px;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(u.name)}</span>
+              ${u.staffId ? `<span style="font-size: 11px; color: var(--text-muted);">Staff ID: ${escapeHtml(u.staffId)}</span>` : ''}
+            </div>
+            ${isSelected ? '<span class="material-icons-round" style="color: var(--primary-600); font-size: 18px;">check</span>' : ''}
+          </div>
+        `;
+      }).join('');
+
+      menuEl.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.dataset.value;
+          assignInput.value = val;
+          searchInput.value = val;
+          closeDropdown();
+        });
+      });
+    };
+
+    const openDropdown = () => {
+      containerEl.classList.add('open');
+      renderDropdownOptions(searchInput.value);
+    };
+
+    const closeDropdown = () => {
+      containerEl.classList.remove('open');
+    };
+
+    const toggleDropdown = () => {
+      if (containerEl.classList.contains('open')) {
+        closeDropdown();
+      } else {
+        openDropdown();
+        searchInput.focus();
       }
     };
 
-    assignDropdownTrigger.addEventListener('click', (e) => {
+    searchInput.addEventListener('focus', () => {
+      openDropdown();
+    });
+
+    searchInput.addEventListener('input', (e) => {
+      const typed = e.target.value;
+      const exactMatch = assignableUsers.find(u => u.name.toLowerCase() === typed.trim().toLowerCase());
+      assignInput.value = exactMatch ? exactMatch.name : '';
+      openDropdown();
+      renderDropdownOptions(typed);
+    });
+
+    toggleBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const isOpen = assignDropdownContainer.classList.contains('open');
-      if (isOpen) {
-        assignDropdownContainer.classList.remove('open');
-        document.removeEventListener('click', onAssignDocClick);
-      } else {
-        assignDropdownContainer.classList.add('open');
-        document.addEventListener('click', onAssignDocClick);
+      toggleDropdown();
+    });
+
+    const onDocClick = (e) => {
+      if (!containerEl.contains(e.target)) {
+        closeDropdown();
       }
-    });
+    };
+    document.addEventListener('click', onDocClick);
 
-    assignDropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(opt => {
-      opt.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const val = opt.dataset.value;
-        assignInput.value = val;
-        const labelEl = assignDropdownTrigger.querySelector('.trigger-label');
-        if (labelEl) {
-          labelEl.textContent = val;
-          labelEl.style.color = 'var(--text-primary)';
-        }
-        assignDropdownContainer.querySelectorAll('.custom-dropdown-option').forEach(o => {
-          o.classList.toggle('active', o.dataset.value === val);
-        });
-        assignDropdownContainer.classList.remove('open');
-        document.removeEventListener('click', onAssignDocClick);
-      });
-    });
+    const closeModal = () => {
+      document.removeEventListener('click', onDocClick);
+      overlay.remove();
+    };
 
-    overlay.querySelector('#tsAssignCancelBtn').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#tsAssignCancelBtn').addEventListener('click', closeModal);
+    overlay.querySelector('#tsAssignCloseIconBtn')?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
 
     overlay.querySelector('#tsAssignConfirmBtn').addEventListener('click', async () => {
-      const selectedName = assignInput.value;
-      if (!selectedName) return alert('Please select a troubleshooter');
+      let selectedName = assignInput.value.trim();
+      if (!selectedName && searchInput.value.trim()) {
+        const typed = searchInput.value.trim().toLowerCase();
+        const match = assignableUsers.find(u => u.name.toLowerCase() === typed || (u.staffId || '').toLowerCase() === typed);
+        if (match) selectedName = match.name;
+      }
+
+      if (!selectedName) {
+        alert('Please select a troubleshooter from the list.');
+        searchInput.focus();
+        openDropdown();
+        return;
+      }
 
       const confirmBtn = overlay.querySelector('#tsAssignConfirmBtn');
       confirmBtn.disabled = true;
@@ -576,12 +661,12 @@ export function renderTroubleShoot(container, currentUser) {
 
       try {
         await db.assignTroubleShootTicket(ticketId, currentUser.name, selectedName);
-        overlay.remove();
+        closeModal();
         renderList();
       } catch (err) {
         alert('Assignment failed: ' + err.message);
         confirmBtn.disabled = false;
-        confirmBtn.innerHTML = '<span class="material-icons-round" style="font-size: 16px;">check</span> Assign';
+        confirmBtn.innerHTML = '<span class="material-icons-round" style="font-size: 16px;">check</span> Assign Ticket';
       }
     });
   }
