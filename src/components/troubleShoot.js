@@ -1,4 +1,5 @@
 import { db } from '../data/db.js';
+import { parseJakartaTimestamp, formatJakartaDateTime, getTimeAgo, getJakartaDateString } from '../utils/dateTime.js';
 
 export function renderTroubleShoot(container, currentUser) {
   let searchQuery = '';
@@ -159,7 +160,7 @@ export function renderTroubleShoot(container, currentUser) {
   });
 
   function updateKpis(allTickets) {
-    const today = new Date().toDateString();
+    const todayJakarta = getJakartaDateString(new Date());
     const openCount = allTickets.filter(t => t.statusTicket === 'Open').length;
     const assignedCount = allTickets.filter(t => t.statusTicket === 'Assigned').length;
 
@@ -174,10 +175,11 @@ export function renderTroubleShoot(container, currentUser) {
     if (elProgress) elProgress.textContent = allTickets.filter(t => t.statusTicket === 'Picked Up').length;
     if (elFound) elFound.textContent = allTickets.filter(t =>
       (t.statusTicket === 'Found' || t.statusTicket === 'Found Partial') &&
-      new Date(t.updateAt).toDateString() === today
+      Boolean(t.updateAt) && getJakartaDateString(t.updateAt) === todayJakarta
     ).length;
     if (elNotFound) elNotFound.textContent = allTickets.filter(t =>
-      t.statusTicket === 'Not Found' && new Date(t.updateAt).toDateString() === today
+      t.statusTicket === 'Not Found' &&
+      Boolean(t.updateAt) && getJakartaDateString(t.updateAt) === todayJakarta
     ).length;
 
     if (badgeAll) badgeAll.textContent = allTickets.length;
@@ -704,16 +706,4 @@ function getStatusClass(status) {
   if (s === 'found partial') return 'ts-status-partial';
   if (s === 'not found') return 'ts-status-notfound';
   return 'ts-status-open';
-}
-
-function getTimeAgo(timestamp) {
-  if (!timestamp) return '';
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
 }

@@ -1,5 +1,6 @@
 import { db } from '../data/db.js';
 import { openCameraScanner } from '../utils/scanner.js';
+import { parseJakartaTimestamp, formatJakartaDateTime, getTimeAgo } from '../utils/dateTime.js';
 
 export function renderTsTask(container, currentUser) {
   let searchQuery = '';
@@ -305,9 +306,9 @@ export function renderTsTask(container, currentUser) {
     // Sorting
     filtered.sort((a, b) => {
       if (sortBy === 'newest') {
-        return new Date(b.requestTimestamp || 0) - new Date(a.requestTimestamp || 0);
+        return parseJakartaTimestamp(b.requestTimestamp) - parseJakartaTimestamp(a.requestTimestamp);
       } else if (sortBy === 'oldest') {
-        return new Date(a.requestTimestamp || 0) - new Date(b.requestTimestamp || 0);
+        return parseJakartaTimestamp(a.requestTimestamp) - parseJakartaTimestamp(b.requestTimestamp);
       } else if (sortBy === 'waveAsc') {
         return String(a.wave || '').localeCompare(String(b.wave || ''), undefined, { numeric: true });
       } else if (sortBy === 'waveDesc') {
@@ -1479,16 +1480,4 @@ function getStatusClass(status) {
   if (s === 'found partial') return 'ts-status-partial';
   if (s === 'not found') return 'ts-status-notfound';
   return 'ts-status-open';
-}
-
-function getTimeAgo(timestamp) {
-  if (!timestamp) return '';
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
 }

@@ -1,5 +1,6 @@
 import { db } from '../data/db.js';
 import { openCameraScanner } from '../utils/scanner.js';
+import { parseJakartaTimestamp, formatJakartaDateTime, getTimeAgo } from '../utils/dateTime.js';
 
 export function renderTsRequest(container, currentUser) {
   const storageKey = `irms_selected_checker_line_${currentUser.staffId}`;
@@ -1084,17 +1085,5 @@ function getStatusClass(status) {
   if (s === 'found partial') return 'ts-status-partial';
   if (s === 'not found') return 'ts-status-notfound';
   return 'ts-status-open';
-}
-
-function getTimeAgo(timestamp) {
-  if (!timestamp) return '';
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
 }
 

@@ -253,10 +253,27 @@ function appendRowByHeader(sheet, payload, defaultHeaders) {
   }
 }
 
+function formatJakartaDateTime(val) {
+  if (!val) return '';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(val.trim())) {
+    return val.trim();
+  }
+  var d;
+  if (val instanceof Date) {
+    d = val;
+  } else {
+    d = new Date(val);
+  }
+  if (isNaN(d.getTime())) {
+    d = new Date();
+  }
+  return Utilities.formatDate(d, "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss");
+}
+
 function getValueForHeader(cleanHeader, payload) {
   // Troubleshoot Module explicit mappings
   if (cleanHeader === 'requesttimestamp') {
-    return payload.requestTimestamp || '';
+    return payload.requestTimestamp ? formatJakartaDateTime(payload.requestTimestamp) : formatJakartaDateTime(new Date());
   }
   if (cleanHeader === 'requestedby') {
     return payload.requestedBy || '';
@@ -286,7 +303,8 @@ function getValueForHeader(cleanHeader, payload) {
     return payload.deliveredAt || '';
   }
   if (cleanHeader === 'updateat') {
-    return payload.updateAt || payload.updatedAt || '';
+    var upVal = payload.updateAt || payload.updatedAt;
+    return upVal ? formatJakartaDateTime(upVal) : '';
   }
 
   // Standard mappings
@@ -307,7 +325,7 @@ function getValueForHeader(cleanHeader, payload) {
         rawDate = parsed;
       }
     }
-    return Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+    return Utilities.formatDate(rawDate, "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss");
   }
   if (cleanHeader === 'pickername' || cleanHeader === 'picker') {
     return payload.pickerName || payload.picker_name || '';
@@ -728,7 +746,7 @@ function handleCreatePutaway(ss, data) {
         }
       }
       
-      var formattedNowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+      var formattedNowStr = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss");
       
       if (existingRowIdx !== -1) {
         // Update existing row
@@ -1121,7 +1139,7 @@ function handleCompleteStockMovement(ss, data) {
         if (cleanH === 'foodornonfood') sFoodCol = col;
       }
 
-      var formattedNowStr = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+      var formattedNowStr = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss");
 
       // Deduct from source rack location
       if (sSkuCol !== -1 && sLocCol !== -1 && sQtySohCol !== -1) {
@@ -1527,7 +1545,7 @@ function handleCreateTroubleShoot(ss, data) {
 
   var payload = {
     id: String(data.id || '').trim(),
-    requestTimestamp: String(data.requestTimestamp || new Date().toISOString()),
+    requestTimestamp: formatJakartaDateTime(data.requestTimestamp || new Date()),
     requestedBy: String(data.requestedBy || '').trim(),
     staffId: String(data.staffId || '').trim(),
     checkerLine: String(data.checkerLine || '').trim(),
@@ -1547,7 +1565,7 @@ function handleCreateTroubleShoot(ss, data) {
     foundAt: '',
     deliveredAt: '',
     pickedBy: '',
-    updateAt: '',
+    updateAt: data.updateAt ? formatJakartaDateTime(data.updateAt) : '',
     wave: String(data.wave || '').trim()
   };
 
@@ -1594,10 +1612,11 @@ function handleAssignTroubleShoot(ss, data) {
           .createTextOutput(JSON.stringify({ result: "error", message: "Ticket is no longer Open (current: " + currentStatus + ")" }))
           .setMimeType(ContentService.MimeType.JSON);
       }
+      var updateAtFormatted = formatJakartaDateTime(data.updateAt || new Date());
       if (statusCol !== -1) tsSheet.getRange(r + 1, statusCol + 1).setValue('Assigned');
       if (assignedByCol !== -1) tsSheet.getRange(r + 1, assignedByCol + 1).setValue(String(data.assignedBy || ''));
       if (assignedToCol !== -1) tsSheet.getRange(r + 1, assignedToCol + 1).setValue(String(data.assignedTo || ''));
-      if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setValue(data.updateAt || new Date().toISOString());
+      if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setNumberFormat("yyyy-MM-dd HH:mm:ss").setValue(updateAtFormatted);
       break;
     }
   }
@@ -1642,9 +1661,10 @@ function handlePickTroubleShoot(ss, data) {
           .createTextOutput(JSON.stringify({ result: "error", message: "Ticket is no longer Assigned (current: " + currentStatus + "). It may have been picked by someone else." }))
           .setMimeType(ContentService.MimeType.JSON);
       }
+      var updateAtFormatted = formatJakartaDateTime(data.updateAt || new Date());
       if (statusCol !== -1) tsSheet.getRange(r + 1, statusCol + 1).setValue('Picked Up');
       if (pickedByCol !== -1) tsSheet.getRange(r + 1, pickedByCol + 1).setValue(String(data.pickedBy || ''));
-      if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setValue(data.updateAt || new Date().toISOString());
+      if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setNumberFormat("yyyy-MM-dd HH:mm:ss").setValue(updateAtFormatted);
       break;
     }
   }
@@ -1671,7 +1691,7 @@ function handleCompleteTroubleShoot(ss, data) {
   var productName = String(data.productName || '').trim();
   var troubleshootEvidence = String(data.troubleshootEvidence || '').trim();
   var deliveredAt = String(data.deliveredAt || '').trim();
-  var updateAt = data.updateAt || new Date().toISOString();
+  var updateAt = formatJakartaDateTime(data.updateAt || new Date());
 
   // 1. Update Trouble_Shoot sheet
   var values = tsSheet.getDataRange().getValues();
@@ -1693,7 +1713,7 @@ function handleCompleteTroubleShoot(ss, data) {
       if (colMap['foundat'] !== undefined) tsSheet.getRange(r + 1, colMap['foundat'] + 1).setValue(foundAt);
       if (colMap['troubleshootevidence'] !== undefined) tsSheet.getRange(r + 1, colMap['troubleshootevidence'] + 1).setValue(troubleshootEvidence);
       if (colMap['deliveredat'] !== undefined) tsSheet.getRange(r + 1, colMap['deliveredat'] + 1).setValue(deliveredAt);
-      if (colMap['updateat'] !== undefined) tsSheet.getRange(r + 1, colMap['updateat'] + 1).setValue(updateAt);
+      if (colMap['updateat'] !== undefined) tsSheet.getRange(r + 1, colMap['updateat'] + 1).setNumberFormat("yyyy-MM-dd HH:mm:ss").setValue(updateAt);
       break;
     }
   }
@@ -1727,7 +1747,7 @@ function handleCompleteTroubleShoot(ss, data) {
               var newQty = Math.max(0, currQty - foundQty);
               sohSheet.getRange(sr + 1, sQtySohCol + 1).setValue(newQty);
               if (sUpdatedAtCol !== -1) {
-                var formattedNow = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss");
+                var formattedNow = Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss");
                 sohSheet.getRange(sr + 1, sUpdatedAtCol + 1).setValue(formattedNow);
               }
               break;
@@ -1751,7 +1771,7 @@ function handleCompleteTroubleShoot(ss, data) {
         operator: '[-]',
         fromLocation: foundAt,
         toLocation: 'Troubleshoot Resolution',
-        timestamp: new Date().toISOString()
+        timestamp: Utilities.formatDate(new Date(), "Asia/Jakarta", "yyyy-MM-dd HH:mm:ss")
       };
       appendRowByHeader(saSheet, saPayload, saHeaders);
 
@@ -1763,6 +1783,42 @@ function handleCompleteTroubleShoot(ss, data) {
   return ContentService
     .createTextOutput(JSON.stringify({ result: "success", ticketId: ticketId, statusTicket: statusTicket }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Utility to fix existing Troubleshoot sheet timestamps to Asia/Jakarta format
+ */
+function fixTroubleShootSheetTimeFormat() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var tsSheet = ss.getSheetByName("Trouble_Shoot");
+  if (!tsSheet) return "Trouble_Shoot sheet not found";
+  var values = tsSheet.getDataRange().getValues();
+  if (values.length < 2) return "No data rows in Trouble_Shoot";
+  var headers = values[0];
+  var reqTsCol = -1, updateAtCol = -1;
+  for (var h = 0; h < headers.length; h++) {
+    var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (cleanH === 'requesttimestamp') reqTsCol = h;
+    if (cleanH === 'updateat') updateAtCol = h;
+  }
+  var fixedCount = 0;
+  for (var r = 1; r < values.length; r++) {
+    if (reqTsCol !== -1 && values[r][reqTsCol]) {
+      var formatted = formatJakartaDateTime(values[r][reqTsCol]);
+      if (formatted && formatted !== String(values[r][reqTsCol]).trim()) {
+        tsSheet.getRange(r + 1, reqTsCol + 1).setNumberFormat("yyyy-MM-dd HH:mm:ss").setValue(formatted);
+        fixedCount++;
+      }
+    }
+    if (updateAtCol !== -1 && values[r][updateAtCol]) {
+      var formattedUp = formatJakartaDateTime(values[r][updateAtCol]);
+      if (formattedUp && formattedUp !== String(values[r][updateAtCol]).trim()) {
+        tsSheet.getRange(r + 1, updateAtCol + 1).setNumberFormat("yyyy-MM-dd HH:mm:ss").setValue(formattedUp);
+        fixedCount++;
+      }
+    }
+  }
+  return "Fixed " + fixedCount + " timestamps in Trouble_Shoot sheet";
 }
 
 function handleUploadTroubleShootPhoto(ss, data) {

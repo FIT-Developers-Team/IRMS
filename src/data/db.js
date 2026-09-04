@@ -1,6 +1,7 @@
 import Papa from 'papaparse';
 import { GOOGLE_SHEETS_CONFIG } from '../config/googleSheets.js';
 import { cacheManager } from './cacheManager.js';
+import { formatJakartaDateTime, parseJakartaTimestamp } from '../utils/dateTime.js';
 
 export const DATA_EXPIRY_DURATION_MS = 5 * 60 * 1000; // 5 minutes TTL
 
@@ -75,8 +76,8 @@ class DatabaseService {
       if (!item) return 0;
       for (const p of tProps) {
         if (item[p]) {
-          const ms = new Date(item[p]).getTime();
-          if (!isNaN(ms)) return ms;
+          const ms = parseJakartaTimestamp(item[p]);
+          if (ms > 0) return ms;
         }
       }
       return 0;
@@ -3011,7 +3012,8 @@ class DatabaseService {
 
     const remoteEntries = (result.data || []).map(row => {
       const id = this.findRowValue(row, ['id', 'ticket id', 'ticket_id', 'ticketid']) || '';
-      const requestTimestamp = this.findRowValue(row, ['request timestamp', 'request_timestamp', 'timestamp', 'date']) || new Date().toISOString();
+      const rawReqTs = this.findRowValue(row, ['request timestamp', 'request_timestamp', 'timestamp', 'date']);
+      const requestTimestamp = rawReqTs ? formatJakartaDateTime(rawReqTs) : formatJakartaDateTime(new Date());
       const requestedBy = this.findRowValue(row, ['requested by', 'requested_by', 'requestedby', 'requester', 'checker name', 'checker_name', 'checker']) || '';
       const staffId = this.findRowValue(row, ['staff id', 'staff_id', 'staffid']) || '';
       const checkerLine = this.findRowValue(row, ['checker line', 'checker_line', 'checkerline', 'line']) || '';
@@ -3031,7 +3033,8 @@ class DatabaseService {
       const foundAt = this.findRowValue(row, ['found at', 'found_at', 'foundat']) || '';
       const deliveredAt = this.findRowValue(row, ['delivered at', 'delivered_at', 'deliveredat']) || '';
       const pickedBy = this.findRowValue(row, ['picked by', 'picked_by', 'pickedby']) || '';
-      const updateAt = this.findRowValue(row, ['update at', 'update_at', 'updateat', 'updated at', 'updated_at']) || '';
+      const rawUpdateAt = this.findRowValue(row, ['update at', 'update_at', 'updateat', 'updated at', 'updated_at']);
+      const updateAt = rawUpdateAt ? formatJakartaDateTime(rawUpdateAt) : '';
       const wave = this.findRowValue(row, ['wave', 'wave_number', 'wavenumber', 'wave name', 'wave_name']) || '';
 
       return {
@@ -3062,7 +3065,7 @@ class DatabaseService {
     }).filter(e => e.id);
 
     const merged = this.mergeDeltaRecords(this.troubleShootTickets, remoteEntries, 'id', ['updateAt', 'requestTimestamp', 'timestamp']);
-    merged.sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+    merged.sort((a, b) => parseJakartaTimestamp(b.requestTimestamp) - parseJakartaTimestamp(a.requestTimestamp));
     const hasChanged = !this.areRecordListsEqual(this.troubleShootTickets, merged, 'id');
     this.troubleShootTickets = merged;
     if (hasChanged) {
@@ -3074,7 +3077,12 @@ class DatabaseService {
   loadSavedTroubleShoot() {
     try {
       const saved = localStorage.getItem('irms_troubleshoot_tickets');
-      return saved ? JSON.parse(saved) : [];
+      const tickets = saved ? JSON.parse(saved) : [];
+      return Array.isArray(tickets) ? tickets.map(t => ({
+        ...t,
+        requestTimestamp: t.requestTimestamp ? formatJakartaDateTime(t.requestTimestamp) : '',
+        updateAt: t.updateAt ? formatJakartaDateTime(t.updateAt) : ''
+      })) : [];
     } catch (e) {
       return [];
     }
@@ -3090,7 +3098,7 @@ class DatabaseService {
   }
 
   getTroubleShootTickets() {
-    return [...this.troubleShootTickets].sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+    return [...this.troubleShootTickets].sort((a, b) => parseJakartaTimestamp(b.requestTimestamp) - parseJakartaTimestamp(a.requestTimestamp));
   }
 
   getTroubleShootTicketsForUser(currentUser) {
@@ -3109,7 +3117,7 @@ class DatabaseService {
       const reqBy = (t.requestedBy || '').trim().toLowerCase();
       const sId = (t.staffId || '').trim().toLowerCase();
       return reqBy === myName || sId === myId;
-    }).sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+    }).sort((a, b) => parseJakartaTimestamp(b.requestTimestamp) - parseJakartaTimestamp(a.requestTimestamp));
   }
 
   getTroubleShootTasksForUser(currentUser) {
@@ -3119,7 +3127,7 @@ class DatabaseService {
       const assignedTo = (t.assignedTo || '').trim().toLowerCase();
       const pickedBy = (t.pickedBy || '').trim().toLowerCase();
       return assignedTo === myName || assignedTo === myId || pickedBy === myId;
-    }).sort((a, b) => new Date(b.requestTimestamp) - new Date(a.requestTimestamp));
+    }).sort((a, b) => parseJakartaTimestamp(b.requestTimestamp) - parseJakartaTimestamp(a.requestTimestamp));
   }
 
   /**
@@ -3140,7 +3148,7 @@ class DatabaseService {
     const role = (currentUser.role || '').trim().toLowerCase();
     const requesterRole = (role === 'picker') ? 'picker' : 'checker';
     const id = this.generateTroubleShootId(requesterRole);
-    const timestamp = new Date().toISOString();
+    const timestamp = formatJakartaDateTime(new Date());
 
     const newTicket = {
       id,
@@ -3198,12 +3206,14 @@ class DatabaseService {
       throw new Error('Only Open tickets can be assigned');
     }
 
+    const updateAt = formatJakartaDateTime(new Date());
+
     this.troubleShootTickets[idx] = {
       ...ticket,
       statusTicket: 'Assigned',
       assignedBy: String(assignedBy).trim(),
       assignedTo: String(assignedTo).trim(),
-      updateAt: new Date().toISOString()
+      updateAt
     };
     this.persistTroubleShoot();
     this.notifyListeners();
@@ -3219,7 +3229,7 @@ class DatabaseService {
             ticketId,
             assignedBy: String(assignedBy).trim(),
             assignedTo: String(assignedTo).trim(),
-            updateAt: new Date().toISOString()
+            updateAt
           })
         });
         setTimeout(() => this.syncGoogleSheets(['troubleShoot']), 2500);
@@ -3240,11 +3250,13 @@ class DatabaseService {
       throw new Error('Only Assigned tickets can be picked up. This ticket may have been picked by someone else.');
     }
 
+    const updateAt = formatJakartaDateTime(new Date());
+
     this.troubleShootTickets[idx] = {
       ...ticket,
       statusTicket: 'Picked Up',
       pickedBy: String(currentUser.staffId || '').trim(),
-      updateAt: new Date().toISOString()
+      updateAt
     };
     this.persistTroubleShoot();
     this.notifyListeners();
@@ -3259,7 +3271,7 @@ class DatabaseService {
             action: 'pickTroubleShoot',
             ticketId,
             pickedBy: String(currentUser.staffId || '').trim(),
-            updateAt: new Date().toISOString()
+            updateAt
           })
         });
         setTimeout(() => this.syncGoogleSheets(['troubleShoot']), 2500);
@@ -3307,6 +3319,8 @@ class DatabaseService {
       }
     }
 
+    const updateAt = formatJakartaDateTime(new Date());
+
     this.troubleShootTickets[idx] = {
       ...ticket,
       statusTicket,
@@ -3314,7 +3328,7 @@ class DatabaseService {
       foundAt,
       troubleshootEvidence: String(resolutionData.troubleshootEvidence || '').trim(),
       deliveredAt: String(resolutionData.deliveredAt || '').trim(),
-      updateAt: new Date().toISOString()
+      updateAt
     };
     this.persistTroubleShoot();
     this.notifyListeners();
@@ -3336,7 +3350,7 @@ class DatabaseService {
             productName: ticket.productName,
             troubleshootEvidence: String(resolutionData.troubleshootEvidence || '').trim(),
             deliveredAt: String(resolutionData.deliveredAt || '').trim(),
-            updateAt: new Date().toISOString()
+            updateAt
           })
         });
         setTimeout(() => this.syncGoogleSheets(['troubleShoot', 'soh']), 2500);
