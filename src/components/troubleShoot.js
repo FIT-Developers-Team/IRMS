@@ -1,12 +1,29 @@
 import { db } from '../data/db.js';
 import { parseJakartaTimestamp, formatJakartaDateTime, getTimeAgo, getJakartaDateString } from '../utils/dateTime.js';
+import { openCustomDateRangePicker } from '../utils/customDatePicker.js';
 
 export function renderTroubleShoot(container, currentUser) {
   let searchQuery = '';
-  let statusFilter = 'all';
-  let activeSubTab = 'all';
-
   let kpiExpanded = false;
+
+  let filterState = {
+    requestTimestampFrom: '',
+    requestTimestampTo: '',
+    requestedBy: '',
+    checkerLine: '',
+    reason: '',
+    soNumber: '',
+    wave: '',
+    skuNumber: '',
+    productName: '',
+    originRackName: '',
+    assignedBy: '',
+    assignedTo: '',
+    statusTicket: 'all',
+    foundAt: '',
+    updateAtFrom: '',
+    updateAtTo: ''
+  };
 
   container.innerHTML = `
     <div class="card-panel ts-admin-panel" style="display: flex; flex-direction: column; height: 100%; min-height: 0; box-sizing: border-box; overflow-y: auto;">
@@ -80,32 +97,27 @@ export function renderTroubleShoot(container, currentUser) {
         </div>
       </div>
 
-      <!-- Prominent Sub Tabs Bar -->
-      <div class="ts-subtab-bar" style="margin-top: 14px; flex-shrink: 0;">
-        <button class="ts-sub-tab active" data-tab="all">
-          <span class="material-icons-round" style="font-size: 16px;">receipt_long</span>
-          <span>All Tickets</span>
-          <span class="subtab-count-badge" id="subtabCountAll">0</span>
+      <!-- Action Toolbar (Search + Filter Button + Reset Button) -->
+      <div style="margin-top: 14px; display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap;">
+        <div style="flex: 1 1 180px; position: relative;">
+          <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 18px; color: var(--text-muted);">search</span>
+          <input type="text" id="tsAdminSearch" placeholder="Search by ID, SO, SKU, product, troubleshooter..." style="width: 100%; padding: 8px 10px 8px 34px; border: 1.5px solid var(--border-light); border-radius: 10px; font-size: 13px; background: #ffffff; color: var(--text-primary); box-sizing: border-box;">
+        </div>
+
+        <button id="tsFilterModalBtn" class="btn-secondary" style="height: 38px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: 1.5px solid var(--border-light); background: #ffffff; white-space: nowrap;">
+          <span class="material-icons-round" style="font-size: 18px; color: var(--primary-600);">filter_list</span>
+          <span>Filter</span>
+          <span id="tsFilterCountBadge" class="filter-count-badge" style="display: none;">0</span>
         </button>
-        <button class="ts-sub-tab" data-tab="unassigned">
-          <span class="material-icons-round" style="font-size: 16px; color: #ef4444;">pending_actions</span>
-          <span>Unassigned</span>
-          <span class="subtab-count-badge" id="subtabCountUnassigned">0</span>
-        </button>
-        <button class="ts-sub-tab" data-tab="assigned">
-          <span class="material-icons-round" style="font-size: 16px; color: #7c3aed;">assignment_ind</span>
-          <span>Assigned</span>
-          <span class="subtab-count-badge" id="subtabCountAssigned">0</span>
+
+        <button id="tsResetFilterBtn" class="btn-secondary" style="height: 38px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 600; display: none; align-items: center; gap: 4px; cursor: pointer; border: 1.5px dashed #fca5a5; background: #fff5f5; color: #dc2626; white-space: nowrap;" title="Clear all filters">
+          <span class="material-icons-round" style="font-size: 16px;">clear_all</span>
+          <span>Reset</span>
         </button>
       </div>
 
-      <!-- Search Input -->
-      <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-shrink: 0;">
-        <div style="flex: 1; position: relative;">
-          <span class="material-icons-round" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 18px; color: var(--text-muted);">search</span>
-          <input type="text" id="tsAdminSearch" placeholder="Search by ticket ID, SO, SKU, product, troubleshooter..." style="width: 100%; padding: 8px 10px 8px 34px; border: 1.5px solid var(--border-light); border-radius: 10px; font-size: 13px; background: #ffffff; color: var(--text-primary); box-sizing: border-box;">
-        </div>
-      </div>
+      <!-- Active Filter Pills Chips Row -->
+      <div id="tsActiveFilterPills" style="display: none; margin-top: 8px; gap: 6px; flex-wrap: wrap; align-items: center; flex-shrink: 0;"></div>
 
       <!-- Scrollable Ticket List Area -->
       <div id="tsAdminScrollArea" style="flex: 1; min-height: 0; overflow-y: auto; margin-top: 12px; padding-right: 2px;">
@@ -117,12 +129,10 @@ export function renderTroubleShoot(container, currentUser) {
   const searchInput = container.querySelector('#tsAdminSearch');
   const listContainer = container.querySelector('#tsAdminList');
   const countBadge = container.querySelector('#tsAdminCountBadge');
-  const subTabs = container.querySelectorAll('.ts-sub-tab');
-
-  // Subtab count badges
-  const badgeAll = container.querySelector('#subtabCountAll');
-  const badgeUnassigned = container.querySelector('#subtabCountUnassigned');
-  const badgeAssigned = container.querySelector('#subtabCountAssigned');
+  const filterBtn = container.querySelector('#tsFilterModalBtn');
+  const resetFilterBtn = container.querySelector('#tsResetFilterBtn');
+  const activePillsContainer = container.querySelector('#tsActiveFilterPills');
+  const filterBadge = container.querySelector('#tsFilterCountBadge');
 
   // KPI Toggle
   const toggleKpiBtn = container.querySelector('#tsToggleKpiBtn');
@@ -150,14 +160,563 @@ export function renderTroubleShoot(container, currentUser) {
     renderList();
   });
 
-  subTabs.forEach(btn => {
-    btn.addEventListener('click', () => {
-      subTabs.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeSubTab = btn.dataset.tab;
+  if (filterBtn) {
+    filterBtn.addEventListener('click', () => {
+      openFilterModal();
+    });
+  }
+
+  if (resetFilterBtn) {
+    resetFilterBtn.addEventListener('click', () => {
+      Object.keys(filterState).forEach(k => {
+        filterState[k] = (k === 'statusTicket' ? 'all' : '');
+      });
       renderList();
     });
-  });
+  }
+
+  function parseInputDateTime(val, isEndOfMinute = false) {
+    if (!val) return null;
+    let str = val.trim();
+    if (str.length === 16) {
+      str += isEndOfMinute ? ':59' : ':00';
+    }
+    if (!str.includes('+') && !str.includes('Z')) {
+      str += '+07:00';
+    }
+    const ms = new Date(str).getTime();
+    return isNaN(ms) ? null : ms;
+  }
+
+  function renderActiveFilterPills() {
+    const activePills = [];
+
+    if (filterState.requestTimestampFrom || filterState.requestTimestampTo) {
+      const fromL = filterState.requestTimestampFrom ? filterState.requestTimestampFrom.replace('T', ' ') : 'Start';
+      const toL = filterState.requestTimestampTo ? filterState.requestTimestampTo.replace('T', ' ') : 'End';
+      activePills.push({
+        label: `Req Time: ${fromL} → ${toL}`,
+        clear: () => { filterState.requestTimestampFrom = ''; filterState.requestTimestampTo = ''; }
+      });
+    }
+
+    if (filterState.updateAtFrom || filterState.updateAtTo) {
+      const fromL = filterState.updateAtFrom ? filterState.updateAtFrom.replace('T', ' ') : 'Start';
+      const toL = filterState.updateAtTo ? filterState.updateAtTo.replace('T', ' ') : 'End';
+      activePills.push({
+        label: `Update Time: ${fromL} → ${toL}`,
+        clear: () => { filterState.updateAtFrom = ''; filterState.updateAtTo = ''; }
+      });
+    }
+
+    if (filterState.statusTicket && filterState.statusTicket !== 'all') {
+      activePills.push({
+        label: `Status: ${filterState.statusTicket}`,
+        clear: () => { filterState.statusTicket = 'all'; }
+      });
+    }
+
+    const textFields = [
+      { key: 'requestedBy', label: 'Requested By' },
+      { key: 'checkerLine', label: 'Checker Line' },
+      { key: 'reason', label: 'Reason' },
+      { key: 'soNumber', label: 'SO' },
+      { key: 'wave', label: 'Wave' },
+      { key: 'skuNumber', label: 'SKU' },
+      { key: 'productName', label: 'Product' },
+      { key: 'originRackName', label: 'Origin Rack' },
+      { key: 'assignedBy', label: 'Assigned By' },
+      { key: 'assignedTo', label: 'Assigned To' },
+      { key: 'foundAt', label: 'Found At' }
+    ];
+
+    textFields.forEach(f => {
+      if (filterState[f.key]) {
+        activePills.push({
+          label: `${f.label}: ${filterState[f.key]}`,
+          clear: () => { filterState[f.key] = ''; }
+        });
+      }
+    });
+
+    if (activePills.length > 0) {
+      filterBadge.textContent = activePills.length;
+      filterBadge.style.display = 'inline-flex';
+      resetFilterBtn.style.display = 'inline-flex';
+      activePillsContainer.style.display = 'flex';
+      activePillsContainer.innerHTML = activePills.map((p, idx) => `
+        <span class="filter-pill-chip">
+          <span>${escapeHtml(p.label)}</span>
+          <button type="button" class="remove-pill-btn" data-idx="${idx}" title="Remove filter">
+            <span class="material-icons-round" style="font-size: 14px;">close</span>
+          </button>
+        </span>
+      `).join('');
+
+      activePillsContainer.querySelectorAll('.remove-pill-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (activePills[idx]) {
+            activePills[idx].clear();
+            renderList();
+          }
+        });
+      });
+    } else {
+      filterBadge.style.display = 'none';
+      resetFilterBtn.style.display = 'none';
+      activePillsContainer.style.display = 'none';
+      activePillsContainer.innerHTML = '';
+    }
+  }
+
+  function getStatusLabel(val) {
+    if (!val || val === 'all') return 'All Statuses';
+    return val;
+  }
+
+  function openFilterModal() {
+    const existing = document.getElementById('tsFilterModal');
+    if (existing) existing.remove();
+
+    const allTickets = db.getTroubleShootTickets();
+
+    // Collect distinct suggestions for autocomplete/datalists
+    const uniqueVals = (key) => [...new Set(allTickets.map(t => String(t[key] || '').trim()).filter(Boolean))].sort();
+
+    const dlRequesters = uniqueVals('requestedBy');
+    const dlCheckerLines = uniqueVals('checkerLine');
+    const dlReasons = uniqueVals('reason');
+    const dlWaves = uniqueVals('wave');
+    const dlAssignedBy = uniqueVals('assignedBy');
+    const dlAssignedTo = uniqueVals('assignedTo');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'tsFilterModal';
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'display: flex; align-items: center; justify-content: center; z-index: 9999;';
+
+    overlay.innerHTML = `
+      <div class="modal-card ts-filter-modal-card">
+        <!-- Header -->
+        <div class="form-modal-header" style="flex-shrink: 0; padding: 16px 20px; border-bottom: 1px solid var(--border-light);">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: #eff6ff; color: var(--primary-600); display: flex; align-items: center; justify-content: center;">
+              <span class="material-icons-round" style="font-size: 20px;">filter_list</span>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--text-primary);">Filter Troubleshoot Tickets</h3>
+              <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Filter tickets by any combination of fields below</span>
+            </div>
+          </div>
+          <button class="form-modal-close-btn" id="tsFilterModalCloseBtn" title="Close">
+            <span class="material-icons-round">close</span>
+          </button>
+        </div>
+
+        <!-- Datalist suggestions for convenience -->
+        <datalist id="dl-requestedBy">${dlRequesters.map(v => `<option value="${escapeHtml(v)}">`).join('')}</datalist>
+        <datalist id="dl-checkerLine">${dlCheckerLines.map(v => `<option value="${escapeHtml(v)}">`).join('')}</datalist>
+        <datalist id="dl-reason">${dlReasons.map(v => `<option value="${escapeHtml(v)}">`).join('')}</datalist>
+        <datalist id="dl-wave">${dlWaves.map(v => `<option value="${escapeHtml(v)}">`).join('')}</datalist>
+        <datalist id="dl-assignedBy">${dlAssignedBy.map(v => `<option value="${escapeHtml(v)}">`).join('')}</datalist>
+        <datalist id="dl-assignedTo">${dlAssignedTo.map(v => `<option value="${escapeHtml(v)}">`).join('')}</datalist>
+
+        <!-- Form Body -->
+        <div class="form-modal-body" style="flex: 1; overflow-y: auto; padding: 18px 20px;">
+          <div class="ts-filter-grid">
+
+            <!-- Row 1: Request Timestamp & Update At (Both single-column custom range cards) -->
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">schedule</span>
+                <span>Request Timestamp</span>
+              </label>
+              <div class="custom-dt-range-card ${filterState.requestTimestampFrom || filterState.requestTimestampTo ? 'has-value' : ''}" id="card_requestTimestamp" tabindex="0">
+                <div class="custom-dt-range-content">
+                  <div class="custom-dt-range-row">
+                    <span class="custom-dt-tag start">Start</span>
+                    <span class="custom-dt-val ${filterState.requestTimestampFrom ? '' : 'placeholder'}" id="lbl_requestTimestampFrom">
+                      ${filterState.requestTimestampFrom ? filterState.requestTimestampFrom.replace('T', ' ') : 'Select start date & time'}
+                    </span>
+                  </div>
+                  <div class="custom-dt-range-row">
+                    <span class="custom-dt-tag end">End</span>
+                    <span class="custom-dt-val ${filterState.requestTimestampTo ? '' : 'placeholder'}" id="lbl_requestTimestampTo">
+                      ${filterState.requestTimestampTo ? filterState.requestTimestampTo.replace('T', ' ') : 'Select end date & time'}
+                    </span>
+                  </div>
+                </div>
+                <div class="custom-dt-range-icons">
+                  <button type="button" class="custom-dt-clear-btn" id="clear_requestTimestamp" title="Clear range" style="${(filterState.requestTimestampFrom || filterState.requestTimestampTo) ? 'display: flex;' : 'display: none;'}">
+                    <span class="material-icons-round">close</span>
+                  </button>
+                  <div class="custom-dt-cal-icon-wrap">
+                    <span class="material-icons-round">calendar_month</span>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" id="f_requestTimestampFrom" value="${escapeHtml(filterState.requestTimestampFrom || '')}">
+              <input type="hidden" id="f_requestTimestampTo" value="${escapeHtml(filterState.requestTimestampTo || '')}">
+            </div>
+
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: #10b981;">update</span>
+                <span>Update At</span>
+              </label>
+              <div class="custom-dt-range-card ${filterState.updateAtFrom || filterState.updateAtTo ? 'has-value' : ''}" id="card_updateAt" tabindex="0">
+                <div class="custom-dt-range-content">
+                  <div class="custom-dt-range-row">
+                    <span class="custom-dt-tag start">Start</span>
+                    <span class="custom-dt-val ${filterState.updateAtFrom ? '' : 'placeholder'}" id="lbl_updateAtFrom">
+                      ${filterState.updateAtFrom ? filterState.updateAtFrom.replace('T', ' ') : 'Select start date & time'}
+                    </span>
+                  </div>
+                  <div class="custom-dt-range-row">
+                    <span class="custom-dt-tag end">End</span>
+                    <span class="custom-dt-val ${filterState.updateAtTo ? '' : 'placeholder'}" id="lbl_updateAtTo">
+                      ${filterState.updateAtTo ? filterState.updateAtTo.replace('T', ' ') : 'Select end date & time'}
+                    </span>
+                  </div>
+                </div>
+                <div class="custom-dt-range-icons">
+                  <button type="button" class="custom-dt-clear-btn" id="clear_updateAt" title="Clear range" style="${(filterState.updateAtFrom || filterState.updateAtTo) ? 'display: flex;' : 'display: none;'}">
+                    <span class="material-icons-round">close</span>
+                  </button>
+                  <div class="custom-dt-cal-icon-wrap" style="background: #ecfdf5; color: #059669;">
+                    <span class="material-icons-round">calendar_month</span>
+                  </div>
+                </div>
+              </div>
+              <input type="hidden" id="f_updateAtFrom" value="${escapeHtml(filterState.updateAtFrom || '')}">
+              <input type="hidden" id="f_updateAtTo" value="${escapeHtml(filterState.updateAtTo || '')}">
+            </div>
+
+            <!-- Row 2: Status Ticket (Custom Dropdown) & Requested By -->
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">flag</span>
+                <span>Status Ticket</span>
+              </label>
+              <div class="custom-dropdown-container" id="dropdown-filter-status" style="position: relative; width: 100%;">
+                <button type="button" class="custom-dropdown-trigger" id="filterStatusTrigger" style="height: 38px; border-radius: 10px; padding: 0 12px; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; background: #ffffff; border: 1.5px solid var(--border-light); width: 100%; cursor: pointer;">
+                  <span class="trigger-label" id="filterStatusLabel">${getStatusLabel(filterState.statusTicket)}</span>
+                  <span class="material-icons-round trigger-icon" style="font-size: 18px; color: var(--text-muted); transition: transform 0.2s;">expand_more</span>
+                </button>
+                <input type="hidden" id="f_statusTicket" value="${escapeHtml(filterState.statusTicket)}">
+                <div class="custom-dropdown-menu" id="filterStatusMenu" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000; max-height: 220px; overflow-y: auto; background: #ffffff; border: 1px solid var(--border-light); border-radius: 12px; padding: 6px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);">
+                  <div class="custom-dropdown-option ${filterState.statusTicket === 'all' ? 'active' : ''}" data-value="all">All Statuses</div>
+                  <div class="custom-dropdown-option ${filterState.statusTicket === 'Open' ? 'active' : ''}" data-value="Open">Open</div>
+                  <div class="custom-dropdown-option ${filterState.statusTicket === 'Assigned' ? 'active' : ''}" data-value="Assigned">Assigned</div>
+                  <div class="custom-dropdown-option ${filterState.statusTicket === 'Picked Up' ? 'active' : ''}" data-value="Picked Up">Picked Up</div>
+                  <div class="custom-dropdown-option ${filterState.statusTicket === 'Found' ? 'active' : ''}" data-value="Found">Found</div>
+                  <div class="custom-dropdown-option ${filterState.statusTicket === 'Found Partial' ? 'active' : ''}" data-value="Found Partial">Found Partial</div>
+                  <div class="custom-dropdown-option ${filterState.statusTicket === 'Not Found' ? 'active' : ''}" data-value="Not Found">Not Found</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">person</span>
+                <span>Requested By</span>
+              </label>
+              <input type="text" id="f_requestedBy" value="${escapeHtml(filterState.requestedBy)}" placeholder="Filter by requester..." list="dl-requestedBy">
+            </div>
+
+            <!-- Row 3: Checker Line & Reason -->
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">view_timeline</span>
+                <span>Checker Line</span>
+              </label>
+              <input type="text" id="f_checkerLine" value="${escapeHtml(filterState.checkerLine)}" placeholder="e.g. Line 1..." list="dl-checkerLine">
+            </div>
+
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: #ea580c;">help_outline</span>
+                <span>Reason</span>
+              </label>
+              <input type="text" id="f_reason" value="${escapeHtml(filterState.reason)}" placeholder="e.g. Missing, damaged..." list="dl-reason">
+            </div>
+
+            <!-- Row 4: SO Number & Wave -->
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">tag</span>
+                <span>SO Number</span>
+              </label>
+              <input type="text" id="f_soNumber" value="${escapeHtml(filterState.soNumber)}" placeholder="Filter by SO Number...">
+            </div>
+
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">waves</span>
+                <span>Wave</span>
+              </label>
+              <input type="text" id="f_wave" value="${escapeHtml(filterState.wave)}" placeholder="e.g. Wave 1, 2..." list="dl-wave">
+            </div>
+
+            <!-- Row 5: SKU Number & Product Name -->
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">qr_code_2</span>
+                <span>SKU Number</span>
+              </label>
+              <input type="text" id="f_skuNumber" value="${escapeHtml(filterState.skuNumber)}" placeholder="Filter by SKU Number...">
+            </div>
+
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">inventory</span>
+                <span>Product Name</span>
+              </label>
+              <input type="text" id="f_productName" value="${escapeHtml(filterState.productName)}" placeholder="Filter by Product Name...">
+            </div>
+
+            <!-- Row 6: Origin Rack & Found At -->
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">grid_view</span>
+                <span>Origin Rack</span>
+              </label>
+              <input type="text" id="f_originRackName" value="${escapeHtml(filterState.originRackName)}" placeholder="e.g. A-01-02...">
+            </div>
+
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: #10b981;">pin_drop</span>
+                <span>Found At</span>
+              </label>
+              <input type="text" id="f_foundAt" value="${escapeHtml(filterState.foundAt)}" placeholder="Found location / rack...">
+            </div>
+
+            <!-- Row 7: Assigned By & Assigned To -->
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: #7c3aed;">how_to_reg</span>
+                <span>Assigned By</span>
+              </label>
+              <input type="text" id="f_assignedBy" value="${escapeHtml(filterState.assignedBy)}" placeholder="Filter by assigner..." list="dl-assignedBy">
+            </div>
+
+            <div class="ts-filter-field">
+              <label>
+                <span class="material-icons-round" style="font-size: 16px; color: #7c3aed;">person_pin</span>
+                <span>Assigned To</span>
+              </label>
+              <input type="text" id="f_assignedTo" value="${escapeHtml(filterState.assignedTo)}" placeholder="Filter by troubleshooter..." list="dl-assignedTo">
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Footer Actions -->
+        <div class="form-modal-footer-actions" style="padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-light); flex-shrink: 0; background: #ffffff;">
+          <button type="button" class="btn-secondary" id="tsFilterResetModalBtn" style="color: #dc2626; border-color: #fca5a5; display: inline-flex; align-items: center; gap: 4px;">
+            <span class="material-icons-round" style="font-size: 16px;">restart_alt</span> Reset
+          </button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-secondary" id="tsFilterCancelModalBtn">Cancel</button>
+            <button type="button" class="btn-primary" id="tsFilterApplyModalBtn" style="display: inline-flex; align-items: center; gap: 6px;">
+              <span class="material-icons-round" style="font-size: 16px;">done</span> Apply Filters
+            </button>
+          </div>
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const closeModal = () => overlay.remove();
+    overlay.querySelector('#tsFilterModalCloseBtn').addEventListener('click', closeModal);
+    overlay.querySelector('#tsFilterCancelModalBtn').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+    // Custom Dropdown wiring for Status Ticket
+    const statusDropdown = overlay.querySelector('#dropdown-filter-status');
+    const statusTrigger = overlay.querySelector('#filterStatusTrigger');
+    const statusLabel = overlay.querySelector('#filterStatusLabel');
+    const statusInput = overlay.querySelector('#f_statusTicket');
+    const statusMenu = overlay.querySelector('#filterStatusMenu');
+
+    if (statusTrigger && statusDropdown && statusMenu) {
+      statusTrigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        statusDropdown.classList.toggle('open');
+      });
+
+      statusMenu.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.dataset.value;
+          statusInput.value = val;
+          statusLabel.textContent = opt.textContent;
+          statusMenu.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.toggle('active', o.dataset.value === val));
+          statusDropdown.classList.remove('open');
+        });
+      });
+
+      overlay.addEventListener('click', (e) => {
+        if (!statusDropdown.contains(e.target)) {
+          statusDropdown.classList.remove('open');
+        }
+      });
+    }
+
+    // Custom Date Range Cards Wiring
+    const cardReq = overlay.querySelector('#card_requestTimestamp');
+    const inputReqFrom = overlay.querySelector('#f_requestTimestampFrom');
+    const inputReqTo = overlay.querySelector('#f_requestTimestampTo');
+    const lblReqFrom = overlay.querySelector('#lbl_requestTimestampFrom');
+    const lblReqTo = overlay.querySelector('#lbl_requestTimestampTo');
+    const clearReqBtn = overlay.querySelector('#clear_requestTimestamp');
+
+    function updateReqCardUi(start, end) {
+      inputReqFrom.value = start || '';
+      inputReqTo.value = end || '';
+      if (start) {
+        lblReqFrom.textContent = start.replace('T', ' ');
+        lblReqFrom.classList.remove('placeholder');
+      } else {
+        lblReqFrom.textContent = 'Select start date & time';
+        lblReqFrom.classList.add('placeholder');
+      }
+      if (end) {
+        lblReqTo.textContent = end.replace('T', ' ');
+        lblReqTo.classList.remove('placeholder');
+      } else {
+        lblReqTo.textContent = 'Select end date & time';
+        lblReqTo.classList.add('placeholder');
+      }
+      const hasVal = Boolean(start || end);
+      cardReq.classList.toggle('has-value', hasVal);
+      clearReqBtn.style.display = hasVal ? 'flex' : 'none';
+    }
+
+    if (cardReq) {
+      cardReq.addEventListener('click', (e) => {
+        if (e.target.closest('#clear_requestTimestamp')) return;
+        openCustomDateRangePicker({
+          title: 'Request Timestamp Range',
+          subtitle: 'Filter tickets by request date and time range',
+          initialStart: inputReqFrom.value,
+          initialEnd: inputReqTo.value,
+          onApply: (startVal, endVal) => {
+            updateReqCardUi(startVal, endVal);
+          },
+          onClear: () => {
+            updateReqCardUi('', '');
+          }
+        });
+      });
+
+      clearReqBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        updateReqCardUi('', '');
+      });
+    }
+
+    const cardUpd = overlay.querySelector('#card_updateAt');
+    const inputUpdFrom = overlay.querySelector('#f_updateAtFrom');
+    const inputUpdTo = overlay.querySelector('#f_updateAtTo');
+    const lblUpdFrom = overlay.querySelector('#lbl_updateAtFrom');
+    const lblUpdTo = overlay.querySelector('#lbl_updateAtTo');
+    const clearUpdBtn = overlay.querySelector('#clear_updateAt');
+
+    function updateUpdCardUi(start, end) {
+      inputUpdFrom.value = start || '';
+      inputUpdTo.value = end || '';
+      if (start) {
+        lblUpdFrom.textContent = start.replace('T', ' ');
+        lblUpdFrom.classList.remove('placeholder');
+      } else {
+        lblUpdFrom.textContent = 'Select start date & time';
+        lblUpdFrom.classList.add('placeholder');
+      }
+      if (end) {
+        lblUpdTo.textContent = end.replace('T', ' ');
+        lblUpdTo.classList.remove('placeholder');
+      } else {
+        lblUpdTo.textContent = 'Select end date & time';
+        lblUpdTo.classList.add('placeholder');
+      }
+      const hasVal = Boolean(start || end);
+      cardUpd.classList.toggle('has-value', hasVal);
+      clearUpdBtn.style.display = hasVal ? 'flex' : 'none';
+    }
+
+    if (cardUpd) {
+      cardUpd.addEventListener('click', (e) => {
+        if (e.target.closest('#clear_updateAt')) return;
+        openCustomDateRangePicker({
+          title: 'Update At Range',
+          subtitle: 'Filter tickets by last update date and time range',
+          initialStart: inputUpdFrom.value,
+          initialEnd: inputUpdTo.value,
+          onApply: (startVal, endVal) => {
+            updateUpdCardUi(startVal, endVal);
+          },
+          onClear: () => {
+            updateUpdCardUi('', '');
+          }
+        });
+      });
+
+      clearUpdBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        updateUpdCardUi('', '');
+      });
+    }
+
+    // Reset fields inside modal
+    overlay.querySelector('#tsFilterResetModalBtn').addEventListener('click', () => {
+      updateReqCardUi('', '');
+      updateUpdCardUi('', '');
+      if (statusInput) statusInput.value = 'all';
+      if (statusLabel) statusLabel.textContent = 'All Statuses';
+      if (statusMenu) {
+        statusMenu.querySelectorAll('.custom-dropdown-option').forEach(o => o.classList.toggle('active', o.dataset.value === 'all'));
+      }
+      overlay.querySelector('#f_requestedBy').value = '';
+      overlay.querySelector('#f_checkerLine').value = '';
+      overlay.querySelector('#f_reason').value = '';
+      overlay.querySelector('#f_soNumber').value = '';
+      overlay.querySelector('#f_wave').value = '';
+      overlay.querySelector('#f_skuNumber').value = '';
+      overlay.querySelector('#f_productName').value = '';
+      overlay.querySelector('#f_originRackName').value = '';
+      overlay.querySelector('#f_foundAt').value = '';
+      overlay.querySelector('#f_assignedBy').value = '';
+      overlay.querySelector('#f_assignedTo').value = '';
+    });
+
+    // Apply filters
+    overlay.querySelector('#tsFilterApplyModalBtn').addEventListener('click', () => {
+      filterState.requestTimestampFrom = overlay.querySelector('#f_requestTimestampFrom').value.trim();
+      filterState.requestTimestampTo = overlay.querySelector('#f_requestTimestampTo').value.trim();
+      filterState.updateAtFrom = overlay.querySelector('#f_updateAtFrom').value.trim();
+      filterState.updateAtTo = overlay.querySelector('#f_updateAtTo').value.trim();
+      filterState.statusTicket = statusInput ? statusInput.value.trim() : 'all';
+      filterState.requestedBy = overlay.querySelector('#f_requestedBy').value.trim();
+      filterState.checkerLine = overlay.querySelector('#f_checkerLine').value.trim();
+      filterState.reason = overlay.querySelector('#f_reason').value.trim();
+      filterState.soNumber = overlay.querySelector('#f_soNumber').value.trim();
+      filterState.wave = overlay.querySelector('#f_wave').value.trim();
+      filterState.skuNumber = overlay.querySelector('#f_skuNumber').value.trim();
+      filterState.productName = overlay.querySelector('#f_productName').value.trim();
+      filterState.originRackName = overlay.querySelector('#f_originRackName').value.trim();
+      filterState.foundAt = overlay.querySelector('#f_foundAt').value.trim();
+      filterState.assignedBy = overlay.querySelector('#f_assignedBy').value.trim();
+      filterState.assignedTo = overlay.querySelector('#f_assignedTo').value.trim();
+
+      closeModal();
+      renderList();
+    });
+  }
 
   function updateKpis(allTickets) {
     const todayJakarta = getJakartaDateString(new Date());
@@ -181,23 +740,104 @@ export function renderTroubleShoot(container, currentUser) {
       t.statusTicket === 'Not Found' &&
       Boolean(t.updateAt) && getJakartaDateString(t.updateAt) === todayJakarta
     ).length;
-
-    if (badgeAll) badgeAll.textContent = allTickets.length;
-    if (badgeUnassigned) badgeUnassigned.textContent = openCount;
-    if (badgeAssigned) badgeAssigned.textContent = assignedCount;
   }
 
   function renderList() {
     const allTickets = db.getTroubleShootTickets();
     updateKpis(allTickets);
+    renderActiveFilterPills();
 
     let filtered = allTickets;
-    if (activeSubTab === 'unassigned') filtered = filtered.filter(t => t.statusTicket === 'Open');
-    else if (activeSubTab === 'assigned') filtered = filtered.filter(t => t.statusTicket === 'Assigned');
 
+    // 1. Request Timestamp Range
+    if (filterState.requestTimestampFrom) {
+      const fromMs = parseInputDateTime(filterState.requestTimestampFrom, false);
+      if (fromMs !== null) {
+        filtered = filtered.filter(t => parseJakartaTimestamp(t.requestTimestamp) >= fromMs);
+      }
+    }
+    if (filterState.requestTimestampTo) {
+      const toMs = parseInputDateTime(filterState.requestTimestampTo, true);
+      if (toMs !== null) {
+        filtered = filtered.filter(t => parseJakartaTimestamp(t.requestTimestamp) <= toMs);
+      }
+    }
+
+    // 2. Update At Range
+    if (filterState.updateAtFrom) {
+      const fromMs = parseInputDateTime(filterState.updateAtFrom, false);
+      if (fromMs !== null) {
+        filtered = filtered.filter(t => {
+          if (!t.updateAt) return false;
+          return parseJakartaTimestamp(t.updateAt) >= fromMs;
+        });
+      }
+    }
+    if (filterState.updateAtTo) {
+      const toMs = parseInputDateTime(filterState.updateAtTo, true);
+      if (toMs !== null) {
+        filtered = filtered.filter(t => {
+          if (!t.updateAt) return false;
+          return parseJakartaTimestamp(t.updateAt) <= toMs;
+        });
+      }
+    }
+
+    // 3. Status Ticket
+    if (filterState.statusTicket && filterState.statusTicket !== 'all') {
+      filtered = filtered.filter(t => String(t.statusTicket || '').toLowerCase() === filterState.statusTicket.toLowerCase());
+    }
+
+    // 4. Specific text fields
+    if (filterState.requestedBy) {
+      const q = filterState.requestedBy.toLowerCase();
+      filtered = filtered.filter(t => String(t.requestedBy || '').toLowerCase().includes(q) || String(t.staffId || '').toLowerCase().includes(q));
+    }
+    if (filterState.checkerLine) {
+      const q = filterState.checkerLine.toLowerCase();
+      filtered = filtered.filter(t => String(t.checkerLine || '').toLowerCase().includes(q));
+    }
+    if (filterState.reason) {
+      const q = filterState.reason.toLowerCase();
+      filtered = filtered.filter(t => String(t.reason || '').toLowerCase().includes(q));
+    }
+    if (filterState.soNumber) {
+      const q = filterState.soNumber.toLowerCase();
+      filtered = filtered.filter(t => String(t.soNumber || '').toLowerCase().includes(q));
+    }
+    if (filterState.wave) {
+      const q = filterState.wave.toLowerCase();
+      filtered = filtered.filter(t => String(t.wave || '').toLowerCase().includes(q));
+    }
+    if (filterState.skuNumber) {
+      const q = filterState.skuNumber.toLowerCase();
+      filtered = filtered.filter(t => String(t.skuNumber || '').toLowerCase().includes(q));
+    }
+    if (filterState.productName) {
+      const q = filterState.productName.toLowerCase();
+      filtered = filtered.filter(t => String(t.productName || '').toLowerCase().includes(q));
+    }
+    if (filterState.originRackName) {
+      const q = filterState.originRackName.toLowerCase();
+      filtered = filtered.filter(t => String(t.originRackName || '').toLowerCase().includes(q));
+    }
+    if (filterState.foundAt) {
+      const q = filterState.foundAt.toLowerCase();
+      filtered = filtered.filter(t => String(t.foundAt || '').toLowerCase().includes(q));
+    }
+    if (filterState.assignedBy) {
+      const q = filterState.assignedBy.toLowerCase();
+      filtered = filtered.filter(t => String(t.assignedBy || '').toLowerCase().includes(q));
+    }
+    if (filterState.assignedTo) {
+      const q = filterState.assignedTo.toLowerCase();
+      filtered = filtered.filter(t => String(t.assignedTo || '').toLowerCase().includes(q));
+    }
+
+    // 5. Global Search query
     if (searchQuery) {
       filtered = filtered.filter(t => {
-        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.requestedBy, t.assignedTo, t.originRackName, t.reason, t.wave].join(' ').toLowerCase();
+        const haystack = [t.id, t.soNumber, t.skuNumber, t.productName, t.requestedBy, t.assignedTo, t.originRackName, t.reason, t.wave, t.foundAt, t.checkerLine].join(' ').toLowerCase();
         return haystack.includes(searchQuery);
       });
     }
@@ -208,7 +848,7 @@ export function renderTroubleShoot(container, currentUser) {
       listContainer.innerHTML = `
         <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
           <span class="material-icons-round" style="font-size: 48px; opacity: 0.3;">troubleshoot</span>
-          <p style="margin-top: 8px; font-size: 13px;">No tickets match the current filter.</p>
+          <p style="margin-top: 8px; font-size: 13px;">No tickets match the current filters.</p>
         </div>
       `;
       return;
@@ -217,7 +857,9 @@ export function renderTroubleShoot(container, currentUser) {
     listContainer.innerHTML = filtered.map(t => {
       const statusClass = getStatusClass(t.statusTicket);
       const timeAgo = getTimeAgo(t.requestTimestamp);
-      const showAssignBtn = t.statusTicket === 'Open';
+      const isResolved = ['Found', 'Found Partial', 'Not Found'].includes(t.statusTicket);
+      const isAssignable = !isResolved;
+      const isReassign = t.statusTicket !== 'Open' && isAssignable;
 
       return `
         <div class="ts-ticket-card" data-id="${escapeHtml(t.id)}" style="background: #ffffff; border: 1.5px solid var(--border-light); border-radius: 14px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
@@ -244,11 +886,17 @@ export function renderTroubleShoot(container, currentUser) {
               ${t.troubleshootEvidence ? '<span style="color: #10b981; display: flex; align-items: center; gap: 2px;"><span class="material-icons-round" style="font-size: 14px;">verified</span> Evidence</span>' : ''}
               ${t.assignedTo ? `<span style="color: #7c3aed; font-weight: 600;">Assigned: ${escapeHtml(t.assignedTo)}</span>` : ''}
             </div>
-            ${showAssignBtn ? `
-              <button class="btn-primary ts-assign-btn" data-id="${escapeHtml(t.id)}" style="height: 28px; padding: 0 12px; font-size: 11px; font-weight: 700; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px;">
-                <span class="material-icons-round" style="font-size: 15px;">person_add</span> Assign
-              </button>
-            ` : `
+            ${isAssignable ? (
+              isReassign ? `
+                <button class="ts-assign-btn ts-reassign-btn" data-id="${escapeHtml(t.id)}" style="height: 28px; padding: 0 12px; font-size: 11px; font-weight: 700; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px; background: #f5f3ff; color: #7c3aed; border: 1.5px solid #ddd6fe; cursor: pointer; transition: all 0.2s;">
+                  <span class="material-icons-round" style="font-size: 15px;">swap_horiz</span> Reassign
+                </button>
+              ` : `
+                <button class="btn-primary ts-assign-btn" data-id="${escapeHtml(t.id)}" style="height: 28px; padding: 0 12px; font-size: 11px; font-weight: 700; border-radius: 20px; display: inline-flex; align-items: center; gap: 4px;">
+                  <span class="material-icons-round" style="font-size: 15px;">person_add</span> Assign
+                </button>
+              `
+            ) : `
               <span style="font-size: 11px; color: var(--primary-600); font-weight: 600; display: flex; align-items: center; gap: 2px;">View Details <span class="material-icons-round" style="font-size: 14px;">chevron_right</span></span>
             `}
           </div>
@@ -282,7 +930,9 @@ export function renderTroubleShoot(container, currentUser) {
     const statusClass = getStatusClass(ticket.statusTicket);
     const photoSrc = formatImageUrl(ticket.photo);
     const evidenceSrc = formatImageUrl(ticket.troubleshootEvidence);
-    const showAssignBtn = ticket.statusTicket === 'Open';
+    const isResolved = ['Found', 'Found Partial', 'Not Found'].includes(ticket.statusTicket);
+    const isAssignable = !isResolved;
+    const isReassign = ticket.statusTicket !== 'Open' && isAssignable;
 
     const overlay = document.createElement('div');
     overlay.id = 'tsDetailModal';
@@ -445,9 +1095,10 @@ export function renderTroubleShoot(container, currentUser) {
         <!-- Footer -->
         <div class="form-modal-footer-actions" style="padding: 16px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid var(--border-light); flex-shrink: 0; background: #ffffff;">
           <button type="button" class="btn-secondary" id="tsDetailCloseBtnBottom">Close</button>
-          ${showAssignBtn ? `
-            <button type="button" class="btn-primary" id="tsDetailAssignBtn" style="display: flex; align-items: center; gap: 4px;">
-              <span class="material-icons-round" style="font-size: 16px;">person_add</span> Assign Ticket
+          ${isAssignable ? `
+            <button type="button" class="btn-primary" id="tsDetailAssignBtn" style="display: flex; align-items: center; gap: 6px; ${isReassign ? 'background: #7c3aed; border-color: #6d28d9;' : ''}">
+              <span class="material-icons-round" style="font-size: 16px;">${isReassign ? 'swap_horiz' : 'person_add'}</span>
+              <span>${isReassign ? 'Reassign Ticket' : 'Assign Ticket'}</span>
             </button>
           ` : ''}
         </div>
@@ -474,6 +1125,10 @@ export function renderTroubleShoot(container, currentUser) {
     const existing = document.getElementById('tsAssignModal');
     if (existing) existing.remove();
 
+    const allTickets = db.getTroubleShootTickets();
+    const ticket = allTickets.find(t => String(t.id).trim() === String(ticketId).trim());
+    const isReassign = Boolean(ticket && ticket.statusTicket !== 'Open');
+
     // Get list of users with Troubleshooter role only
     const users = db.users || [];
     const assignableUsers = users.filter(u => (u.role || '').toLowerCase() === 'troubleshooter');
@@ -487,14 +1142,27 @@ export function renderTroubleShoot(container, currentUser) {
       <div class="modal-card" style="width: 90%; max-width: 440px; padding: 22px; border-radius: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.2); overflow: visible !important;">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
           <h3 style="margin: 0; font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; color: var(--text-primary);">
-            <span class="material-icons-round" style="color: #7c3aed; font-size: 24px;">person_add</span>
-            Assign Ticket: <span style="color: var(--primary-600);">${escapeHtml(ticketId)}</span>
+            <span class="material-icons-round" style="color: ${isReassign ? '#7c3aed' : 'var(--primary-600)'}; font-size: 24px;">${isReassign ? 'swap_horiz' : 'person_add'}</span>
+            <span>${isReassign ? 'Reassign' : 'Assign'} Ticket: <span style="color: var(--primary-600);">${escapeHtml(ticketId)}</span></span>
           </h3>
           <button type="button" id="tsAssignCloseIconBtn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center;" title="Close">
             <span class="material-icons-round" style="font-size: 20px;">close</span>
           </button>
         </div>
         
+        ${isReassign && ticket ? `
+          <div style="margin-bottom: 16px; padding: 10px 14px; background: #fbfbfe; border: 1.5px dashed #ddd6fe; border-radius: 12px; display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+            <div>
+              <span style="color: var(--text-muted); font-size: 11px; font-weight: 600; display: block;">Currently Assigned To:</span>
+              <strong style="color: #7c3aed; font-size: 13px;">${escapeHtml(ticket.assignedTo || 'None')}</strong>
+            </div>
+            <div style="text-align: right;">
+              <span style="color: var(--text-muted); font-size: 11px; font-weight: 600; display: block;">Current Status:</span>
+              <span class="ts-status-badge ${getStatusClass(ticket.statusTicket)}">${escapeHtml(ticket.statusTicket)}</span>
+            </div>
+          </div>
+        ` : ''}
+
         <div style="margin-bottom: 22px;">
           <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: block;">Select Troubleshooter</label>
           <input type="hidden" id="tsAssignSelect" value="">
@@ -528,8 +1196,9 @@ export function renderTroubleShoot(container, currentUser) {
 
         <div style="display: flex; gap: 10px; justify-content: flex-end;">
           <button id="tsAssignCancelBtn" class="btn-secondary" style="padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 700;">Cancel</button>
-          <button id="tsAssignConfirmBtn" class="btn-primary" style="padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
-            <span class="material-icons-round" style="font-size: 18px;">check</span> Assign Ticket
+          <button id="tsAssignConfirmBtn" class="btn-primary" style="padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px; ${isReassign ? 'background: #7c3aed; border-color: #6d28d9;' : ''}">
+            <span class="material-icons-round" style="font-size: 18px;">${isReassign ? 'swap_horiz' : 'check'}</span>
+            <span>${isReassign ? 'Confirm Reassign' : 'Assign Ticket'}</span>
           </button>
         </div>
       </div>
@@ -659,16 +1328,16 @@ export function renderTroubleShoot(container, currentUser) {
 
       const confirmBtn = overlay.querySelector('#tsAssignConfirmBtn');
       confirmBtn.disabled = true;
-      confirmBtn.innerHTML = '<span class="material-icons-round spin" style="font-size: 16px;">sync</span> Assigning...';
+      confirmBtn.innerHTML = `<span class="material-icons-round spin" style="font-size: 16px;">sync</span> ${isReassign ? 'Reassigning...' : 'Assigning...'}`;
 
       try {
         await db.assignTroubleShootTicket(ticketId, currentUser.name, selectedName);
         closeModal();
         renderList();
       } catch (err) {
-        alert('Assignment failed: ' + err.message);
+        alert((isReassign ? 'Reassignment' : 'Assignment') + ' failed: ' + err.message);
         confirmBtn.disabled = false;
-        confirmBtn.innerHTML = '<span class="material-icons-round" style="font-size: 16px;">check</span> Assign Ticket';
+        confirmBtn.innerHTML = `<span class="material-icons-round" style="font-size: 18px;">${isReassign ? 'swap_horiz' : 'check'}</span> ${isReassign ? 'Confirm Reassign' : 'Assign Ticket'}`;
       }
     });
   }

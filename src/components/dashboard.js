@@ -10,74 +10,86 @@ import { renderTsRequest } from './tsRequest.js';
 import { renderTroubleShoot } from './troubleShoot.js';
 import { renderTsTask } from './tsTask.js';
 import { db } from '../data/db.js';
-import { hasUserAccess, getUserAccessiblePages, ALL_PAGES } from '../utils/security.js';
+import { hasUserAccess, getUserAccessiblePages, getUserAccessibleMenu, ALL_PAGES } from '../utils/security.js';
 import { showBlockerLock, hideBlockerLock } from '../utils/blocker.js';
 
 export function renderDashboard(container, currentUser, onLogout) {
   let activeTab = 'home';
   let isCollapsed = localStorage.getItem('irms_sidebar_collapsed') === 'true';
 
-  // Evaluate accessible tabs for user
-  const accessiblePages = getUserAccessiblePages(currentUser);
-  const showMoreButton = accessiblePages.length > 4;
-
-  const primaryTabs = showMoreButton ? accessiblePages.slice(0, 4) : accessiblePages;
-  const extendedTabs = showMoreButton ? accessiblePages.slice(4) : [];
+  // Evaluate RBAC-filtered hierarchical menu
+  const accessibleMenu = getUserAccessibleMenu(currentUser);
 
   const canPickup = hasUserAccess(currentUser, 'requestPickup');
   const canPicking = hasUserAccess(currentUser, 'pickingTask');
   const canSoh = hasUserAccess(currentUser, 'soh');
   const canLostFound = hasUserAccess(currentUser, 'lostAndFound');
   const canMovement = hasUserAccess(currentUser, 'stockMovement');
+  const canTroubleShoot = hasUserAccess(currentUser, 'troubleShoot');
+  const canTsRequest = hasUserAccess(currentUser, 'tsRequest');
+  const canTsTask = hasUserAccess(currentUser, 'tsTask');
   const canAdmin = hasUserAccess(currentUser, 'admin');
 
-  // 1. Primary mobile tabs (up to 4) - rendered for both desktop & mobile
-  const primaryTabsHtml = primaryTabs.map(page => {
-    let badgeHtml = '';
-    if (page.key === 'requestPickup' || page.key === 'pickingTask' || page.key === 'stockMovement') {
-      badgeHtml = `<span class="nav-badge-count" data-badge="${page.key}" style="display: none;">0</span>`;
+  // Helper descriptions for mobile submenu modal
+  const itemDescriptions = {
+    requestPickup: 'Create & track pickup requests',
+    pickingTask: 'Warehouse picking execution',
+    lostAndFound: 'Investigate missing or misplaced items',
+    soh: 'Store inventory levels & locations',
+    sohwh: 'Warehouse stock lookup & inquiry',
+    stockMovement: 'Stock movements & deductions',
+    troubleShoot: 'Manage troubleshooting tickets',
+    tsRequest: 'Submit new troubleshoot request',
+    tsTask: 'Execute assigned troubleshoot tasks',
+    admin: 'Manage system settings & users'
+  };
+
+  // Build the hierarchical menu HTML
+  const menuHtml = accessibleMenu.map(entry => {
+    if (entry.type === 'item') {
+      const isDivider = entry.key === 'admin';
+      return `
+        ${isDivider ? '<div class="sidebar-divider desktop-only-nav-item"></div>' : ''}
+        <button class="nav-tab-item ${entry.key === 'home' ? 'active' : ''} ${entry.key === 'admin' ? 'nav-tab-admin' : ''}" data-tab="${entry.key}" title="${entry.label}">
+          <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+            <span class="material-icons-round">${entry.icon}</span>
+          </div>
+          <span class="nav-label">${entry.label}</span>
+        </button>
+      `;
     }
-    return `
-      <button class="nav-tab-item ${page.key === 'home' ? 'active' : ''}" data-tab="${page.key}" title="${page.label}">
-        <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-          <span class="material-icons-round">${page.icon}</span>
-          ${badgeHtml}
-        </div>
-        <span class="nav-label">${page.label}</span>
-      </button>
-    `;
-  }).join('');
 
-  // 2. Extended tabs (5th+ items) - visible on desktop sidebar only, opened via "More" modal on mobile
-  const extendedTabsHtml = extendedTabs.map(page => {
-    const isDivider = page.key === 'admin';
-    let badgeHtml = '';
-    if (page.key === 'requestPickup' || page.key === 'pickingTask' || page.key === 'stockMovement') {
-      badgeHtml = `<span class="nav-badge-count" data-badge="${page.key}" style="display: none;">0</span>`;
+    if (entry.type === 'group') {
+      const subItemsHtml = entry.children.map(child => {
+        return `
+          <button class="nav-tab-item nav-sub-item" data-tab="${child.key}" data-parent-group="${entry.key}" title="${child.label}">
+            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+              <span class="material-icons-round" style="font-size: 18px;">${child.icon}</span>
+              <span class="nav-badge-count" data-badge="${child.key}" style="display: none;">0</span>
+            </div>
+            <span class="nav-label">${child.label}</span>
+          </button>
+        `;
+      }).join('');
+
+      return `
+        <div class="nav-group" data-group="${entry.key}">
+          <button class="nav-tab-item nav-group-header" data-group-header="${entry.key}" title="${entry.label}">
+            <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
+              <span class="material-icons-round">${entry.icon}</span>
+              <span class="nav-badge-count group-badge" data-group-badge="${entry.key}" style="display: none;">0</span>
+            </div>
+            <span class="nav-label">${entry.label}</span>
+            <span class="material-icons-round nav-group-chevron">expand_more</span>
+          </button>
+          <div class="nav-group-submenu">
+            ${subItemsHtml}
+          </div>
+        </div>
+      `;
     }
-
-    return `
-      ${isDivider ? '<div class="sidebar-divider desktop-only-nav-item"></div>' : ''}
-      <button class="nav-tab-item desktop-only-nav-item ${page.key === 'admin' ? 'nav-tab-admin' : ''}" data-tab="${page.key}" title="${page.label}">
-        <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-          <span class="material-icons-round">${page.icon}</span>
-          ${badgeHtml}
-        </div>
-        <span class="nav-label">${page.label}</span>
-      </button>
-    `;
+    return '';
   }).join('');
-
-  // 3. More button (5th item on mobile if showMoreButton is true)
-  const mobileMoreBtnHtml = showMoreButton ? `
-    <button class="nav-tab-item mobile-only-nav-item" id="mobileMoreNavBtn" title="More Modules">
-      <div style="position: relative; display: inline-flex; align-items: center; justify-content: center;">
-        <span class="material-icons-round">grid_view</span>
-        <span class="nav-badge-count" data-badge="moreNavBtn" style="display: none;">0</span>
-      </div>
-      <span class="nav-label">More</span>
-    </button>
-  ` : '';
 
   container.innerHTML = `
     <div class="app-layout-root">
@@ -122,9 +134,7 @@ export function renderDashboard(container, currentUser, onLogout) {
         </div>
 
         <div class="sidebar-menu">
-          ${primaryTabsHtml}
-          ${extendedTabsHtml}
-          ${mobileMoreBtnHtml}
+          ${menuHtml}
         </div>
 
         <div class="sidebar-footer">
@@ -255,11 +265,7 @@ export function renderDashboard(container, currentUser, onLogout) {
   }
 
   // ── Reactive Badge Counters Update Function ──────────────────────────────
-  function updateNavBadgeCounters() {
-    const isSuper = (currentUser.role || '').toLowerCase() === 'super';
-    const myName = (currentUser.name || '').trim().toLowerCase();
-    const myId = (currentUser.staffId || '').trim().toLowerCase();
-
+  function getBadgeCounts() {
     // 1. Pickup Requests Active Count (Private per user unless elevated role)
     const userPickupRequests = db.getPickupRequestsForUser ? db.getPickupRequestsForUser(currentUser) : (db.requests || []);
     const activePickupCount = userPickupRequests.filter(r => {
@@ -281,43 +287,63 @@ export function renderDashboard(container, currentUser, onLogout) {
       return st === 'pending';
     }).length;
 
-    // Total count for Mobile More Button Badge
-    const totalMoreActiveCount = (canMovement ? activeMovementCount : 0);
+    // 4. Troubleshoot tickets (open/assigned)
+    const tsTickets = db.getTroubleShootTicketsForUser ? db.getTroubleShootTicketsForUser(currentUser) : (db.troubleShootTickets || []);
+    const activeTsTicketsCount = tsTickets.filter(t => {
+      const st = String(t.statusTicket || '').toLowerCase().trim();
+      return st === 'open' || st === 'assigned';
+    }).length;
 
-    // Apply to badge elements in DOM
-    container.querySelectorAll('.nav-badge-count[data-badge="requestPickup"]').forEach(el => {
-      if (canPickup && activePickupCount > 0) {
-        el.textContent = activePickupCount > 99 ? '99+' : activePickupCount;
-        el.style.display = 'inline-flex';
-      } else {
-        el.style.display = 'none';
-      }
+    // 5. TS Tasks (assigned to user / picked up)
+    const tsTasks = db.getTroubleShootTasksForUser ? db.getTroubleShootTasksForUser(currentUser) : (db.troubleShootTickets || []);
+    const activeTsTasksCount = tsTasks.filter(t => {
+      const st = String(t.statusTicket || '').toLowerCase().trim();
+      return st === 'assigned' || st === 'picked up';
+    }).length;
+
+    return {
+      requestPickup: canPickup ? activePickupCount : 0,
+      pickingTask: canPicking ? activePickingCount : 0,
+      stockMovement: canMovement ? activeMovementCount : 0,
+      troubleShoot: canTroubleShoot ? activeTsTicketsCount : 0,
+      tsTask: canTsTask ? activeTsTasksCount : 0,
+      tsRequest: 0,
+      lostAndFound: 0,
+      soh: 0,
+      sohwh: 0,
+      home: 0,
+      admin: 0
+    };
+  }
+
+  function updateNavBadgeCounters() {
+    const counts = getBadgeCounts();
+
+    // 1. Update individual sub-item badges
+    Object.keys(counts).forEach(key => {
+      const count = counts[key];
+      container.querySelectorAll(`.nav-badge-count[data-badge="${key}"]`).forEach(el => {
+        if (count > 0) {
+          el.textContent = count > 99 ? '99+' : count;
+          el.style.display = 'inline-flex';
+        } else {
+          el.style.display = 'none';
+        }
+      });
     });
 
-    container.querySelectorAll('.nav-badge-count[data-badge="pickingTask"]').forEach(el => {
-      if (canPicking && activePickingCount > 0) {
-        el.textContent = activePickingCount > 99 ? '99+' : activePickingCount;
-        el.style.display = 'inline-flex';
-      } else {
-        el.style.display = 'none';
-      }
-    });
-
-    container.querySelectorAll('.nav-badge-count[data-badge="stockMovement"]').forEach(el => {
-      if (canMovement && activeMovementCount > 0) {
-        el.textContent = activeMovementCount > 99 ? '99+' : activeMovementCount;
-        el.style.display = 'inline-flex';
-      } else {
-        el.style.display = 'none';
-      }
-    });
-
-    container.querySelectorAll('.nav-badge-count[data-badge="moreNavBtn"]').forEach(el => {
-      if (totalMoreActiveCount > 0) {
-        el.textContent = totalMoreActiveCount > 99 ? '99+' : totalMoreActiveCount;
-        el.style.display = 'inline-flex';
-      } else {
-        el.style.display = 'none';
+    // 2. Update group badges (sum of permitted children in each group)
+    accessibleMenu.forEach(entry => {
+      if (entry.type === 'group' && entry.children) {
+        const groupTotal = entry.children.reduce((acc, child) => acc + (counts[child.key] || 0), 0);
+        container.querySelectorAll(`.nav-badge-count[data-group-badge="${entry.key}"]`).forEach(el => {
+          if (groupTotal > 0) {
+            el.textContent = groupTotal > 99 ? '99+' : groupTotal;
+            el.style.display = 'inline-flex';
+          } else {
+            el.style.display = 'none';
+          }
+        });
       }
     });
   }
@@ -439,6 +465,94 @@ export function renderDashboard(container, currentUser, onLogout) {
     setTimeout(() => toast.remove(), 3500);
   }
 
+  function isMobileView() {
+    return window.innerWidth <= 768 || !!document.querySelector('.ios-screen');
+  }
+
+  // ── Mobile Submenu Modal (Positioned on top of bottom navigation bar) ──────
+  function openMobileSubmenuModal(groupKey) {
+    const existing = document.getElementById('mobileSubmenuModal');
+    if (existing) existing.remove();
+
+    const groupEntry = accessibleMenu.find(m => m.type === 'group' && m.key === groupKey);
+    if (!groupEntry || !groupEntry.children || groupEntry.children.length === 0) return;
+
+    const counts = getBadgeCounts();
+
+    const itemsHtml = groupEntry.children.map(child => {
+      const isActive = activeTab === child.key;
+      const count = counts[child.key] || 0;
+      const badgeHtml = count > 0 
+        ? `<span class="nav-badge-count" style="position: static; margin-left: 6px; display: inline-flex;">${count > 99 ? '99+' : count}</span>` 
+        : '';
+      const desc = itemDescriptions[child.key] || 'Access module';
+
+      return `
+        <button class="mobile-sub-card ${isActive ? 'active' : ''}" data-tab="${child.key}">
+          <div class="mobile-sub-icon-wrap">
+            <span class="material-icons-round">${child.icon}</span>
+          </div>
+          <div class="mobile-sub-content">
+            <div class="mobile-sub-title-row">
+              <span class="mobile-sub-title">${child.label}</span>
+              ${badgeHtml}
+            </div>
+            <span class="mobile-sub-desc">${desc}</span>
+          </div>
+          <span class="material-icons-round mobile-sub-arrow">chevron_right</span>
+        </button>
+      `;
+    }).join('');
+
+    const modalOverlay = document.createElement('div');
+    modalOverlay.id = 'mobileSubmenuModal';
+    modalOverlay.className = 'mobile-submenu-overlay';
+
+    modalOverlay.innerHTML = `
+      <div class="mobile-submenu-card">
+        <!-- Drag indicator pill -->
+        <div class="mobile-submenu-pill"></div>
+
+        <!-- Header -->
+        <div class="mobile-submenu-header">
+          <div class="mobile-submenu-header-title">
+            <div class="mobile-submenu-header-icon">
+              <span class="material-icons-round">${groupEntry.icon}</span>
+            </div>
+            <div>
+              <h3 style="margin: 0; font-size: 15px; font-weight: 800; color: var(--text-primary);">${groupEntry.label} Modules</h3>
+              <span style="font-size: 11px; color: var(--text-muted); font-weight: 500;">Select an action or module</span>
+            </div>
+          </div>
+          <button id="closeMobileSubmenuBtn" class="mobile-submenu-close-btn" title="Close">
+            <span class="material-icons-round">close</span>
+          </button>
+        </div>
+
+        <!-- List of permitted sub-items -->
+        <div class="mobile-submenu-list">
+          ${itemsHtml}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modalOverlay);
+
+    const closeModal = () => modalOverlay.remove();
+    modalOverlay.querySelector('#closeMobileSubmenuBtn').addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+
+    modalOverlay.querySelectorAll('.mobile-sub-card').forEach(cardBtn => {
+      cardBtn.addEventListener('click', () => {
+        const tab = cardBtn.dataset.tab;
+        closeModal();
+        switchTab(tab);
+      });
+    });
+  }
+
   async function switchTab(tabId) {
     const tabObj = ALL_PAGES.find(p => p.key === tabId) || { label: tabId };
     
@@ -451,16 +565,32 @@ export function renderDashboard(container, currentUser, onLogout) {
     activeTab = tabId;
     window.irmsActiveTab = tabId;
     
-    navTabs.forEach(btn => {
-      if (btn.dataset.tab) {
-        btn.classList.toggle('active', btn.dataset.tab === tabId);
+    // Find parent group (if any)
+    let parentGroupKey = null;
+    accessibleMenu.forEach(entry => {
+      if (entry.type === 'group' && entry.children && entry.children.some(c => c.key === tabId)) {
+        parentGroupKey = entry.key;
       }
     });
 
-    const moreBtn = container.querySelector('#mobileMoreNavBtn');
-    if (moreBtn) {
-      const isExtendedActive = extendedTabs.some(t => t.key === tabId);
-      moreBtn.classList.toggle('active', isExtendedActive);
+    // Update active tab buttons (standalone items + sub-items)
+    container.querySelectorAll('.nav-tab-item[data-tab]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tab === tabId);
+    });
+
+    // Update group headers (for mobile bottom bar and desktop sidebar)
+    container.querySelectorAll('.nav-group-header').forEach(header => {
+      const isParentActive = header.dataset.groupHeader === parentGroupKey;
+      header.classList.toggle('active-parent', isParentActive);
+      header.classList.toggle('active', isParentActive);
+    });
+
+    // On desktop, auto-expand parent group if tab belongs to it
+    if (parentGroupKey && !isMobileView()) {
+      const parentGroupEl = container.querySelector(`.nav-group[data-group="${parentGroupKey}"]`);
+      if (parentGroupEl && !parentGroupEl.classList.contains('expanded')) {
+        parentGroupEl.classList.add('expanded');
+      }
     }
 
     const targetArea = tabContentArea || container.querySelector('#tabContentArea');
@@ -489,113 +619,33 @@ export function renderDashboard(container, currentUser, onLogout) {
     }
   }
 
-  // Attach tab click handlers
-  navTabs.forEach(btn => {
-    if (btn.dataset.tab) {
-      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-    }
+  // Attach tab click handlers for all items with [data-tab]
+  container.querySelectorAll('.nav-tab-item[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  // Attach Mobile More Menu button listener dynamically
-  const mobileMoreBtn = container.querySelector('#mobileMoreNavBtn');
-  if (mobileMoreBtn) {
-    mobileMoreBtn.addEventListener('click', (e) => {
+  // Attach group header click handlers (toggle on desktop, modal on mobile)
+  container.querySelectorAll('.nav-group-header').forEach(headerBtn => {
+    headerBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      openMobileMoreNavigationModal();
-    });
-  }
+      const groupKey = headerBtn.dataset.groupHeader;
 
-  // Mobile More Navigation Bottom Sheet Drawer
-  function openMobileMoreNavigationModal() {
-    const existing = document.getElementById('mobileMoreNavModal');
-    if (existing) existing.remove();
-
-    if (!extendedTabs || extendedTabs.length === 0) return;
-
-    const isSuper = (currentUser.role || '').toLowerCase() === 'super';
-    const myName = (currentUser.name || '').trim().toLowerCase();
-    const myId = (currentUser.staffId || '').trim().toLowerCase();
-
-    const movements = db.getStockMovements ? db.getStockMovements() : (db.stockMovements || []);
-    const activeMovementCount = movements.filter(m => {
-      const st = String(m.status || '').toLowerCase();
-      if (st === 'completed' || st === 'done' || st === 'cancelled' || st === 'canceled') {
-        return false;
+      if (isMobileView()) {
+        openMobileSubmenuModal(groupKey);
+      } else {
+        // Desktop: toggle submenu expansion
+        if (isCollapsed) {
+          isCollapsed = false;
+          sidebarNav.classList.remove('collapsed');
+          localStorage.setItem('irms_sidebar_collapsed', 'false');
+        }
+        const navGroup = headerBtn.closest('.nav-group');
+        if (navGroup) {
+          navGroup.classList.toggle('expanded');
+        }
       }
-      if (isSuper) return true;
-      const sName = (m.staffName || '').trim().toLowerCase();
-      const aBy = (m.assignedBy || '').trim().toLowerCase();
-      return sName === myName || sName === myId || aBy === myName || aBy === myId;
-    }).length;
-
-    const modalOverlay = document.createElement('div');
-    modalOverlay.id = 'mobileMoreNavModal';
-    modalOverlay.className = 'modal-overlay';
-    modalOverlay.style.cssText = 'z-index: 5000; align-items: flex-end; justify-content: center; padding: 12px; animation: fadeIn 0.2s ease;';
-
-    const cardsHtml = extendedTabs.map(t => {
-      const isActive = activeTab === t.key;
-      let badgeHtml = '';
-      if (t.key === 'stockMovement' && activeMovementCount > 0) {
-        badgeHtml = `<span class="nav-badge-count" style="top: -4px; right: -4px;">${activeMovementCount}</span>`;
-      }
-      return `
-        <button class="more-nav-card ${isActive ? 'active' : ''}" data-tab="${t.key}" style="display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 14px; border: 1.5px solid ${isActive ? 'var(--primary-600)' : 'var(--border-light)'}; background: ${isActive ? 'var(--primary-50)' : '#ffffff'}; text-align: left; cursor: pointer;">
-          <div style="width: 38px; height: 38px; border-radius: 10px; background: #eff6ff; color: var(--primary-600); display: flex; align-items: center; justify-content: center; flex-shrink: 0; position: relative;">
-            <span class="material-icons-round" style="font-size: 20px;">${t.icon}</span>
-            ${badgeHtml}
-          </div>
-          <div>
-            <div style="font-size: 13px; font-weight: 700; color: var(--text-primary);">${t.label}</div>
-            <div style="font-size: 10px; color: var(--text-muted);">Access module</div>
-          </div>
-        </button>
-      `;
-    }).join('');
-
-    modalOverlay.innerHTML = `
-      <div class="modal-card form-modal-card" style="width: calc(100% - 24px); max-width: 440px; margin: 0 auto calc(80px + env(safe-area-inset-bottom, 0px)) auto; border-radius: 24px; padding: 20px 18px 24px; box-sizing: border-box; background: #ffffff; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.25); animation: slideUpSheet 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
-        <!-- Top Drag Handle Indicator -->
-        <div style="width: 40px; height: 4px; background: #cbd5e1; border-radius: 4px; margin: 0 auto 16px auto;"></div>
-
-        <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 12px; margin-bottom: 16px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="material-icons-round" style="color: var(--primary-600); font-size: 22px;">grid_view</span>
-            <h3 style="margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary);">Navigation Menu</h3>
-          </div>
-          <button id="closeMoreNavBtn" style="border: none; background: #f1f5f9; cursor: pointer; padding: 6px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-            <span class="material-icons-round" style="color: var(--text-secondary); font-size: 18px;">close</span>
-          </button>
-        </div>
-
-        <!-- Extended Menu Options Grid -->
-        <div style="display: flex; flex-direction: column; gap: 12px;">
-          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Permitted Modules</div>
-
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-            ${cardsHtml}
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modalOverlay);
-
-    const closeModal = () => modalOverlay.remove();
-    modalOverlay.querySelector('#closeMoreNavBtn').addEventListener('click', closeModal);
-    modalOverlay.addEventListener('click', (e) => {
-      if (e.target === modalOverlay) closeModal();
     });
-
-    modalOverlay.querySelectorAll('.more-nav-card').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        closeModal();
-        switchTab(tab);
-      });
-    });
-  }
+  });
 
   // Initialize with 'home' tab
   switchTab(activeTab);

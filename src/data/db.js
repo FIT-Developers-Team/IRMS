@@ -3202,8 +3202,9 @@ class DatabaseService {
     if (idx === -1) throw new Error(`Troubleshoot ticket "${ticketId}" not found`);
 
     const ticket = this.troubleShootTickets[idx];
-    if (ticket.statusTicket !== 'Open') {
-      throw new Error('Only Open tickets can be assigned');
+    const resolvedStatuses = ['Found', 'Found Partial', 'Not Found'];
+    if (resolvedStatuses.includes(ticket.statusTicket)) {
+      throw new Error(`Ticket is already ${ticket.statusTicket} and cannot be reassigned`);
     }
 
     const updateAt = formatJakartaDateTime(new Date());
@@ -3213,6 +3214,7 @@ class DatabaseService {
       statusTicket: 'Assigned',
       assignedBy: String(assignedBy).trim(),
       assignedTo: String(assignedTo).trim(),
+      pickedBy: '',
       updateAt
     };
     this.persistTroubleShoot();

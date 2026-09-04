@@ -1588,13 +1588,14 @@ function handleAssignTroubleShoot(ss, data) {
   var values = tsSheet.getDataRange().getValues();
   var headers = values[0];
 
-  var idCol = -1, statusCol = -1, assignedByCol = -1, assignedToCol = -1, updateAtCol = -1;
+  var idCol = -1, statusCol = -1, assignedByCol = -1, assignedToCol = -1, pickedByCol = -1, updateAtCol = -1;
   for (var h = 0; h < headers.length; h++) {
     var cleanH = String(headers[h]).toLowerCase().replace(/[^a-z0-9]/g, '');
     if (cleanH === 'id') idCol = h;
     if (cleanH === 'statusticket') statusCol = h;
     if (cleanH === 'assignedby') assignedByCol = h;
     if (cleanH === 'assignedto') assignedToCol = h;
+    if (cleanH === 'pickedby') pickedByCol = h;
     if (cleanH === 'updateat') updateAtCol = h;
   }
 
@@ -1607,15 +1608,16 @@ function handleAssignTroubleShoot(ss, data) {
   for (var r = 1; r < values.length; r++) {
     if (String(values[r][idCol]).trim() === ticketId) {
       var currentStatus = String(values[r][statusCol] || '').trim();
-      if (currentStatus !== 'Open') {
+      if (currentStatus === 'Found' || currentStatus === 'Found Partial' || currentStatus === 'Not Found') {
         return ContentService
-          .createTextOutput(JSON.stringify({ result: "error", message: "Ticket is no longer Open (current: " + currentStatus + ")" }))
+          .createTextOutput(JSON.stringify({ result: "error", message: "Ticket is already " + currentStatus + " and cannot be reassigned" }))
           .setMimeType(ContentService.MimeType.JSON);
       }
       var updateAtFormatted = formatJakartaDateTime(data.updateAt || new Date());
       if (statusCol !== -1) tsSheet.getRange(r + 1, statusCol + 1).setValue('Assigned');
       if (assignedByCol !== -1) tsSheet.getRange(r + 1, assignedByCol + 1).setValue(String(data.assignedBy || ''));
       if (assignedToCol !== -1) tsSheet.getRange(r + 1, assignedToCol + 1).setValue(String(data.assignedTo || ''));
+      if (pickedByCol !== -1) tsSheet.getRange(r + 1, pickedByCol + 1).setValue('');
       if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setNumberFormat("yyyy-MM-dd HH:mm:ss").setValue(updateAtFormatted);
       break;
     }
