@@ -3233,6 +3233,63 @@ class DatabaseService {
     return this.troubleShootTickets[idx];
   }
 
+  async assignTroubleShootTicketsBulk(ticketIds, assignedBy, assignedTo) {
+    if (!Array.isArray(ticketIds) || ticketIds.length === 0) {
+      throw new Error('No tickets selected for assignment');
+    }
+
+    const resolvedStatuses = ['Found', 'Found Partial', 'Not Found'];
+    const updateAt = formatJakartaDateTime(new Date());
+    const validIds = [];
+
+    for (const ticketId of ticketIds) {
+      const idx = this.troubleShootTickets.findIndex(t => String(t.id).trim() === String(ticketId).trim());
+      if (idx !== -1) {
+        const ticket = this.troubleShootTickets[idx];
+        if (!resolvedStatuses.includes(ticket.statusTicket)) {
+          this.troubleShootTickets[idx] = {
+            ...ticket,
+            statusTicket: 'Assigned',
+            assignedBy: String(assignedBy).trim(),
+            assignedTo: String(assignedTo).trim(),
+            pickedBy: '',
+            updateAt
+          };
+          validIds.push(String(ticket.id).trim());
+        }
+      }
+    }
+
+    if (validIds.length === 0) {
+      throw new Error('None of the selected tickets are eligible for assignment');
+    }
+
+    this.persistTroubleShoot();
+    this.notifyListeners();
+
+    if (this.webAppUrl) {
+      try {
+        await fetch(this.webAppUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'assignTroubleShoot',
+            ticketIds: validIds,
+            assignedBy: String(assignedBy).trim(),
+            assignedTo: String(assignedTo).trim(),
+            updateAt
+          })
+        });
+        setTimeout(() => this.syncGoogleSheets(['troubleShoot']), 2500);
+      } catch (err) {
+        console.error('Failed to push bulk assignTroubleShoot to WebApp:', err);
+      }
+    }
+
+    return validIds;
+  }
+
   async pickTroubleShootTicket(ticketId, currentUser) {
     const idx = this.troubleShootTickets.findIndex(t => String(t.id).trim() === String(ticketId).trim());
     if (idx === -1) throw new Error(`Troubleshoot ticket "${ticketId}" not found`);

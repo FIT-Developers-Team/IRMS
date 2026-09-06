@@ -110,6 +110,12 @@ export function renderTroubleShoot(container, currentUser) {
           <span id="tsFilterCountBadge" class="filter-count-badge" style="display: none;">0</span>
         </button>
 
+        <button id="tsSelectModeBtn" class="btn-secondary" style="height: 38px; padding: 0 14px; border-radius: 10px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: 1.5px solid var(--border-light); background: #ffffff; white-space: nowrap; transition: all 0.2s;">
+          <span class="material-icons-round" style="font-size: 18px; color: var(--primary-600);">checklist</span>
+          <span id="tsSelectModeText">Select Mode</span>
+          <span id="tsSelectedCountBadge" class="filter-count-badge" style="display: none; background: var(--primary-600); color: #ffffff;">0</span>
+        </button>
+
         <button id="tsResetFilterBtn" class="btn-secondary" style="height: 38px; padding: 0 12px; border-radius: 10px; font-size: 12px; font-weight: 600; display: none; align-items: center; gap: 4px; cursor: pointer; border: 1.5px dashed #fca5a5; background: #fff5f5; color: #dc2626; white-space: nowrap;" title="Clear all filters">
           <span class="material-icons-round" style="font-size: 16px;">clear_all</span>
           <span>Reset</span>
@@ -123,8 +129,14 @@ export function renderTroubleShoot(container, currentUser) {
       <div id="tsAdminScrollArea" style="flex: 1; min-height: 0; overflow-y: auto; margin-top: 12px; padding-right: 2px;">
         <div id="tsAdminList"></div>
       </div>
+
+      <!-- Floating Bulk Action Bar Container -->
+      <div id="tsBulkActionBarContainer" style="display: none; margin-top: 10px; flex-shrink: 0;"></div>
     </div>
   `;
+
+  let isSelectMode = false;
+  const selectedTicketIds = new Set();
 
   const searchInput = container.querySelector('#tsAdminSearch');
   const listContainer = container.querySelector('#tsAdminList');
@@ -133,6 +145,10 @@ export function renderTroubleShoot(container, currentUser) {
   const resetFilterBtn = container.querySelector('#tsResetFilterBtn');
   const activePillsContainer = container.querySelector('#tsActiveFilterPills');
   const filterBadge = container.querySelector('#tsFilterCountBadge');
+  const selectModeBtn = container.querySelector('#tsSelectModeBtn');
+  const selectModeText = container.querySelector('#tsSelectModeText');
+  const selectedCountBadge = container.querySelector('#tsSelectedCountBadge');
+  const bulkActionBarContainer = container.querySelector('#tsBulkActionBarContainer');
 
   // KPI Toggle
   const toggleKpiBtn = container.querySelector('#tsToggleKpiBtn');
@@ -152,6 +168,41 @@ export function renderTroubleShoot(container, currentUser) {
         toggleKpiText.textContent = 'Show KPIs';
         toggleKpiIcon.textContent = 'expand_more';
       }
+    });
+  }
+
+  function updateSelectModeUi() {
+    if (!selectModeBtn) return;
+    if (isSelectMode) {
+      selectModeBtn.style.background = 'var(--primary-50, #eff6ff)';
+      selectModeBtn.style.borderColor = 'var(--primary-600)';
+      selectModeBtn.style.color = 'var(--primary-700)';
+      if (selectModeText) selectModeText.textContent = 'Exit Selection';
+      if (selectedCountBadge) {
+        if (selectedTicketIds.size > 0) {
+          selectedCountBadge.style.display = 'inline-flex';
+          selectedCountBadge.textContent = selectedTicketIds.size;
+        } else {
+          selectedCountBadge.style.display = 'none';
+        }
+      }
+    } else {
+      selectModeBtn.style.background = '#ffffff';
+      selectModeBtn.style.borderColor = 'var(--border-light)';
+      selectModeBtn.style.color = 'var(--text-primary)';
+      if (selectModeText) selectModeText.textContent = 'Select Mode';
+      if (selectedCountBadge) selectedCountBadge.style.display = 'none';
+    }
+  }
+
+  if (selectModeBtn) {
+    selectModeBtn.addEventListener('click', () => {
+      isSelectMode = !isSelectMode;
+      if (!isSelectMode) {
+        selectedTicketIds.clear();
+      }
+      updateSelectModeUi();
+      renderList();
     });
   }
 
@@ -854,17 +905,42 @@ export function renderTroubleShoot(container, currentUser) {
       return;
     }
 
+    const eligibleFilteredTickets = filtered.filter(t => !['Found', 'Found Partial', 'Not Found', 'Picked Up'].includes(t.statusTicket));
+
+    // Clean up any stale selected IDs
+    const allEligibleIds = new Set(allTickets.filter(t => !['Found', 'Found Partial', 'Not Found', 'Picked Up'].includes(t.statusTicket)).map(t => t.id));
+    for (const id of Array.from(selectedTicketIds)) {
+      if (!allEligibleIds.has(id)) {
+        selectedTicketIds.delete(id);
+      }
+    }
+    updateSelectModeUi();
+
     listContainer.innerHTML = filtered.map(t => {
       const statusClass = getStatusClass(t.statusTicket);
       const timeAgo = getTimeAgo(t.requestTimestamp);
       const isResolved = ['Found', 'Found Partial', 'Not Found'].includes(t.statusTicket);
       const isAssignable = !isResolved;
       const isReassign = t.statusTicket !== 'Open' && isAssignable;
+      const isSelected = selectedTicketIds.has(t.id);
+
+      const checkboxHtml = isSelectMode ? (
+        isAssignable ? `
+          <input type="checkbox" class="ts-card-select-checkbox" data-id="${escapeHtml(t.id)}" ${isSelected ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: var(--primary-600); cursor: pointer; margin-right: 6px; flex-shrink: 0;" />
+        ` : `
+          <input type="checkbox" disabled title="Only Open or Assigned tickets can be selected" style="width: 18px; height: 18px; opacity: 0.25; cursor: not-allowed; margin-right: 6px; flex-shrink: 0;" />
+        `
+      ) : '';
+
+      const cardStyle = isSelected
+        ? 'background: #f0f7ff; border: 2px solid var(--primary-600); border-radius: 14px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(37,99,235,0.08);'
+        : 'background: #ffffff; border: 1.5px solid var(--border-light); border-radius: 14px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.02);';
 
       return `
-        <div class="ts-ticket-card" data-id="${escapeHtml(t.id)}" style="background: #ffffff; border: 1.5px solid var(--border-light); border-radius: 14px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+        <div class="ts-ticket-card" data-id="${escapeHtml(t.id)}" style="${cardStyle}">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div style="display: flex; align-items: center; gap: 6px;">
+              ${checkboxHtml}
               <span class="material-icons-round" style="font-size: 16px; color: var(--primary-600);">confirmation_number</span>
               <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">${escapeHtml(t.id)}</span>
             </div>
@@ -904,13 +980,44 @@ export function renderTroubleShoot(container, currentUser) {
       `;
     }).join('');
 
-    // Attach card click handlers for details popup
+    // Attach card click handlers for details popup or selection toggle
     listContainer.querySelectorAll('.ts-ticket-card').forEach(card => {
       card.addEventListener('click', (e) => {
         if (e.target.closest('.ts-assign-btn')) return; // ignore click on assign button
         const ticketId = card.dataset.id;
         const ticket = allTickets.find(t => t.id === ticketId);
-        if (ticket) openDetailModal(ticket);
+        if (!ticket) return;
+
+        if (isSelectMode) {
+          const isEligible = !['Found', 'Found Partial', 'Not Found', 'Picked Up'].includes(ticket.statusTicket);
+          if (isEligible) {
+            if (selectedTicketIds.has(ticketId)) {
+              selectedTicketIds.delete(ticketId);
+            } else {
+              selectedTicketIds.add(ticketId);
+            }
+            updateSelectModeUi();
+            renderList();
+          }
+          return;
+        }
+
+        openDetailModal(ticket);
+      });
+    });
+
+    // Checkbox click handler (prevent bubbling to card)
+    listContainer.querySelectorAll('.ts-card-select-checkbox').forEach(cb => {
+      cb.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const ticketId = cb.dataset.id;
+        if (cb.checked) {
+          selectedTicketIds.add(ticketId);
+        } else {
+          selectedTicketIds.delete(ticketId);
+        }
+        updateSelectModeUi();
+        renderList();
       });
     });
 
@@ -920,6 +1027,301 @@ export function renderTroubleShoot(container, currentUser) {
         e.stopPropagation();
         openAssignModal(btn.dataset.id);
       });
+    });
+
+    // Render bulk action bar
+    renderBulkActionBar(eligibleFilteredTickets, allTickets);
+  }
+
+  function renderBulkActionBar(eligibleTickets, allTickets) {
+    if (!bulkActionBarContainer) return;
+    if (!isSelectMode) {
+      bulkActionBarContainer.style.display = 'none';
+      bulkActionBarContainer.innerHTML = '';
+      return;
+    }
+
+    bulkActionBarContainer.style.display = 'block';
+
+    const visibleEligibleIds = eligibleTickets.map(t => t.id);
+    const allVisibleSelected = visibleEligibleIds.length > 0 && visibleEligibleIds.every(id => selectedTicketIds.has(id));
+
+    bulkActionBarContainer.innerHTML = `
+      <div class="bulk-action-bar" style="display: flex; justify-content: space-between; align-items: center; background: #ffffff; border: 1.5px solid var(--primary-300); border-radius: 14px; padding: 12px 18px; box-shadow: 0 10px 25px -5px rgba(13, 71, 161, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1); flex-wrap: wrap; gap: 12px; animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <button type="button" id="tsBulkSelectAllBtn" class="btn-secondary" style="height: 34px; padding: 0 12px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: 1.5px solid var(--border-light); background: #ffffff;">
+            <span class="material-icons-round" style="font-size: 18px; color: var(--primary-600);">${allVisibleSelected ? 'deselect' : 'select_all'}</span>
+            <span>${allVisibleSelected ? 'Deselect Visible' : 'Select All Visible'}</span>
+          </button>
+          <span style="font-size: 13px; font-weight: 700; color: var(--text-primary);">
+            <span style="color: var(--primary-600); font-weight: 800;">${selectedTicketIds.size}</span> of ${eligibleTickets.length} eligible selected
+          </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button type="button" id="tsBulkCancelBtn" class="btn-secondary" style="height: 34px; padding: 0 14px; font-size: 12px; font-weight: 600; border-radius: 8px; cursor: pointer;">
+            Cancel
+          </button>
+          <button type="button" id="tsBulkAssignBtn" class="btn-primary" ${selectedTicketIds.size === 0 ? 'disabled' : ''} style="height: 34px; padding: 0 16px; font-size: 12px; font-weight: 700; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; ${selectedTicketIds.size === 0 ? 'opacity: 0.5; cursor: not-allowed;' : 'cursor: pointer;'}">
+            <span class="material-icons-round" style="font-size: 18px;">assignment_ind</span>
+            <span>Assign Selected (${selectedTicketIds.size})</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Select all visible toggle
+    bulkActionBarContainer.querySelector('#tsBulkSelectAllBtn')?.addEventListener('click', () => {
+      if (allVisibleSelected) {
+        visibleEligibleIds.forEach(id => selectedTicketIds.delete(id));
+      } else {
+        visibleEligibleIds.forEach(id => selectedTicketIds.add(id));
+      }
+      updateSelectModeUi();
+      renderList();
+    });
+
+    // Cancel button
+    bulkActionBarContainer.querySelector('#tsBulkCancelBtn')?.addEventListener('click', () => {
+      isSelectMode = false;
+      selectedTicketIds.clear();
+      updateSelectModeUi();
+      renderList();
+    });
+
+    // Bulk assign button
+    bulkActionBarContainer.querySelector('#tsBulkAssignBtn')?.addEventListener('click', () => {
+      if (selectedTicketIds.size === 0) return;
+      openBulkAssignModal(Array.from(selectedTicketIds), allTickets);
+    });
+  }
+
+  function openBulkAssignModal(selectedIds, allTickets) {
+    const existing = document.getElementById('tsBulkAssignModal');
+    if (existing) existing.remove();
+
+    const selectedTickets = allTickets.filter(t => selectedIds.includes(t.id));
+    const users = db.users || [];
+    const assignableUsers = users.filter(u => (u.role || '').toLowerCase() === 'troubleshooter');
+
+    const overlay = document.createElement('div');
+    overlay.id = 'tsBulkAssignModal';
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'display:flex; align-items:center; justify-content:center; z-index:9999;';
+
+    overlay.innerHTML = `
+      <div class="modal-card" style="width: 92%; max-width: 500px; padding: 22px; border-radius: 20px; box-shadow: 0 16px 40px rgba(0,0,0,0.2); overflow: visible !important; max-height: 90vh; display: flex; flex-direction: column;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-shrink: 0;">
+          <h3 style="margin: 0; font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; color: var(--text-primary);">
+            <span class="material-icons-round" style="color: var(--primary-600); font-size: 24px;">assignment_ind</span>
+            <span>Assign <strong style="color: var(--primary-600);">${selectedIds.length}</strong> Tickets</span>
+          </h3>
+          <button type="button" id="tsBulkAssignCloseIconBtn" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 6px; display: flex; align-items: center;" title="Close">
+            <span class="material-icons-round" style="font-size: 20px;">close</span>
+          </button>
+        </div>
+
+        <!-- Selected Tickets Preview List -->
+        <div style="margin-bottom: 16px; flex-shrink: 0;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px;">
+            Selected Tickets (${selectedTickets.length})
+          </div>
+          <div style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--surface-body, #f8fafc); border-radius: 12px; border: 1px solid var(--border-light);">
+            ${selectedTickets.map(t => `
+              <div style="display: flex; align-items: center; justify-content: space-between; background: #ffffff; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-light); font-size: 12px;">
+                <div style="display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden;">
+                  <strong style="color: var(--primary-700); font-size: 11px; flex-shrink: 0;">${escapeHtml(t.id)}</strong>
+                  <span style="color: var(--text-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">SO: ${escapeHtml(t.soNumber)}</span>
+                  <span style="color: var(--text-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">· ${escapeHtml(t.productName)}</span>
+                </div>
+                <span class="ts-status-badge ${getStatusClass(t.statusTicket)}" style="font-size: 9px; padding: 2px 6px; flex-shrink: 0;">${escapeHtml(t.statusTicket)}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Select Troubleshooter -->
+        <div style="margin-bottom: 22px; flex-shrink: 0;">
+          <label style="font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 8px; display: block;">Assign All Selected To Troubleshooter *</label>
+          <input type="hidden" id="tsBulkAssignSelect" value="">
+          
+          <div class="custom-dropdown-container" id="dropdown-bulk-assign-troubleshooter" style="position: relative; width: 100%;">
+            <div style="position: relative; width: 100%; display: flex; align-items: center;">
+              <span class="material-icons-round" style="position: absolute; left: 12px; font-size: 18px; color: var(--text-muted); pointer-events: none; z-index: 5;">search</span>
+              <input 
+                type="text" 
+                id="tsBulkAssignSearchInput" 
+                class="text-control" 
+                placeholder="Search or select troubleshooter..." 
+                autocomplete="off"
+                style="height: 42px; border-radius: 12px; padding: 0 40px 0 38px; font-size: 13px; font-weight: 600; background: #ffffff; border: 1.5px solid var(--border-light); width: 100%; box-sizing: border-box; outline: none;"
+              />
+              <button 
+                type="button" 
+                id="tsBulkAssignDropdownToggleBtn" 
+                tabindex="-1"
+                style="position: absolute; right: 8px; background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; padding: 0;"
+                title="Toggle List"
+              >
+                <span class="material-icons-round trigger-icon" style="font-size: 20px; transition: transform 0.2s;">expand_more</span>
+              </button>
+            </div>
+
+            <div class="custom-dropdown-menu" id="tsBulkAssignDropdownMenu" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 9999; max-height: 200px; overflow-y: auto !important; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding: 6px; border-radius: 12px; border: 1.5px solid var(--border-light); background: #ffffff; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);">
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end; flex-shrink: 0;">
+          <button id="tsBulkAssignCancelBtn" class="btn-secondary" style="padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 700;">Cancel</button>
+          <button id="tsBulkAssignConfirmBtn" class="btn-primary" style="padding: 10px 20px; border-radius: 10px; font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+            <span class="material-icons-round" style="font-size: 18px;">check</span>
+            <span>Confirm Bulk Assign</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const assignInput = overlay.querySelector('#tsBulkAssignSelect');
+    const containerEl = overlay.querySelector('#dropdown-bulk-assign-troubleshooter');
+    const searchInput = overlay.querySelector('#tsBulkAssignSearchInput');
+    const toggleBtn = overlay.querySelector('#tsBulkAssignDropdownToggleBtn');
+    const menuEl = overlay.querySelector('#tsBulkAssignDropdownMenu');
+
+    const renderDropdownOptions = (query = '') => {
+      const q = query.toLowerCase().trim();
+      const filtered = assignableUsers.filter(u => 
+        (u.name || '').toLowerCase().includes(q) || 
+        (u.staffId || '').toLowerCase().includes(q)
+      );
+
+      if (filtered.length === 0) {
+        if (assignableUsers.length === 0) {
+          menuEl.innerHTML = `
+            <div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 12px;">
+              No staff with Troubleshooter role found.
+            </div>
+          `;
+        } else {
+          menuEl.innerHTML = `
+            <div style="padding: 14px; text-align: center; color: var(--text-muted); font-size: 12px;">
+              No troubleshooter found matching "<strong>${escapeHtml(query)}</strong>"
+            </div>
+          `;
+        }
+        return;
+      }
+
+      menuEl.innerHTML = filtered.map(u => {
+        const isSelected = assignInput.value === u.name;
+        return `
+          <div class="custom-dropdown-option ${isSelected ? 'active' : ''}" data-value="${escapeHtml(u.name)}" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; cursor: pointer; border-radius: 8px; margin-bottom: 2px;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-weight: 700; color: var(--text-primary); font-size: 13px;">${escapeHtml(u.name)}</span>
+              ${u.staffId ? `<span style="font-size: 11px; color: var(--text-muted);">Staff ID: ${escapeHtml(u.staffId)}</span>` : ''}
+            </div>
+            ${isSelected ? '<span class="material-icons-round" style="color: var(--primary-600); font-size: 18px;">check</span>' : ''}
+          </div>
+        `;
+      }).join('');
+
+      menuEl.querySelectorAll('.custom-dropdown-option').forEach(opt => {
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const val = opt.dataset.value;
+          assignInput.value = val;
+          searchInput.value = val;
+          closeDropdown();
+        });
+      });
+    };
+
+    const openDropdown = () => {
+      containerEl.classList.add('open');
+      renderDropdownOptions(searchInput.value);
+    };
+
+    const closeDropdown = () => {
+      containerEl.classList.remove('open');
+    };
+
+    const toggleDropdown = () => {
+      if (containerEl.classList.contains('open')) {
+        closeDropdown();
+      } else {
+        openDropdown();
+        searchInput.focus();
+      }
+    };
+
+    searchInput.addEventListener('focus', () => {
+      openDropdown();
+    });
+
+    searchInput.addEventListener('input', (e) => {
+      const typed = e.target.value;
+      const exactMatch = assignableUsers.find(u => u.name.toLowerCase() === typed.trim().toLowerCase());
+      assignInput.value = exactMatch ? exactMatch.name : '';
+      openDropdown();
+      renderDropdownOptions(typed);
+    });
+
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleDropdown();
+    });
+
+    const onDocClick = (e) => {
+      if (!containerEl.contains(e.target)) {
+        closeDropdown();
+      }
+    };
+    document.addEventListener('click', onDocClick);
+
+    const closeModal = () => {
+      document.removeEventListener('click', onDocClick);
+      overlay.remove();
+    };
+
+    overlay.querySelector('#tsBulkAssignCancelBtn').addEventListener('click', closeModal);
+    overlay.querySelector('#tsBulkAssignCloseIconBtn')?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+
+    overlay.querySelector('#tsBulkAssignConfirmBtn').addEventListener('click', async () => {
+      let selectedName = assignInput.value.trim();
+      if (!selectedName && searchInput.value.trim()) {
+        const typed = searchInput.value.trim().toLowerCase();
+        const match = assignableUsers.find(u => u.name.toLowerCase() === typed || (u.staffId || '').toLowerCase() === typed);
+        if (match) selectedName = match.name;
+      }
+
+      if (!selectedName) {
+        alert('Please select a troubleshooter from the list.');
+        searchInput.focus();
+        openDropdown();
+        return;
+      }
+
+      const confirmBtn = overlay.querySelector('#tsBulkAssignConfirmBtn');
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = `<span class="material-icons-round spin" style="font-size: 16px;">sync</span> Assigning ${selectedIds.length} Tickets...`;
+
+      try {
+        await db.assignTroubleShootTicketsBulk(selectedIds, currentUser.name, selectedName);
+        if (typeof window.showToast === 'function') {
+          window.showToast(`Successfully assigned ${selectedIds.length} ticket${selectedIds.length > 1 ? 's' : ''} to ${selectedName}`);
+        }
+        isSelectMode = false;
+        selectedTicketIds.clear();
+        updateSelectModeUi();
+        closeModal();
+        renderList();
+      } catch (err) {
+        alert('Bulk assignment failed: ' + err.message);
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = `<span class="material-icons-round" style="font-size: 18px;">check</span> Confirm Bulk Assign`;
+      }
     });
   }
 

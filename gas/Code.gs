@@ -1584,7 +1584,25 @@ function handleAssignTroubleShoot(ss, data) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  var ticketId = String(data.ticketId || '').trim();
+  // Support both single ticketId and bulk ticketIds array
+  var ticketIdList = [];
+  if (Array.isArray(data.ticketIds)) {
+    ticketIdList = data.ticketIds.map(function(id) { return String(id || '').trim(); }).filter(Boolean);
+  } else if (data.ticketId) {
+    ticketIdList = [String(data.ticketId).trim()];
+  }
+
+  if (ticketIdList.length === 0) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ result: "error", message: "No ticketId or ticketIds provided" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var targetIdsMap = {};
+  for (var i = 0; i < ticketIdList.length; i++) {
+    targetIdsMap[ticketIdList[i]] = true;
+  }
+
   var values = tsSheet.getDataRange().getValues();
   var headers = values[0];
 
@@ -1605,26 +1623,28 @@ function handleAssignTroubleShoot(ss, data) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
+  var updateAtFormatted = formatJakartaDateTime(data.updateAt || new Date());
+  var updatedCount = 0;
+
   for (var r = 1; r < values.length; r++) {
-    if (String(values[r][idCol]).trim() === ticketId) {
+    var rowId = String(values[r][idCol]).trim();
+    if (targetIdsMap[rowId]) {
       var currentStatus = String(values[r][statusCol] || '').trim();
+      // Skip if already resolved
       if (currentStatus === 'Found' || currentStatus === 'Found Partial' || currentStatus === 'Not Found') {
-        return ContentService
-          .createTextOutput(JSON.stringify({ result: "error", message: "Ticket is already " + currentStatus + " and cannot be reassigned" }))
-          .setMimeType(ContentService.MimeType.JSON);
+        continue;
       }
-      var updateAtFormatted = formatJakartaDateTime(data.updateAt || new Date());
       if (statusCol !== -1) tsSheet.getRange(r + 1, statusCol + 1).setValue('Assigned');
       if (assignedByCol !== -1) tsSheet.getRange(r + 1, assignedByCol + 1).setValue(String(data.assignedBy || ''));
       if (assignedToCol !== -1) tsSheet.getRange(r + 1, assignedToCol + 1).setValue(String(data.assignedTo || ''));
       if (pickedByCol !== -1) tsSheet.getRange(r + 1, pickedByCol + 1).setValue('');
       if (updateAtCol !== -1) tsSheet.getRange(r + 1, updateAtCol + 1).setNumberFormat("yyyy-MM-dd HH:mm:ss").setValue(updateAtFormatted);
-      break;
+      updatedCount++;
     }
   }
 
   return ContentService
-    .createTextOutput(JSON.stringify({ result: "success", ticketId: ticketId }))
+    .createTextOutput(JSON.stringify({ result: "success", updatedCount: updatedCount, ticketIds: ticketIdList }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
