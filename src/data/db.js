@@ -643,16 +643,6 @@ class DatabaseService {
     if (shouldSync('soData')) {
       const soDataFetch = (async () => {
         try {
-          // If we already have cached soData, check if Column A Row 2 timestamp has changed
-          if (this.soList && this.soList.length > 0) {
-            const latestTs = await this.checkLatestSheetTimestamp(soDataTab);
-            const cachedTs = await cacheManager.getLastSyncTime('soData_timestamp');
-            if (latestTs && cachedTs && String(latestTs).trim() === String(cachedTs).trim()) {
-              console.log(`[SO_DATA Sync] Timestamp unchanged (${latestTs}). Skipping full download.`);
-              return { key: 'soData', skipped: true };
-            }
-            this._pendingSoDataTimestamp = latestTs;
-          }
           const res = await fetch(`https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(soDataTab)}&${cacheBuster}`, { cache: 'no-store' });
           return { key: 'soData', res: res };
         } catch (err) {

@@ -470,10 +470,20 @@ export function renderTsRequest(container, currentUser) {
     let currentSoMatchingItems = [];
     let photoBase64 = '';
 
+    // Ensure SO data is fetching if empty
+    if (!db.soList || db.soList.length === 0) {
+      db.syncSectionData('tsRequest');
+    }
+
+    const closeModal = () => {
+      if (typeof modalUnsub === 'function') modalUnsub();
+      overlay.remove();
+    };
+
     // Close
-    overlay.querySelector('#tsCreateCloseBtn').addEventListener('click', () => overlay.remove());
-    overlay.querySelector('#tsCreateCancelBtn')?.addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('#tsCreateCloseBtn').addEventListener('click', closeModal);
+    overlay.querySelector('#tsCreateCancelBtn')?.addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
 
     // Product selection trigger
     if (productTrigger) {
@@ -778,13 +788,14 @@ export function renderTsRequest(container, currentUser) {
       const list = [];
       (db.soList || []).forEach(item => {
         if (!item || !item.soNumber) return;
-        const key = item.soNumber.toLowerCase().trim();
+        const sNum = String(item.soNumber).trim();
+        const key = sNum.toLowerCase();
         if (!map.has(key)) {
           const entry = {
-            soNumber: item.soNumber.trim(),
-            pickerName: item.pickerName || '',
-            wave: item.wave || '',
-            firstProduct: item.productName || '',
+            soNumber: sNum,
+            pickerName: String(item.pickerName || '').trim(),
+            wave: String(item.wave || '').trim(),
+            firstProduct: String(item.productName || '').trim(),
             itemCount: 1,
             items: [item]
           };
@@ -794,8 +805,8 @@ export function renderTsRequest(container, currentUser) {
           const entry = map.get(key);
           entry.itemCount++;
           entry.items.push(item);
-          if (!entry.pickerName && item.pickerName) entry.pickerName = item.pickerName;
-          if (!entry.wave && item.wave) entry.wave = item.wave;
+          if (!entry.pickerName && item.pickerName) entry.pickerName = String(item.pickerName).trim();
+          if (!entry.wave && item.wave) entry.wave = String(item.wave).trim();
         }
       });
       return list;
@@ -815,9 +826,10 @@ export function renderTsRequest(container, currentUser) {
       });
 
       if (!filtered.length) {
+        const isStillLoading = (!db.soList || db.soList.length === 0) && db.isSyncing;
         soMenu.innerHTML = `
-          <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">
-            No matching SO numbers found
+          <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+            ${isStillLoading ? '<span class="material-icons-round spin" style="font-size: 16px; color: var(--primary-600);">sync</span><span>Syncing SO Data from Google Sheets...</span>' : '<span>No matching SO numbers found</span>'}
           </div>
         `;
         return;
@@ -923,7 +935,7 @@ export function renderTsRequest(container, currentUser) {
         soDropdownContainer.classList.add('open');
       }
       clearTimeout(soDebounce);
-      soDebounce = setTimeout(() => lookupSo(soInput.value.trim()), 400);
+      soDebounce = setTimeout(() => lookupSo(soInput.value.trim()), 300);
     });
 
     // Close dropdown on click outside
@@ -934,7 +946,8 @@ export function renderTsRequest(container, currentUser) {
     });
 
     function lookupSo(soNumber) {
-      if (!soNumber) {
+      const cleanSo = String(soNumber || '').trim().toLowerCase();
+      if (!cleanSo) {
         productFieldWrapper.style.display = 'none';
         document.getElementById('tsCreateAutoFields').style.display = 'none';
         soData = null;
@@ -942,7 +955,9 @@ export function renderTsRequest(container, currentUser) {
         return;
       }
 
-      currentSoMatchingItems = db.soList.filter(s => s.soNumber.toLowerCase() === soNumber.toLowerCase());
+      currentSoMatchingItems = (db.soList || []).filter(s => 
+        String(s.soNumber || '').trim().toLowerCase() === cleanSo
+      );
 
       if (currentSoMatchingItems.length === 0) {
         productFieldWrapper.style.display = 'none';
@@ -965,6 +980,16 @@ export function renderTsRequest(container, currentUser) {
         openProductChipModal();
       }
     }
+
+    // Modal reactive subscription to DB updates
+    const modalUnsub = db.subscribe(() => {
+      if (soDropdownContainer && soDropdownContainer.classList.contains('open')) {
+        renderSoDropdown(soInput.value);
+      }
+      if (soInput && soInput.value.trim() && (!soData || currentSoMatchingItems.length === 0)) {
+        lookupSo(soInput.value.trim());
+      }
+    });
 
     // Photo capture
     overlay.querySelector('#tsCreatePhotoInput').addEventListener('change', (e) => {
@@ -1031,7 +1056,7 @@ export function renderTsRequest(container, currentUser) {
           }
         }
 
-        overlay.remove();
+        closeModal();
         renderList();
       } catch (err) {
         alert('Failed to create ticket: ' + err.message);

@@ -614,7 +614,7 @@ export function renderDashboard(container, currentUser, onLogout) {
     else renderHome(targetArea, currentUser);
 
     // If section data is expired, run a non-blocking background sync with live indicator
-    if (db.isSectionDataExpired(tabId) && !db.isSyncing) {
+    if (db.isSectionDataExpired(tabId)) {
       db.syncSectionData(tabId);
     }
   }
